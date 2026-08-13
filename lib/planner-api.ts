@@ -64,6 +64,15 @@ export type PlannerAggregate = {
   externalEvents: ApiExternalEvent[];
 };
 
+export type GoogleIntegrationStatus = {
+  provider: "google_calendar";
+  connected: boolean;
+  mode: "fake" | "live" | "none";
+  lastSyncAt: string | null;
+  lastReplanAt: string | null;
+  calendarChanged: boolean;
+};
+
 export class PlannerApiError extends Error {
   constructor(
     message: string,
@@ -148,5 +157,26 @@ export function deleteTimeBlock(id: string) {
   return requestJson<{ id: string; deleted: true }>(
     `/api/time-blocks/${encodeURIComponent(id)}`,
     { method: "DELETE" },
+  );
+}
+
+export async function fetchGoogleIntegration(signal?: AbortSignal) {
+  const result = await requestJson<{ providers: GoogleIntegrationStatus[] }>(
+    "/api/integrations/status",
+    { signal },
+  );
+  return result.providers.find((provider) => provider.provider === "google_calendar") ?? null;
+}
+
+export function getGoogleAuthUrl() {
+  return requestJson<{ mode: "oauth" | "fake"; url: string | null; redirectUri?: string }>(
+    "/api/integrations/google/auth-url",
+  );
+}
+
+export function syncGoogleCalendar() {
+  return requestJson<{ ok: true; summary: { created: number; updated: number; deleted: number } }>(
+    "/api/calendar/sync",
+    { method: "POST", body: JSON.stringify({}) },
   );
 }

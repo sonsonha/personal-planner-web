@@ -30,10 +30,13 @@ import {
   createTask as createPlannerTask,
   createTimeBlock as createPlannerTimeBlock,
   deleteTimeBlock,
+  fetchGoogleIntegration,
   fetchPlanner,
+  getGoogleAuthUrl,
   PlannerApiError,
   updateTask,
   updateTimeBlock,
+  syncGoogleCalendar,
   type ApiExternalEvent,
   type ApiProject,
   type ApiTask,
@@ -70,6 +73,7 @@ type CalendarBlock = {
 
 type ProjectOption = { id: string | null; title: string; color: string };
 type ConnectionState = "loading" | "syncing" | "live" | "demo" | "error";
+type GoogleConnectionState = "loading" | "connected" | "not-connected" | "syncing" | "error";
 
 type DragPayload =
   | { kind: "task"; taskId: string }
@@ -359,6 +363,7 @@ export function PlannerApp({
   const [blocks, setBlocks] = useState(initialBlocks);
   const [projects, setProjects] = useState<ProjectOption[]>(initialProjects);
   const [connection, setConnection] = useState<ConnectionState>("loading");
+  const [googleConnection, setGoogleConnection] = useState<GoogleConnectionState>("loading");
   const [reloadKey, setReloadKey] = useState(0);
   const [taskFilter, setTaskFilter] = useState<"inbox" | "today">("inbox");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -414,6 +419,34 @@ export function PlannerApp({
 
     return () => controller.abort();
   }, [reloadKey, weekStart]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchGoogleIntegration(controller.signal)
+      .then((status) => setGoogleConnection(status?.connected ? "connected" : "not-connected"))
+      .catch(() => {
+        if (!controller.signal.aborted) setGoogleConnection("error");
+      });
+    return () => controller.abort();
+  }, [reloadKey]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("google") !== "connected") return;
+    url.searchParams.delete("google");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    queueMicrotask(() => setGoogleConnection("syncing"));
+    syncGoogleCalendar()
+      .then(() => {
+        setGoogleConnection("connected");
+        setReloadKey((value) => value + 1);
+        setToast("Google Calendar connected and synced");
+      })
+      .catch(() => {
+        setGoogleConnection("error");
+        setToast("Calendar connected · first sync needs a retry");
+      });
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -628,13 +661,52 @@ export function PlannerApp({
     }
   };
 
-  const connectionLabel = {
+  const dataConnectionLabel = {
     loading: "Connecting…",
     syncing: "Refreshing…",
     live: "Synced",
     demo: "Demo data",
     error: "Offline",
   }[connection];
+
+  const syncDisplay = connection !== "live"
+    ? { state: connection, label: dataConnectionLabel }
+    : googleConnection === "connected"
+      ? { state: "live", label: "Synced" }
+      : googleConnection === "not-connected"
+        ? { state: "demo", label: "Connect" }
+        : googleConnection === "syncing" || googleConnection === "loading"
+          ? { state: "syncing", label: googleConnection === "syncing" ? "Syncing…" : "Checking…" }
+          : { state: "error", label: "Retry" };
+
+  const handleCalendarConnection = async () => {
+    if (connection !== "live") {
+      setReloadKey((value) => value + 1);
+      return;
+    }
+    if (googleConnection === "connected") {
+      setGoogleConnection("syncing");
+      try {
+        await syncGoogleCalendar();
+        setGoogleConnection("connected");
+        setReloadKey((value) => value + 1);
+        setToast("Google Calendar synced");
+      } catch {
+        setGoogleConnection("error");
+        setToast("Google Calendar sync failed · tap Retry");
+      }
+      return;
+    }
+    try {
+      setGoogleConnection("loading");
+      const result = await getGoogleAuthUrl();
+      if (!result.url) throw new Error("OAuth is unavailable");
+      window.location.assign(result.url);
+    } catch {
+      setGoogleConnection("error");
+      setToast("Could not start Google Calendar connection");
+    }
+  };
 
   return (
     <div className="app-shell">
@@ -656,16 +728,16 @@ export function PlannerApp({
 
           <div className="topbar-actions">
             <button
-              className={`sync-status ${connection}`}
-              title={connection === "demo"
-                ? "Backend is not configured; click to retry"
-                : "Calendar connection status; click to refresh"}
-              onClick={() => setReloadKey((value) => value + 1)}
+              className={`sync-status ${syncDisplay.state}`}
+              title={googleConnection === "connected"
+                ? "Google Calendar is connected; click to sync now"
+                : "Connect Google Calendar"}
+              onClick={handleCalendarConnection}
               aria-live="polite"
             >
               <span className="sync-dot" />
               Google Calendar
-              <span>{connectionLabel}</span>
+              <span>{syncDisplay.label}</span>
             </button>
             <button className="icon-button" aria-label="Notifications">
               <Bell size={18} />
