@@ -1,4 +1,5 @@
 import { getChatGPTUser } from "@/app/chatgpt-auth";
+import { createPrivateKey, sign } from "node:crypto";
 
 type ProxyOptions = {
   method: "GET" | "POST" | "PATCH" | "DELETE";
@@ -13,7 +14,8 @@ function jsonError(status: number, code: string, message: string) {
 function plannerConfig() {
   const baseUrl = process.env.PLANNER_API_BASE_URL?.trim().replace(/\/$/, "");
   const token = process.env.PLANNER_WEB_TOKEN?.trim();
-  if (!baseUrl || !token) return null;
+  const privateKey = process.env.PLANNER_WEB_PRIVATE_KEY?.trim();
+  if (!baseUrl || (!token && !privateKey)) return null;
 
   let parsed: URL;
   try {
@@ -24,8 +26,9 @@ function plannerConfig() {
   if (process.env.NODE_ENV === "production" && parsed.protocol !== "https:") {
     return null;
   }
-  if (!['http:', 'https:'].includes(parsed.protocol) || token.length < 32) return null;
-  return { baseUrl, token };
+  if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+  if (token && token.length < 32) return null;
+  return { baseUrl, token, privateKey };
 }
 
 export async function proxyPlannerRequest({ method, path, request }: ProxyOptions) {
@@ -43,10 +46,21 @@ export async function proxyPlannerRequest({ method, path, request }: ProxyOption
     );
   }
 
-  const headers = new Headers({
-    accept: "application/json",
-    authorization: `Bearer ${config.token}`,
-  });
+  const headers = new Headers({ accept: "application/json" });
+  if (config.privateKey) {
+    try {
+      const timestamp = String(Date.now());
+      const message = `${timestamp}\n${method}\n${path}`;
+      const signature = sign(null, Buffer.from(message), createPrivateKey(config.privateKey));
+      headers.set("x-planner-key-id", "personal-os-web-v1");
+      headers.set("x-planner-timestamp", timestamp);
+      headers.set("x-planner-signature", signature.toString("base64url"));
+    } catch {
+      return jsonError(503, "PLANNER_NOT_CONFIGURED", "Planner signing key is invalid");
+    }
+  } else if (config.token) {
+    headers.set("authorization", `Bearer ${config.token}`);
+  }
   let body: ArrayBuffer | undefined;
   if (method !== "GET" && method !== "DELETE") {
     headers.set("content-type", "application/json");

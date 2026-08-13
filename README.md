@@ -33,9 +33,9 @@ npm run build
 
 ## Connect the backend
 
-Copy `.env.example` to `.env.local`, then set `PLANNER_API_BASE_URL` and `PLANNER_WEB_TOKEN`. The same token must be configured as `PLANNER_WEB_TOKEN` on the backend and must contain at least 32 characters.
+Copy `.env.example` to `.env.local`, then set `PLANNER_API_BASE_URL`. Production uses `PLANNER_WEB_PRIVATE_KEY`, an Ed25519 PKCS#8 private key held only by the web host. Local development can continue using the shared `PLANNER_WEB_TOKEN` fallback.
 
-The token is read only by the web server proxy. It is never shipped to browser JavaScript. Production pages and proxy calls also use the private Site's authenticated-user headers.
+Credentials are read only by the web server proxy and are never shipped to browser JavaScript. Production pages and proxy calls also use the private Site's authenticated-user headers.
 
 ## Product boundary
 
