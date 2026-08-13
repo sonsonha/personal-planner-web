@@ -1,5 +1,13 @@
+import { getChatGPTUser } from "./chatgpt-auth";
 import { PlannerApp } from "./planner-app";
 
-export default function Home() {
-  return <PlannerApp />;
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const viewer = await getChatGPTUser();
+  return (
+    <PlannerApp
+      viewer={viewer ? { displayName: viewer.displayName, email: viewer.email } : null}
+    />
+  );
 }

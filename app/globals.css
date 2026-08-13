@@ -290,6 +290,7 @@ button {
   border-radius: 10px;
   background: #fff;
   color: #41485d;
+  cursor: pointer;
   font-size: 10.5px;
   font-weight: 620;
 }
@@ -306,6 +307,27 @@ button {
   border-radius: 50%;
   background: #25bd72;
   box-shadow: 0 0 0 2px #c9f3dc;
+}
+
+.sync-status.loading .sync-dot,
+.sync-status.syncing .sync-dot {
+  background: #3478f6;
+  box-shadow: 0 0 0 2px #d8e7ff;
+  animation: sync-pulse 1.2s ease-in-out infinite;
+}
+
+.sync-status.demo .sync-dot {
+  background: #f3a712;
+  box-shadow: 0 0 0 2px #ffedbe;
+}
+
+.sync-status.error .sync-dot {
+  background: #fa5d73;
+  box-shadow: 0 0 0 2px #ffd7de;
+}
+
+@keyframes sync-pulse {
+  50% { opacity: 0.45; transform: scale(0.78); }
 }
 
 .icon-button {
@@ -633,6 +655,7 @@ button {
 }
 
 .calendar-event:active { cursor: grabbing; }
+.calendar-event[data-sync="pending"] { opacity: 0.72; }
 
 .calendar-event.external {
   border-color: #dce0e9;
@@ -681,6 +704,21 @@ button {
   color: var(--event-color);
   cursor: pointer;
   opacity: 0;
+}
+
+.sync-warning {
+  display: grid;
+  width: 15px;
+  height: 15px;
+  margin-left: 3px;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #fa5d73;
+  color: #fff;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .calendar-event:hover .event-complete { opacity: 1; }

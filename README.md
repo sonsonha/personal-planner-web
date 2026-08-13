@@ -12,7 +12,7 @@ Calendar-first planning workspace for the Personal Secretary V2 rebuild.
 - separate visual treatment for Google Calendar events
 - responsive layout for narrower screens
 
-The current UI uses local demo data so the interaction model can be validated before authentication and API wiring. The backend already exposes the V2 planner aggregate, task, and time-block endpoints.
+The web now loads and mutates real V2 planner data through a same-origin server proxy. If the backend connection is not configured, it clearly falls back to demo data so the interaction model remains testable.
 
 ## Run locally
 
@@ -30,6 +30,12 @@ npm run lint
 npm test
 npm run build
 ```
+
+## Connect the backend
+
+Copy `.env.example` to `.env.local`, then set `PLANNER_API_BASE_URL` and `PLANNER_WEB_TOKEN`. The same token must be configured as `PLANNER_WEB_TOKEN` on the backend and must contain at least 32 characters.
+
+The token is read only by the web server proxy. It is never shipped to browser JavaScript. Production pages and proxy calls also use the private Site's authenticated-user headers.
 
 ## Product boundary
 

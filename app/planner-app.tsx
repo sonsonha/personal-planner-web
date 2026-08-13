@@ -26,12 +26,26 @@ import {
   Zap,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createTask as createPlannerTask,
+  createTimeBlock as createPlannerTimeBlock,
+  deleteTimeBlock,
+  fetchPlanner,
+  PlannerApiError,
+  updateTask,
+  updateTimeBlock,
+  type ApiExternalEvent,
+  type ApiProject,
+  type ApiTask,
+  type ApiTimeBlock,
+} from "@/lib/planner-api";
 
 type TaskStatus = "inbox" | "scheduled" | "done";
 
 type PlannerTask = {
   id: string;
   title: string;
+  projectId: string | null;
   project: string;
   color: string;
   duration: number;
@@ -49,8 +63,13 @@ type CalendarBlock = {
   color: string;
   type: "task" | "external";
   taskId?: string;
+  projectId?: string | null;
   meta?: string;
+  syncStatus?: "PENDING" | "SYNCED" | "FAILED";
 };
+
+type ProjectOption = { id: string | null; title: string; color: string };
+type ConnectionState = "loading" | "syncing" | "live" | "demo" | "error";
 
 type DragPayload =
   | { kind: "task"; taskId: string }
@@ -68,10 +87,19 @@ const COLORS = {
   amber: "#F3A712",
 };
 
+const initialProjects: ProjectOption[] = [
+  { id: "demo-personal-os", title: "Personal OS", color: COLORS.violet },
+  { id: "demo-rover", title: "Landfill Rover", color: COLORS.coral },
+  { id: "demo-career", title: "Career capital", color: COLORS.cyan },
+  { id: "demo-life", title: "Life admin", color: COLORS.amber },
+  { id: null, title: "Inbox", color: COLORS.violet },
+];
+
 const initialTasks: PlannerTask[] = [
   {
     id: "task-roadmap",
     title: "Finalize product roadmap",
+    projectId: "demo-personal-os",
     project: "Personal OS",
     color: COLORS.violet,
     duration: 60,
@@ -82,6 +110,7 @@ const initialTasks: PlannerTask[] = [
   {
     id: "task-networking",
     title: "Study TCP reliability",
+    projectId: null,
     project: "Systems depth",
     color: COLORS.blue,
     duration: 45,
@@ -92,6 +121,7 @@ const initialTasks: PlannerTask[] = [
   {
     id: "task-demo",
     title: "Record Rover demo walkthrough",
+    projectId: "demo-rover",
     project: "Landfill Rover",
     color: COLORS.coral,
     duration: 90,
@@ -102,6 +132,7 @@ const initialTasks: PlannerTask[] = [
   {
     id: "task-english",
     title: "English interview practice",
+    projectId: "demo-career",
     project: "Career capital",
     color: COLORS.cyan,
     duration: 30,
@@ -111,6 +142,7 @@ const initialTasks: PlannerTask[] = [
   {
     id: "task-expenses",
     title: "Review monthly expenses",
+    projectId: "demo-life",
     project: "Life admin",
     color: COLORS.amber,
     duration: 30,
@@ -213,7 +245,109 @@ function durationLabel(minutes: number) {
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 }
 
-export function PlannerApp() {
+function slotDate(weekStart: Date, day: number, minutes: number) {
+  const date = addDays(weekStart, day);
+  date.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+  return date;
+}
+
+function dayIndexFor(dateValue: string, weekStart: Date) {
+  const date = new Date(dateValue);
+  const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const localWeek = new Date(
+    weekStart.getFullYear(),
+    weekStart.getMonth(),
+    weekStart.getDate(),
+  );
+  return Math.round((localDate.getTime() - localWeek.getTime()) / 86_400_000);
+}
+
+function dueLabel(value: string | null) {
+  if (!value) return undefined;
+  const due = new Date(value);
+  const today = new Date();
+  if (due.toDateString() === today.toDateString()) return "Today";
+  return due.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function projectOptions(projects: ApiProject[]): ProjectOption[] {
+  return [
+    ...projects
+      .filter((project) => project.active)
+      .map((project) => ({ id: project.id, title: project.title, color: project.color })),
+    { id: null, title: "Inbox", color: COLORS.violet },
+  ];
+}
+
+function taskFromApi(task: ApiTask, projects: ProjectOption[]): PlannerTask {
+  const project = projects.find((item) => item.id === task.projectId) ?? projects.at(-1)!;
+  return {
+    id: task.id,
+    title: task.title,
+    projectId: task.projectId,
+    project: project.title,
+    color: project.color,
+    duration: task.durationMinutes,
+    priority: task.priority === "HIGH" ? "high" : "normal",
+    status: task.status.toLowerCase() as TaskStatus,
+    due: dueLabel(task.dueAt),
+  };
+}
+
+function timeBlockFromApi(
+  block: ApiTimeBlock,
+  weekStart: Date,
+  projects: ProjectOption[],
+): CalendarBlock {
+  const start = new Date(block.startAt);
+  const end = new Date(block.endAt);
+  const project = projects.find((item) => item.id === block.projectId);
+  return {
+    id: block.id,
+    title: block.title,
+    day: dayIndexFor(block.startAt, weekStart),
+    start: start.getHours() * 60 + start.getMinutes(),
+    duration: Math.max(15, Math.round((end.getTime() - start.getTime()) / 60_000)),
+    color: block.color,
+    type: "task",
+    taskId: block.taskId ?? undefined,
+    projectId: block.projectId,
+    meta: project?.title ?? "Personal Planner",
+    syncStatus: block.syncStatus,
+  };
+}
+
+function externalBlockFromApi(event: ApiExternalEvent, weekStart: Date): CalendarBlock {
+  const start = new Date(event.startAt);
+  const end = new Date(event.endAt);
+  return {
+    id: `external-${event.id}`,
+    title: event.title,
+    day: dayIndexFor(event.startAt, weekStart),
+    start: start.getHours() * 60 + start.getMinutes(),
+    duration: Math.max(15, Math.round((end.getTime() - start.getTime()) / 60_000)),
+    color: "#94A3B8",
+    type: "external",
+    meta: event.location || "Google Calendar",
+  };
+}
+
+function initials(displayName?: string) {
+  if (!displayName) return "PO";
+  return displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+export function PlannerApp({
+  viewer,
+}: {
+  viewer: { displayName: string; email: string } | null;
+}) {
   const [now] = useState(() => new Date());
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [view, setView] = useState<"week" | "day">("week");
@@ -223,12 +357,16 @@ export function PlannerApp() {
   });
   const [tasks, setTasks] = useState(initialTasks);
   const [blocks, setBlocks] = useState(initialBlocks);
+  const [projects, setProjects] = useState<ProjectOption[]>(initialProjects);
+  const [connection, setConnection] = useState<ConnectionState>("loading");
+  const [reloadKey, setReloadKey] = useState(0);
   const [taskFilter, setTaskFilter] = useState<"inbox" | "today">("inbox");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [taskPanelOpen, setTaskPanelOpen] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const liveDataRef = useRef(false);
 
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
@@ -240,6 +378,42 @@ export function PlannerApp() {
   const isCurrentWeek = currentWeekStart === weekStart.getTime();
   const nowDay = now.getDay() === 0 ? 6 : now.getDay() - 1;
   const nowMinute = now.getHours() * 60 + now.getMinutes();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const from = new Date(weekStart);
+    const to = addDays(weekStart, 7);
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) {
+        setConnection((current) => current === "live" ? "syncing" : "loading");
+      }
+    });
+
+    fetchPlanner(from.toISOString(), to.toISOString(), controller.signal)
+      .then((data) => {
+        const nextProjects = projectOptions(data.projects);
+        setProjects(nextProjects);
+        setTasks(data.tasks.map((task) => taskFromApi(task, nextProjects)));
+        setBlocks([
+          ...data.timeBlocks.map((block) => timeBlockFromApi(block, weekStart, nextProjects)),
+          ...data.externalEvents.map((event) => externalBlockFromApi(event, weekStart)),
+        ].filter((block) => block.day >= 0 && block.day < 7));
+        liveDataRef.current = true;
+        setConnection("live");
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        if (error instanceof PlannerApiError && error.code === "PLANNER_NOT_CONFIGURED") {
+          liveDataRef.current = false;
+          setConnection("demo");
+          return;
+        }
+        setConnection("error");
+        setToast("Could not refresh planner · keeping the current view");
+      });
+
+    return () => controller.abort();
+  }, [reloadKey, weekStart]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -268,7 +442,9 @@ export function PlannerApp() {
     if (task.status === "done") return false;
     if (taskFilter === "inbox" && task.status === "scheduled") return false;
     if (taskFilter === "today") {
-      return blocks.some((block) => block.taskId === task.id && block.day === nowDay);
+      if (!blocks.some((block) => block.taskId === task.id && block.day === nowDay)) {
+        return false;
+      }
     }
     return task.title.toLowerCase().includes(search.toLowerCase());
   });
@@ -276,6 +452,10 @@ export function PlannerApp() {
   const plannedMinutes = blocks
     .filter((block) => block.type === "task")
     .reduce((total, block) => total + block.duration, 0);
+  const openMinutes = Math.max(
+    0,
+    7 * MINUTES_VISIBLE - blocks.reduce((total, block) => total + block.duration, 0),
+  );
 
   const changeWeek = (amount: number) => {
     setWeekStart((current) => addDays(current, amount * 7));
@@ -286,12 +466,31 @@ export function PlannerApp() {
     setActiveDay(nowDay);
   };
 
-  const completeTask = (taskId: string) => {
+  const completeTask = async (taskId: string) => {
+    const previousTasks = tasks;
+    const previousBlocks = blocks;
+    const taskBlocks = blocks.filter(
+      (block) => block.type === "task" && block.taskId === taskId,
+    );
     setTasks((current) =>
       current.map((task) => (task.id === taskId ? { ...task, status: "done" } : task)),
     );
     setBlocks((current) => current.filter((block) => block.taskId !== taskId));
-    setToast("Task completed");
+    setToast(liveDataRef.current ? "Completing task…" : "Task completed · demo mode");
+    if (!liveDataRef.current) return;
+
+    try {
+      await Promise.all([
+        updateTask(taskId, { status: "DONE" }),
+        ...taskBlocks.map((block) => deleteTimeBlock(block.id)),
+      ]);
+      setToast("Task completed · calendar updated");
+    } catch {
+      setTasks(previousTasks);
+      setBlocks(previousBlocks);
+      setConnection("error");
+      setToast("Could not complete task · changes rolled back");
+    }
   };
 
   const onDragStart = (event: React.DragEvent, payload: DragPayload) => {
@@ -299,28 +498,55 @@ export function PlannerApp() {
     event.dataTransfer.setData("application/x-personal-os", JSON.stringify(payload));
   };
 
-  const onCalendarDrop = (event: React.DragEvent, day: number) => {
+  const onCalendarDrop = async (event: React.DragEvent, day: number) => {
     event.preventDefault();
     const raw = event.dataTransfer.getData("application/x-personal-os");
     if (!raw) return;
-    const payload = JSON.parse(raw) as DragPayload;
+    let payload: DragPayload;
+    try {
+      payload = JSON.parse(raw) as DragPayload;
+    } catch {
+      return;
+    }
     const rect = event.currentTarget.getBoundingClientRect();
     const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
     const minutesFromStart = Math.round((y / rect.height) * MINUTES_VISIBLE / SNAP_MINUTES) * SNAP_MINUTES;
     const start = Math.min(END_HOUR * 60 - SNAP_MINUTES, START_HOUR * 60 + minutesFromStart);
 
     if (payload.kind === "block") {
+      const previous = blocks.find((block) => block.id === payload.blockId);
+      if (!previous || previous.type === "external") return;
       setBlocks((current) =>
         current.map((block) => (block.id === payload.blockId ? { ...block, day, start } : block)),
       );
-      setToast("Time block moved · sync queued");
+      setToast(liveDataRef.current ? "Moving time block…" : "Time block moved · demo mode");
+      if (!liveDataRef.current) return;
+      const startAt = slotDate(weekStart, day, start);
+      const endAt = new Date(startAt.getTime() + previous.duration * 60_000);
+      try {
+        const saved = await updateTimeBlock(previous.id, {
+          startAt: startAt.toISOString(),
+          endAt: endAt.toISOString(),
+        });
+        const mapped = timeBlockFromApi(saved, weekStart, projects);
+        setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
+        setToast(saved.syncStatus === "FAILED"
+          ? "Block saved · Google sync needs attention"
+          : "Time block moved · calendar synced");
+      } catch {
+        setBlocks((current) => current.map((block) =>
+          block.id === previous.id ? previous : block,
+        ));
+        setConnection("error");
+        setToast("Could not move block · changes rolled back");
+      }
       return;
     }
 
     const task = tasks.find((item) => item.id === payload.taskId);
     if (!task) return;
     const block: CalendarBlock = {
-      id: `block-${task.id}-${blocks.length + 1}`,
+      id: `pending-${crypto.randomUUID()}`,
       title: task.title,
       day,
       start,
@@ -328,21 +554,51 @@ export function PlannerApp() {
       color: task.color,
       type: "task",
       taskId: task.id,
+      projectId: task.projectId,
       meta: task.project,
+      syncStatus: "PENDING",
     };
     setBlocks((current) => [...current, block]);
     setTasks((current) =>
       current.map((item) => (item.id === task.id ? { ...item, status: "scheduled" } : item)),
     );
-    setToast("Task scheduled · sync queued");
+    setToast(liveDataRef.current ? "Scheduling task…" : "Task scheduled · demo mode");
+    if (!liveDataRef.current) return;
+
+    const startAt = slotDate(weekStart, day, start);
+    const endAt = new Date(startAt.getTime() + task.duration * 60_000);
+    try {
+      const saved = await createPlannerTimeBlock({
+        taskId: task.id,
+        projectId: task.projectId,
+        title: task.title,
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        color: task.color,
+      });
+      const mapped = timeBlockFromApi(saved, weekStart, projects);
+      setBlocks((current) => current.map((item) => item.id === block.id ? mapped : item));
+      setToast(saved.syncStatus === "FAILED"
+        ? "Task scheduled · Google sync needs attention"
+        : "Task scheduled · calendar synced");
+    } catch {
+      setBlocks((current) => current.filter((item) => item.id !== block.id));
+      setTasks((current) => current.map((item) =>
+        item.id === task.id ? { ...item, status: "inbox" } : item,
+      ));
+      setConnection("error");
+      setToast("Could not schedule task · changes rolled back");
+    }
   };
 
-  const addTask = (title: string, duration: number, project: string) => {
+  const addTask = async (title: string, duration: number, projectId: string | null) => {
+    const project = projects.find((item) => item.id === projectId) ?? projects.at(-1)!;
     const task: PlannerTask = {
-      id: `task-${tasks.length + 1}`,
+      id: `pending-${crypto.randomUUID()}`,
       title,
-      project: project || "Inbox",
-      color: COLORS.violet,
+      projectId,
+      project: project.title,
+      color: project.color,
       duration,
       priority: "normal",
       status: "inbox",
@@ -352,8 +608,33 @@ export function PlannerApp() {
     setTaskFilter("inbox");
     setTaskPanelOpen(true);
     setQuickAddOpen(false);
-    setToast("Task added to Inbox");
+    setToast(liveDataRef.current ? "Saving task…" : "Task added · demo mode");
+    if (!liveDataRef.current) return;
+
+    try {
+      const saved = await createPlannerTask({
+        title,
+        projectId,
+        durationMinutes: duration,
+        priority: "NORMAL",
+      });
+      const mapped = taskFromApi(saved, projects);
+      setTasks((current) => current.map((item) => item.id === task.id ? mapped : item));
+      setToast("Task saved to Inbox");
+    } catch {
+      setTasks((current) => current.filter((item) => item.id !== task.id));
+      setConnection("error");
+      setToast("Could not save task · changes rolled back");
+    }
   };
+
+  const connectionLabel = {
+    loading: "Connecting…",
+    syncing: "Refreshing…",
+    live: "Synced",
+    demo: "Demo data",
+    error: "Offline",
+  }[connection];
 
   return (
     <div className="app-shell">
@@ -374,16 +655,25 @@ export function PlannerApp() {
           </div>
 
           <div className="topbar-actions">
-            <div className="sync-status" title="Calendar connection status">
+            <button
+              className={`sync-status ${connection}`}
+              title={connection === "demo"
+                ? "Backend is not configured; click to retry"
+                : "Calendar connection status; click to refresh"}
+              onClick={() => setReloadKey((value) => value + 1)}
+              aria-live="polite"
+            >
               <span className="sync-dot" />
               Google Calendar
-              <span>Synced</span>
-            </div>
+              <span>{connectionLabel}</span>
+            </button>
             <button className="icon-button" aria-label="Notifications">
               <Bell size={18} />
               <span className="notification-dot" />
             </button>
-            <button className="avatar" aria-label="Open profile menu">SH</button>
+            <button className="avatar" aria-label="Open profile menu" title={viewer?.email}>
+              {initials(viewer?.displayName)}
+            </button>
           </div>
         </header>
 
@@ -409,7 +699,7 @@ export function PlannerApp() {
             <div className="capacity-summary">
               <span><strong>{durationLabel(plannedMinutes)}</strong> planned</span>
               <i />
-              <span><strong>12h 15m</strong> open</span>
+              <span><strong>{durationLabel(openMinutes)}</strong> open</span>
             </div>
             <div className="view-switcher" aria-label="Calendar view">
               <button className={view === "day" ? "active" : ""} onClick={() => setView("day")}>Day</button>
@@ -425,7 +715,11 @@ export function PlannerApp() {
         </section>
 
         <div className={`planner-layout ${taskPanelOpen ? "with-panel" : ""}`}>
-          <section className="calendar-card" aria-label="Weekly calendar">
+          <section
+            className="calendar-card"
+            aria-label="Weekly calendar"
+            aria-busy={connection === "loading" || connection === "syncing"}
+          >
             <div className="calendar-days" style={{ "--day-count": visibleDays.length } as React.CSSProperties}>
               <div className="timezone">GMT+7</div>
               {visibleDays.map((date, index) => {
@@ -450,12 +744,8 @@ export function PlannerApp() {
 
             <div className="all-day-row" style={{ "--day-count": visibleDays.length } as React.CSSProperties}>
               <div className="all-day-label">All day</div>
-              {visibleDays.map((date, index) => (
-                <div className="all-day-cell" key={date.toISOString()}>
-                  {visibleIndexes[index] === 4 && (
-                    <div className="deadline-pill"><Flag size={12} /> Rover demo due</div>
-                  )}
-                </div>
+              {visibleDays.map((date) => (
+                <div className="all-day-cell" key={date.toISOString()} />
               ))}
             </div>
 
@@ -521,7 +811,13 @@ export function PlannerApp() {
         <Plus size={22} />
       </button>
 
-      {quickAddOpen && <QuickAdd onClose={() => setQuickAddOpen(false)} onAdd={addTask} />}
+      {quickAddOpen && (
+        <QuickAdd
+          projects={projects}
+          onClose={() => setQuickAddOpen(false)}
+          onAdd={addTask}
+        />
+      )}
 
       {toast && (
         <div className="toast" role="status">
@@ -582,6 +878,8 @@ function CalendarEvent({
   return (
     <article
       className={`calendar-event ${block.type}`}
+      data-sync={block.syncStatus?.toLowerCase()}
+      title={block.syncStatus === "FAILED" ? "Saved in Personal OS; Google Calendar sync failed" : undefined}
       style={{
         top: block.start - START_HOUR * 60 + 3,
         height: Math.max(28, block.duration - 6),
@@ -605,6 +903,7 @@ function CalendarEvent({
             <Check size={11} />
           </button>
         )}
+        {block.syncStatus === "FAILED" && <em className="sync-warning">!</em>}
       </div>
       {block.duration >= 45 && <span>{minutesToTime(block.start)} · {block.meta}</span>}
     </article>
@@ -703,10 +1002,18 @@ function TaskPanel({
   );
 }
 
-function QuickAdd({ onClose, onAdd }: { onClose: () => void; onAdd: (title: string, duration: number, project: string) => void }) {
+function QuickAdd({
+  projects,
+  onClose,
+  onAdd,
+}: {
+  projects: ProjectOption[];
+  onClose: () => void;
+  onAdd: (title: string, duration: number, projectId: string | null) => void;
+}) {
   const [title, setTitle] = useState("");
   const [duration, setDuration] = useState(30);
-  const [project, setProject] = useState("Personal OS");
+  const [projectId, setProjectId] = useState<string | null>(projects[0]?.id ?? null);
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -716,7 +1023,7 @@ function QuickAdd({ onClose, onAdd }: { onClose: () => void; onAdd: (title: stri
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!title.trim()) return;
-    onAdd(title.trim(), duration, project);
+    onAdd(title.trim(), duration, projectId);
   };
 
   return (
@@ -749,12 +1056,15 @@ function QuickAdd({ onClose, onAdd }: { onClose: () => void; onAdd: (title: stri
           </label>
           <label>
             <span>Project</span>
-            <select value={project} onChange={(event) => setProject(event.target.value)}>
-              <option>Personal OS</option>
-              <option>Landfill Rover</option>
-              <option>Career capital</option>
-              <option>Life admin</option>
-              <option>Inbox</option>
+            <select
+              value={projectId ?? ""}
+              onChange={(event) => setProjectId(event.target.value || null)}
+            >
+              {projects.map((project) => (
+                <option key={project.id ?? "inbox"} value={project.id ?? ""}>
+                  {project.title}
+                </option>
+              ))}
             </select>
           </label>
         </div>
