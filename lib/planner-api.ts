@@ -73,6 +73,16 @@ export type GoogleIntegrationStatus = {
   calendarChanged: boolean;
 };
 
+export type CalendarSyncSummary = {
+  fetched: number;
+  upserted: number;
+  removed: number;
+  ownedUpdated: number;
+  ownedRemoved: number;
+  connected: boolean;
+  retry: { attempted: number; synced: number; failed: number };
+};
+
 export class PlannerApiError extends Error {
   constructor(
     message: string,
@@ -175,7 +185,7 @@ export function getGoogleAuthUrl() {
 }
 
 export function syncGoogleCalendar() {
-  return requestJson<{ ok: true; summary: { created: number; updated: number; deleted: number } }>(
+  return requestJson<{ ok: true; summary: CalendarSyncSummary }>(
     "/api/calendar/sync",
     { method: "POST", body: JSON.stringify({}) },
   );

@@ -37,6 +37,7 @@ import {
   updateTask,
   updateTimeBlock,
   syncGoogleCalendar,
+  type CalendarSyncSummary,
   type ApiExternalEvent,
   type ApiProject,
   type ApiTask,
@@ -78,6 +79,22 @@ type GoogleConnectionState = "loading" | "connected" | "not-connected" | "syncin
 type DragPayload =
   | { kind: "task"; taskId: string }
   | { kind: "block"; blockId: string };
+
+function calendarSyncMessage(summary: CalendarSyncSummary): string {
+  if (summary.retry.failed > 0) {
+    return `Calendar checked · ${summary.retry.failed} block${summary.retry.failed === 1 ? "" : "s"} still need attention`;
+  }
+  if (summary.ownedRemoved > 0) {
+    return `Calendar synced · ${summary.ownedRemoved} deleted Google event${summary.ownedRemoved === 1 ? "" : "s"} removed`;
+  }
+  if (summary.ownedUpdated > 0) {
+    return `Calendar synced · ${summary.ownedUpdated} Personal OS block${summary.ownedUpdated === 1 ? "" : "s"} updated`;
+  }
+  if (summary.upserted > 0 || summary.removed > 0) {
+    return `Calendar synced · ${summary.upserted} Google event${summary.upserted === 1 ? "" : "s"} visible`;
+  }
+  return "Google Calendar is up to date";
+}
 
 const START_HOUR = 7;
 const END_HOUR = 22;
@@ -437,10 +454,10 @@ export function PlannerApp({
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     queueMicrotask(() => setGoogleConnection("syncing"));
     syncGoogleCalendar()
-      .then(() => {
+      .then(({ summary }) => {
         setGoogleConnection("connected");
         setReloadKey((value) => value + 1);
-        setToast("Google Calendar connected and synced");
+        setToast(calendarSyncMessage(summary));
       })
       .catch(() => {
         setGoogleConnection("error");
@@ -669,8 +686,14 @@ export function PlannerApp({
     error: "Offline",
   }[connection];
 
+  const failedSyncCount = blocks.filter(
+    (block) => block.type === "task" && block.syncStatus === "FAILED",
+  ).length;
+
   const syncDisplay = connection !== "live"
     ? { state: connection, label: dataConnectionLabel }
+    : googleConnection === "connected" && failedSyncCount > 0
+      ? { state: "error", label: `${failedSyncCount} failed` }
     : googleConnection === "connected"
       ? { state: "live", label: "Synced" }
       : googleConnection === "not-connected"
@@ -687,10 +710,10 @@ export function PlannerApp({
     if (googleConnection === "connected") {
       setGoogleConnection("syncing");
       try {
-        await syncGoogleCalendar();
+        const { summary } = await syncGoogleCalendar();
         setGoogleConnection("connected");
         setReloadKey((value) => value + 1);
-        setToast("Google Calendar synced");
+        setToast(calendarSyncMessage(summary));
       } catch {
         setGoogleConnection("error");
         setToast("Google Calendar sync failed · tap Retry");
@@ -730,7 +753,9 @@ export function PlannerApp({
             <button
               className={`sync-status ${syncDisplay.state}`}
               title={googleConnection === "connected"
-                ? "Google Calendar is connected; click to sync now"
+                ? failedSyncCount > 0
+                  ? `${failedSyncCount} Personal OS block${failedSyncCount === 1 ? "" : "s"} failed to sync; click to retry`
+                  : "Google Calendar is connected; click to sync now"
                 : "Connect Google Calendar"}
               onClick={handleCalendarConnection}
               aria-live="polite"

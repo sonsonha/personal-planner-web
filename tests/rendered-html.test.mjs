@@ -51,7 +51,9 @@ test("ships the core planning interactions", async () => {
   assert.match(apiClient, /updateTimeBlock/);
   assert.match(apiClient, /getGoogleAuthUrl/);
   assert.match(apiClient, /syncGoogleCalendar/);
-  assert.match(source, /Google Calendar connected and synced/);
+  assert.match(source, /Google Calendar is up to date/);
+  assert.match(source, /still need attention/);
+  assert.match(source, /failedSyncCount/);
   assert.match(proxy, /PLANNER_WEB_TOKEN/);
   assert.doesNotMatch(proxy, /NEXT_PUBLIC_PLANNER_WEB_TOKEN/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
