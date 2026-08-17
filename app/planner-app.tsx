@@ -2,6 +2,7 @@
 
 import {
   Bell,
+  CalendarClock,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -12,16 +13,20 @@ import {
   Command,
   Crosshair,
   Flag,
+  FileText,
   FolderKanban,
   GripVertical,
   ListTodo,
   LockKeyhole,
   MoreHorizontal,
   Plus,
+  RotateCcw,
+  Save,
   Search,
   Settings,
   Sparkles,
   Target,
+  Trash2,
   X,
   Zap,
 } from "lucide-react";
@@ -29,9 +34,11 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import {
   createTask as createPlannerTask,
   createTimeBlock as createPlannerTimeBlock,
+  deleteTask as deletePlannerTask,
   deleteTimeBlock,
   fetchGoogleIntegration,
   fetchPlanner,
+  fetchTaskTimeBlocks,
   getGoogleAuthUrl,
   PlannerApiError,
   updateTask,
@@ -49,12 +56,14 @@ type TaskStatus = "inbox" | "scheduled" | "done";
 type PlannerTask = {
   id: string;
   title: string;
+  notes: string;
   projectId: string | null;
   project: string;
   color: string;
   duration: number;
-  priority: "high" | "normal";
+  priority: "high" | "normal" | "low";
   status: TaskStatus;
+  dueAt: string | null;
   due?: string;
 };
 
@@ -75,6 +84,7 @@ type CalendarBlock = {
 type ProjectOption = { id: string | null; title: string; color: string };
 type ConnectionState = "loading" | "syncing" | "live" | "demo" | "error";
 type GoogleConnectionState = "loading" | "connected" | "not-connected" | "syncing" | "error";
+type ActiveSection = "calendar" | "tasks";
 
 type DragPayload =
   | { kind: "task"; taskId: string }
@@ -122,55 +132,65 @@ const initialTasks: PlannerTask[] = [
   {
     id: "task-roadmap",
     title: "Finalize product roadmap",
+    notes: "Turn the current product direction into a focused first milestone.",
     projectId: "demo-personal-os",
     project: "Personal OS",
     color: COLORS.violet,
     duration: 60,
     priority: "high",
     status: "inbox",
+    dueAt: new Date().toISOString(),
     due: "Today",
   },
   {
     id: "task-networking",
     title: "Study TCP reliability",
+    notes: "",
     projectId: null,
     project: "Systems depth",
     color: COLORS.blue,
     duration: 45,
     priority: "normal",
     status: "scheduled",
+    dueAt: null,
     due: "This week",
   },
   {
     id: "task-demo",
     title: "Record Rover demo walkthrough",
+    notes: "Capture a short walkthrough of the latest inference flow.",
     projectId: "demo-rover",
     project: "Landfill Rover",
     color: COLORS.coral,
     duration: 90,
     priority: "high",
     status: "inbox",
+    dueAt: null,
     due: "Friday",
   },
   {
     id: "task-english",
     title: "English interview practice",
+    notes: "",
     projectId: "demo-career",
     project: "Career capital",
     color: COLORS.cyan,
     duration: 30,
     priority: "normal",
     status: "inbox",
+    dueAt: null,
   },
   {
     id: "task-expenses",
     title: "Review monthly expenses",
+    notes: "",
     projectId: "demo-life",
     project: "Life admin",
     color: COLORS.amber,
     duration: 30,
     priority: "normal",
     status: "inbox",
+    dueAt: null,
   },
 ];
 
@@ -293,6 +313,39 @@ function dueLabel(value: string | null) {
   return due.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function dateInputValue(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function timeInputValue(value: string) {
+  const date = new Date(value);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function scheduleStart(dateValue: string, timeValue: string) {
+  return new Date(`${dateValue}T${timeValue}:00`);
+}
+
+function defaultScheduleStart() {
+  const date = new Date();
+  date.setMinutes(date.getMinutes() < 30 ? 30 : 60, 0, 0);
+  if (date.getHours() >= END_HOUR) {
+    date.setDate(date.getDate() + 1);
+    date.setHours(9, 0, 0, 0);
+  }
+  return date;
+}
+
+function scheduleLabel(block?: CalendarBlock) {
+  if (!block) return "Scheduled";
+  return `${minutesToTime(block.start)} · ${block.duration < 60 ? `${block.duration}m` : durationLabel(block.duration)}`;
+}
+
 function projectOptions(projects: ApiProject[]): ProjectOption[] {
   return [
     ...projects
@@ -307,12 +360,14 @@ function taskFromApi(task: ApiTask, projects: ProjectOption[]): PlannerTask {
   return {
     id: task.id,
     title: task.title,
+    notes: task.notes,
     projectId: task.projectId,
     project: project.title,
     color: project.color,
     duration: task.durationMinutes,
-    priority: task.priority === "HIGH" ? "high" : "normal",
+    priority: task.priority === "HIGH" ? "high" : task.priority === "LOW" ? "low" : "normal",
     status: task.status.toLowerCase() as TaskStatus,
+    dueAt: task.dueAt,
     due: dueLabel(task.dueAt),
   };
 }
@@ -373,6 +428,7 @@ export function PlannerApp({
 }) {
   const [now] = useState(() => new Date());
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const [activeSection, setActiveSection] = useState<ActiveSection>("calendar");
   const [view, setView] = useState<"week" | "day">("week");
   const [activeDay, setActiveDay] = useState(() => {
     const day = new Date().getDay();
@@ -387,6 +443,7 @@ export function PlannerApp({
   const [reloadKey, setReloadKey] = useState(0);
   const [taskFilter, setTaskFilter] = useState<"inbox" | "today">("inbox");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [taskPanelOpen, setTaskPanelOpen] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -405,6 +462,9 @@ export function PlannerApp({
   const isCurrentWeek = currentWeekStart === weekStart.getTime();
   const nowDay = now.getDay() === 0 ? 6 : now.getDay() - 1;
   const nowMinute = now.getHours() * 60 + now.getMinutes();
+  const editingTask = editingTaskId
+    ? tasks.find((task) => task.id === editingTaskId) ?? null
+    : null;
 
   const runCalendarSync = useCallback((options: {
     announce?: boolean;
@@ -577,9 +637,6 @@ export function PlannerApp({
   const completeTask = async (taskId: string) => {
     const previousTasks = tasks;
     const previousBlocks = blocks;
-    const taskBlocks = blocks.filter(
-      (block) => block.type === "task" && block.taskId === taskId,
-    );
     setTasks((current) =>
       current.map((task) => (task.id === taskId ? { ...task, status: "done" } : task)),
     );
@@ -588,16 +645,33 @@ export function PlannerApp({
     if (!liveDataRef.current) return;
 
     try {
-      await Promise.all([
-        updateTask(taskId, { status: "DONE" }),
-        ...taskBlocks.map((block) => deleteTimeBlock(block.id)),
-      ]);
+      const linkedBlocks = await fetchTaskTimeBlocks(taskId);
+      await Promise.all(linkedBlocks.map((block) => deleteTimeBlock(block.id)));
+      await updateTask(taskId, { status: "DONE" });
       setToast("Task completed · calendar updated");
+      setReloadKey((value) => value + 1);
     } catch {
       setTasks(previousTasks);
       setBlocks(previousBlocks);
       setConnection("error");
       setToast("Could not complete task · changes rolled back");
+    }
+  };
+
+  const restoreTask = async (taskId: string) => {
+    const previousTasks = tasks;
+    setTasks((current) => current.map((task) =>
+      task.id === taskId ? { ...task, status: "inbox" } : task,
+    ));
+    setToast(liveDataRef.current ? "Restoring task…" : "Task restored · demo mode");
+    if (!liveDataRef.current) return;
+    try {
+      await updateTask(taskId, { status: "INBOX" });
+      setToast("Task restored to Inbox");
+      setReloadKey((value) => value + 1);
+    } catch {
+      setTasks(previousTasks);
+      setToast("Could not restore task · changes rolled back");
     }
   };
 
@@ -704,12 +778,14 @@ export function PlannerApp({
     const task: PlannerTask = {
       id: `pending-${crypto.randomUUID()}`,
       title,
+      notes: "",
       projectId,
       project: project.title,
       color: project.color,
       duration,
       priority: "normal",
       status: "inbox",
+      dueAt: null,
       due: "Today",
     };
     setTasks((current) => [task, ...current]);
@@ -782,20 +858,31 @@ export function PlannerApp({
 
   return (
     <div className="app-shell">
-      <Sidebar inboxCount={tasks.filter((task) => task.status === "inbox").length} />
+      <Sidebar
+        inboxCount={tasks.filter((task) => task.status === "inbox").length}
+        activeSection={activeSection}
+        onNavigate={(section) => {
+          setActiveSection(section);
+          if (section === "calendar") goToday();
+        }}
+      />
 
-      <main className="workspace">
+      <main className={`workspace ${activeSection === "tasks" ? "tasks-mode" : ""}`}>
         <header className="topbar">
           <div className="mobile-brand">
             <div className="brand-mark">P</div>
             <strong>Personal OS</strong>
           </div>
           <div className="calendar-title-block">
-            <div className="eyebrow">Calendar planner</div>
-            <h1>
-              {weekStart.toLocaleDateString("en-US", { month: "long" })}{" "}
-              <span>{weekStart.getFullYear()}</span>
-            </h1>
+            <div className="eyebrow">{activeSection === "calendar" ? "Calendar planner" : "Task workspace"}</div>
+            {activeSection === "calendar" ? (
+              <h1>
+                {weekStart.toLocaleDateString("en-US", { month: "long" })}{" "}
+                <span>{weekStart.getFullYear()}</span>
+              </h1>
+            ) : (
+              <h1>Tasks <span>{tasks.filter((task) => task.status !== "done").length} active</span></h1>
+            )}
           </div>
 
           <div className="topbar-actions">
@@ -823,6 +910,7 @@ export function PlannerApp({
           </div>
         </header>
 
+        {activeSection === "calendar" ? <>
         <section className="calendar-toolbar" aria-label="Calendar controls">
           <div className="toolbar-cluster">
             <button className="today-button" onClick={goToday}>Today</button>
@@ -928,6 +1016,7 @@ export function PlannerApp({
                           block={block}
                           onDragStart={onDragStart}
                           onComplete={completeTask}
+                          onOpenTask={setEditingTaskId}
                         />
                       ))}
                   </div>
@@ -948,9 +1037,20 @@ export function PlannerApp({
               onQuickAdd={() => setQuickAddOpen(true)}
               onDragStart={onDragStart}
               onComplete={completeTask}
+              onOpenTask={setEditingTaskId}
             />
           )}
         </div>
+        </> : (
+          <TasksWorkspace
+            tasks={tasks}
+            blocks={blocks}
+            onQuickAdd={() => setQuickAddOpen(true)}
+            onOpenTask={setEditingTaskId}
+            onComplete={completeTask}
+            onRestore={restoreTask}
+          />
+        )}
       </main>
 
       <button className="quick-add-fab" onClick={() => setQuickAddOpen(true)} aria-label="Quick add">
@@ -965,6 +1065,21 @@ export function PlannerApp({
         />
       )}
 
+      {editingTask && (
+        <TaskEditor
+          key={editingTask.id}
+          task={editingTask}
+          projects={projects}
+          live={connection === "live"}
+          onClose={() => setEditingTaskId(null)}
+          onChanged={(message) => {
+            setEditingTaskId(null);
+            setReloadKey((value) => value + 1);
+            setToast(message);
+          }}
+        />
+      )}
+
       {toast && (
         <div className="toast" role="status">
           <CheckCircle2 size={18} /> {toast}
@@ -974,7 +1089,15 @@ export function PlannerApp({
   );
 }
 
-function Sidebar({ inboxCount }: { inboxCount: number }) {
+function Sidebar({
+  inboxCount,
+  activeSection,
+  onNavigate,
+}: {
+  inboxCount: number;
+  activeSection: ActiveSection;
+  onNavigate: (section: ActiveSection) => void;
+}) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -986,9 +1109,13 @@ function Sidebar({ inboxCount }: { inboxCount: number }) {
       </div>
 
       <nav className="primary-nav" aria-label="Primary navigation">
-        <button><Crosshair size={19} /><span>Today</span></button>
-        <button className="active"><CalendarDays size={19} /><span>Calendar</span></button>
-        <button><ListTodo size={19} /><span>Tasks</span><em>{inboxCount}</em></button>
+        <button onClick={() => onNavigate("calendar")}><Crosshair size={19} /><span>Today</span></button>
+        <button className={activeSection === "calendar" ? "active" : ""} onClick={() => onNavigate("calendar")}>
+          <CalendarDays size={19} /><span>Calendar</span>
+        </button>
+        <button className={activeSection === "tasks" ? "active" : ""} onClick={() => onNavigate("tasks")}>
+          <ListTodo size={19} /><span>Tasks</span><em>{inboxCount}</em>
+        </button>
         <button><FolderKanban size={19} /><span>Projects</span></button>
         <button><Target size={19} /><span>Goals</span></button>
       </nav>
@@ -1016,10 +1143,12 @@ function CalendarEvent({
   block,
   onDragStart,
   onComplete,
+  onOpenTask,
 }: {
   block: CalendarBlock;
   onDragStart: (event: React.DragEvent, payload: DragPayload) => void;
   onComplete: (taskId: string) => void;
+  onOpenTask: (taskId: string) => void;
 }) {
   return (
     <article
@@ -1033,6 +1162,9 @@ function CalendarEvent({
       } as React.CSSProperties}
       draggable={block.type === "task"}
       onDragStart={(event) => onDragStart(event, { kind: "block", blockId: block.id })}
+      onDoubleClick={() => {
+        if (block.taskId) onOpenTask(block.taskId);
+      }}
     >
       <div className="event-title-row">
         {block.type === "external" && <LockKeyhole size={11} />}
@@ -1067,6 +1199,7 @@ function TaskPanel({
   onQuickAdd,
   onDragStart,
   onComplete,
+  onOpenTask,
 }: {
   tasks: PlannerTask[];
   count: number;
@@ -1078,6 +1211,7 @@ function TaskPanel({
   onQuickAdd: () => void;
   onDragStart: (event: React.DragEvent, payload: DragPayload) => void;
   onComplete: (taskId: string) => void;
+  onOpenTask: (taskId: string) => void;
 }) {
   return (
     <aside className="task-panel">
@@ -1125,7 +1259,9 @@ function TaskPanel({
               <Circle size={18} />
             </button>
             <div className="task-content">
-              <strong>{task.title}</strong>
+              <button className="task-title-button" type="button" onClick={() => onOpenTask(task.id)}>
+                {task.title}
+              </button>
               <div className="task-project"><i style={{ background: task.color }} />{task.project}</div>
               <div className="task-meta">
                 <span><Clock3 size={13} />{durationLabel(task.duration)}</span>
@@ -1145,6 +1281,365 @@ function TaskPanel({
         )}
       </div>
     </aside>
+  );
+}
+
+function TasksWorkspace({
+  tasks,
+  blocks,
+  onQuickAdd,
+  onOpenTask,
+  onComplete,
+  onRestore,
+}: {
+  tasks: PlannerTask[];
+  blocks: CalendarBlock[];
+  onQuickAdd: () => void;
+  onOpenTask: (taskId: string) => void;
+  onComplete: (taskId: string) => void;
+  onRestore: (taskId: string) => void;
+}) {
+  const [filter, setFilter] = useState<"open" | "inbox" | "scheduled" | "done">("open");
+  const [query, setQuery] = useState("");
+  const today = new Date();
+  const normalizedQuery = query.trim().toLowerCase();
+  const active = tasks.filter((task) => task.status !== "done");
+  const overdue = active.filter((task) => task.dueAt && new Date(task.dueAt) < today).length;
+  const scheduled = active.filter((task) => task.status === "scheduled").length;
+  const completed = tasks.filter((task) => task.status === "done").length;
+  const visible = tasks
+    .filter((task) => {
+      if (filter === "open" && task.status === "done") return false;
+      if (filter !== "open" && task.status !== filter) return false;
+      if (!normalizedQuery) return true;
+      return `${task.title} ${task.notes} ${task.project}`.toLowerCase().includes(normalizedQuery);
+    })
+    .sort((left, right) => {
+      if (left.priority !== right.priority) {
+        const rank = { high: 0, normal: 1, low: 2 };
+        return rank[left.priority] - rank[right.priority];
+      }
+      return (left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER)
+        - (right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER);
+    });
+
+  return (
+    <section className="tasks-workspace" aria-label="Task workspace">
+      <div className="tasks-hero">
+        <div>
+          <div className="eyebrow">Plan the work, then protect the time</div>
+          <h2>Your tasks</h2>
+          <p>Capture everything here. Schedule only what deserves time on your calendar.</p>
+        </div>
+        <button className="primary-button task-add-button" onClick={onQuickAdd}>
+          <Plus size={17} /> Add task
+        </button>
+      </div>
+
+      <div className="task-metrics" aria-label="Task summary">
+        <div><span>Open</span><strong>{active.length}</strong><small>ready to plan</small></div>
+        <div><span>Scheduled</span><strong>{scheduled}</strong><small>protected on calendar</small></div>
+        <div className={overdue ? "attention" : ""}><span>Overdue</span><strong>{overdue}</strong><small>needs a decision</small></div>
+        <div><span>Completed</span><strong>{completed}</strong><small>all-time progress</small></div>
+      </div>
+
+      <div className="task-board">
+        <div className="task-board-toolbar">
+          <div className="task-board-tabs">
+            {(["open", "inbox", "scheduled", "done"] as const).map((value) => (
+              <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>
+                {value === "done" ? "Completed" : value[0].toUpperCase() + value.slice(1)}
+              </button>
+            ))}
+          </div>
+          <label className="task-workspace-search">
+            <Search size={16} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks" />
+          </label>
+        </div>
+
+        <div className="task-table-heading" aria-hidden="true">
+          <span>Task</span><span>Project</span><span>Schedule</span><span>Due</span><span />
+        </div>
+        <div className="task-workspace-list">
+          {visible.map((task) => {
+            const block = blocks.find((candidate) => candidate.taskId === task.id);
+            const isOverdue = Boolean(task.dueAt && new Date(task.dueAt) < today && task.status !== "done");
+            return (
+              <article className={`task-workspace-row ${task.status === "done" ? "completed" : ""}`} key={task.id}>
+                <button
+                  className="workspace-task-check"
+                  aria-label={task.status === "done" ? `Restore ${task.title}` : `Complete ${task.title}`}
+                  onClick={() => task.status === "done" ? onRestore(task.id) : onComplete(task.id)}
+                >
+                  {task.status === "done" ? <RotateCcw size={15} /> : <Circle size={19} />}
+                </button>
+                <button className="workspace-task-title" onClick={() => onOpenTask(task.id)}>
+                  <strong>{task.title}</strong>
+                  <span>{task.notes || `${durationLabel(task.duration)} focus block`}</span>
+                </button>
+                <div className="workspace-task-project"><i style={{ background: task.color }} />{task.project}</div>
+                <div className={`workspace-task-status ${task.status}`}>
+                  {task.status === "scheduled" ? <CalendarClock size={14} /> : <FileText size={14} />}
+                  {task.status === "scheduled" ? scheduleLabel(block) : task.status === "done" ? "Completed" : "Inbox"}
+                </div>
+                <div className={`workspace-task-due ${isOverdue ? "overdue" : ""}`}>
+                  {task.due ? <><Flag size={13} />{task.due}</> : "—"}
+                </div>
+                <button className="row-more" aria-label={`Edit ${task.title}`} onClick={() => onOpenTask(task.id)}>
+                  <MoreHorizontal size={18} />
+                </button>
+              </article>
+            );
+          })}
+
+          {visible.length === 0 && (
+            <div className="task-workspace-empty">
+              <div><Sparkles size={22} /></div>
+              <strong>No tasks in this view</strong>
+              <span>Switch filters or capture your next action.</span>
+              <button onClick={onQuickAdd}><Plus size={15} /> Add task</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TaskEditor({
+  task,
+  projects,
+  live,
+  onClose,
+  onChanged,
+}: {
+  task: PlannerTask;
+  projects: ProjectOption[];
+  live: boolean;
+  onClose: () => void;
+  onChanged: (message: string) => void;
+}) {
+  const suggestedStart = defaultScheduleStart();
+  const [title, setTitle] = useState(task.title);
+  const [notes, setNotes] = useState(task.notes);
+  const [projectId, setProjectId] = useState<string | null>(task.projectId);
+  const [dueDate, setDueDate] = useState(dateInputValue(task.dueAt));
+  const [duration, setDuration] = useState(task.duration);
+  const [priority, setPriority] = useState<"LOW" | "NORMAL" | "HIGH">(
+    task.priority === "high" ? "HIGH" : task.priority === "low" ? "LOW" : "NORMAL",
+  );
+  const [taskBlocks, setTaskBlocks] = useState<ApiTimeBlock[]>([]);
+  const [scheduleDate, setScheduleDate] = useState(dateInputValue(suggestedStart.toISOString()));
+  const [scheduleTime, setScheduleTime] = useState(timeInputValue(suggestedStart.toISOString()));
+  const [loadingSchedule, setLoadingSchedule] = useState(live);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const scheduledBlock = taskBlocks[0];
+
+  useEffect(() => {
+    titleRef.current?.focus();
+    if (!live) {
+      queueMicrotask(() => setLoadingSchedule(false));
+      return;
+    }
+    const controller = new AbortController();
+    fetchTaskTimeBlocks(task.id, controller.signal)
+      .then((items) => {
+        setTaskBlocks(items);
+        if (items[0]) {
+          setScheduleDate(dateInputValue(items[0].startAt));
+          setScheduleTime(timeInputValue(items[0].startAt));
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setError("Could not load this task's schedule.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingSchedule(false);
+      });
+    return () => controller.abort();
+  }, [live, task.id]);
+
+  const taskPayload = () => ({
+    title: title.trim(),
+    notes: notes.trim(),
+    projectId,
+    dueAt: dueDate ? new Date(`${dueDate}T23:59:00`).toISOString() : null,
+    durationMinutes: duration,
+    priority,
+  });
+
+  const selectedProject = projects.find((project) => project.id === projectId)
+    ?? projects.at(-1)!;
+
+  const saveTask = async (schedule: boolean) => {
+    if (!title.trim()) {
+      setError("Task title cannot be empty.");
+      return;
+    }
+    if ((schedule || scheduledBlock) && (!scheduleDate || !scheduleTime)) {
+      setError("Choose a date and time before scheduling.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    if (!live) {
+      onChanged(schedule ? "Task scheduled · demo mode" : "Task updated · demo mode");
+      return;
+    }
+    try {
+      await updateTask(task.id, taskPayload());
+      if (schedule || scheduledBlock) {
+        const startAt = scheduleStart(scheduleDate, scheduleTime);
+        const endAt = new Date(startAt.getTime() + duration * 60_000);
+        if (scheduledBlock) {
+          await updateTimeBlock(scheduledBlock.id, {
+            title: title.trim(),
+            projectId,
+            color: selectedProject.color,
+            startAt: startAt.toISOString(),
+            endAt: endAt.toISOString(),
+          });
+        } else {
+          await createPlannerTimeBlock({
+            taskId: task.id,
+            projectId,
+            title: title.trim(),
+            color: selectedProject.color,
+            startAt: startAt.toISOString(),
+            endAt: endAt.toISOString(),
+          });
+        }
+      }
+      onChanged(schedule
+        ? "Task saved and synced to Google Calendar"
+        : scheduledBlock
+          ? "Task and calendar block updated"
+          : "Task details updated");
+    } catch {
+      setSaving(false);
+      setError("Could not save these changes. Please try again.");
+    }
+  };
+
+  const unscheduleTask = async () => {
+    setSaving(true);
+    setError(null);
+    if (!live) {
+      onChanged("Task returned to Inbox · demo mode");
+      return;
+    }
+    try {
+      await Promise.all(taskBlocks.map((block) => deleteTimeBlock(block.id)));
+      await updateTask(task.id, { status: "INBOX" });
+      onChanged("Task removed from calendar and returned to Inbox");
+    } catch {
+      setSaving(false);
+      setError("Could not remove this task from the calendar.");
+    }
+  };
+
+  const removeTask = async () => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    if (!live) {
+      onChanged("Task deleted · demo mode");
+      return;
+    }
+    try {
+      await deletePlannerTask(task.id);
+      onChanged("Task and its calendar blocks deleted");
+    } catch {
+      setSaving(false);
+      setError("Could not delete this task. Please try again.");
+    }
+  };
+
+  return (
+    <div className="task-editor-backdrop">
+      <button className="modal-dismiss" type="button" aria-label="Close task editor" onClick={onClose} />
+      <aside className="task-editor" role="dialog" aria-modal="true" aria-label={`Edit ${task.title}`}>
+        <div className="task-editor-header">
+          <div>
+            <div className="eyebrow">Task detail</div>
+            <span className={`task-state-pill ${scheduledBlock ? "scheduled" : task.status}`}>
+              {scheduledBlock ? "Scheduled" : task.status === "done" ? "Completed" : "Inbox"}
+            </span>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </div>
+
+        <div className="task-editor-body">
+          <label className="editor-title-field">
+            <span>Task</span>
+            <input ref={titleRef} value={title} onChange={(event) => setTitle(event.target.value)} />
+          </label>
+          <label className="editor-notes-field">
+            <span>Notes</span>
+            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Context, links, or the definition of done…" />
+          </label>
+
+          <div className="editor-field-grid">
+            <label><span>Project</span>
+              <select value={projectId ?? ""} onChange={(event) => setProjectId(event.target.value || null)}>
+                {projects.map((project) => <option key={project.id ?? "inbox"} value={project.id ?? ""}>{project.title}</option>)}
+              </select>
+            </label>
+            <label><span>Priority</span>
+              <select value={priority} onChange={(event) => setPriority(event.target.value as "LOW" | "NORMAL" | "HIGH")}>
+                <option value="HIGH">High</option><option value="NORMAL">Normal</option><option value="LOW">Low</option>
+              </select>
+            </label>
+            <label><span>Duration</span>
+              <select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>
+                <option value={15}>15 minutes</option><option value={30}>30 minutes</option><option value={45}>45 minutes</option>
+                <option value={60}>1 hour</option><option value={90}>1.5 hours</option><option value={120}>2 hours</option>
+              </select>
+            </label>
+            <label><span>Due date</span><input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
+          </div>
+
+          <section className="editor-schedule-section">
+            <div className="editor-section-heading">
+              <div><CalendarClock size={17} /><span>Calendar time</span></div>
+              {loadingSchedule && <small>Checking schedule…</small>}
+            </div>
+            <div className="editor-schedule-fields">
+              <label><span>Date</span><input type="date" value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} /></label>
+              <label><span>Start</span><input type="time" value={scheduleTime} onChange={(event) => setScheduleTime(event.target.value)} /></label>
+              <div><span>Length</span><strong>{durationLabel(duration)}</strong></div>
+            </div>
+            <p>{scheduledBlock
+              ? "Saving will update this time block in Personal OS and Google Calendar."
+              : "Schedule this task when you are ready to protect time for it."}</p>
+          </section>
+
+          {error && <div className="editor-error" role="alert">{error}</div>}
+        </div>
+
+        <div className="task-editor-footer">
+          <button className={`delete-task-button ${confirmDelete ? "confirm" : ""}`} type="button" onClick={removeTask} disabled={saving}>
+            <Trash2 size={15} /> {confirmDelete ? "Click again to delete" : "Delete"}
+          </button>
+          <div>
+            {scheduledBlock && <button className="secondary-button" type="button" onClick={unscheduleTask} disabled={saving}>Unschedule</button>}
+            <button className="secondary-button" type="button" onClick={() => saveTask(false)} disabled={saving || loadingSchedule}>
+              <Save size={15} /> Save details
+            </button>
+            <button className="primary-button" type="button" onClick={() => saveTask(true)} disabled={saving || loadingSchedule}>
+              <CalendarClock size={15} /> {saving ? "Saving…" : scheduledBlock ? "Save & sync" : "Schedule task"}
+            </button>
+          </div>
+        </div>
+      </aside>
+    </div>
   );
 }
 

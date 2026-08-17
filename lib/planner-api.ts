@@ -122,7 +122,9 @@ export function fetchPlanner(from: string, to: string, signal?: AbortSignal) {
 
 export function createTask(input: {
   title: string;
+  notes?: string;
   projectId: string | null;
+  dueAt?: string | null;
   durationMinutes: number;
   priority: ApiPriority;
 }) {
@@ -132,10 +134,32 @@ export function createTask(input: {
   });
 }
 
-export function updateTask(id: string, input: Partial<{ status: ApiTaskStatus }>) {
-  return requestJson<{ id: string; status: ApiTaskStatus; revision: number }>(
+export function updateTask(id: string, input: Partial<{
+  title: string;
+  notes: string;
+  projectId: string | null;
+  dueAt: string | null;
+  durationMinutes: number;
+  priority: ApiPriority;
+  status: ApiTaskStatus;
+}>) {
+  return requestJson<ApiTask>(
     `/api/tasks/${encodeURIComponent(id)}`,
     { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+export function fetchTaskTimeBlocks(id: string, signal?: AbortSignal) {
+  return requestJson<ApiTimeBlock[]>(
+    `/api/tasks/${encodeURIComponent(id)}/time-blocks`,
+    { signal },
+  );
+}
+
+export function deleteTask(id: string) {
+  return requestJson<{ id: string; deleted: true; removedTimeBlocks: number }>(
+    `/api/tasks/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
   );
 }
 
@@ -155,7 +179,15 @@ export function createTimeBlock(input: {
 
 export function updateTimeBlock(
   id: string,
-  input: { startAt: string; endAt: string },
+  input: Partial<{
+    taskId: string | null;
+    projectId: string | null;
+    title: string;
+    startAt: string;
+    endAt: string;
+    color: string;
+    reminderMinutes: number | null;
+  }>,
 ) {
   return requestJson<ApiTimeBlock>(`/api/time-blocks/${encodeURIComponent(id)}`, {
     method: "PATCH",

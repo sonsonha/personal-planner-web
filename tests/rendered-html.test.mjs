@@ -29,13 +29,15 @@ test("server-renders the Personal OS calendar planner", async () => {
 });
 
 test("ships the core planning interactions", async () => {
-  const [source, page, layout, packageJson, apiClient, proxy] = await Promise.all([
+  const [source, page, layout, packageJson, apiClient, proxy, taskRoute, taskBlocksRoute] = await Promise.all([
     readFile(new URL("../app/planner-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../lib/planner-api.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/planner-backend.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/tasks/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/tasks/[id]/time-blocks/route.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /getChatGPTUser/);
@@ -58,6 +60,13 @@ test("ships the core planning interactions", async () => {
   assert.match(source, /window\.addEventListener\("focus"/);
   assert.match(source, /document\.addEventListener\("visibilitychange"/);
   assert.match(source, /lastCalendarSyncAttemptRef/);
+  assert.match(source, /function TasksWorkspace/);
+  assert.match(source, /function TaskEditor/);
+  assert.match(source, /Unschedule/);
+  assert.match(apiClient, /fetchTaskTimeBlocks/);
+  assert.match(apiClient, /deleteTask/);
+  assert.match(taskRoute, /export async function DELETE/);
+  assert.match(taskBlocksRoute, /\/v2\/tasks\/\$\{id\}\/time-blocks/);
   assert.match(proxy, /PLANNER_WEB_TOKEN/);
   assert.doesNotMatch(proxy, /NEXT_PUBLIC_PLANNER_WEB_TOKEN/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
