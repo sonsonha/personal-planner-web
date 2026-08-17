@@ -501,23 +501,24 @@ export function PlannerApp({
   useEffect(() => {
     if (connection !== "live" || !hasGoogleIntegration) return;
 
-    const syncWhenActive = () => {
+    const syncWhenActive = (force = false) => {
       if (document.visibilityState !== "visible") return;
-      void runCalendarSync();
+      void runCalendarSync({ force });
     };
+    const onWindowFocus = () => syncWhenActive(true);
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") syncWhenActive();
+      if (document.visibilityState === "visible") syncWhenActive(true);
     };
 
-    const initialSync = window.setTimeout(syncWhenActive, 0);
-    const interval = window.setInterval(syncWhenActive, AUTO_SYNC_INTERVAL_MS);
-    window.addEventListener("focus", syncWhenActive);
+    const initialSync = window.setTimeout(() => syncWhenActive(), 0);
+    const interval = window.setInterval(() => syncWhenActive(), AUTO_SYNC_INTERVAL_MS);
+    window.addEventListener("focus", onWindowFocus);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
       window.clearTimeout(initialSync);
       window.clearInterval(interval);
-      window.removeEventListener("focus", syncWhenActive);
+      window.removeEventListener("focus", onWindowFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [connection, hasGoogleIntegration, runCalendarSync]);
