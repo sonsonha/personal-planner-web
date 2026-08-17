@@ -54,6 +54,10 @@ test("ships the core planning interactions", async () => {
   assert.match(source, /Google Calendar is up to date/);
   assert.match(source, /still need attention/);
   assert.match(source, /failedSyncCount/);
+  assert.match(source, /AUTO_SYNC_INTERVAL_MS/);
+  assert.match(source, /window\.addEventListener\("focus"/);
+  assert.match(source, /document\.addEventListener\("visibilitychange"/);
+  assert.match(source, /lastCalendarSyncAttemptRef/);
   assert.match(proxy, /PLANNER_WEB_TOKEN/);
   assert.doesNotMatch(proxy, /NEXT_PUBLIC_PLANNER_WEB_TOKEN/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);

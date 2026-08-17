@@ -25,7 +25,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createTask as createPlannerTask,
   createTimeBlock as createPlannerTimeBlock,
@@ -100,6 +100,8 @@ const START_HOUR = 7;
 const END_HOUR = 22;
 const MINUTES_VISIBLE = (END_HOUR - START_HOUR) * 60;
 const SNAP_MINUTES = 15;
+const AUTO_SYNC_INTERVAL_MS = 5 * 60_000;
+const AUTO_SYNC_MIN_GAP_MS = 30_000;
 const COLORS = {
   violet: "#705CF6",
   blue: "#3478F6",
@@ -381,6 +383,7 @@ export function PlannerApp({
   const [projects, setProjects] = useState<ProjectOption[]>(initialProjects);
   const [connection, setConnection] = useState<ConnectionState>("loading");
   const [googleConnection, setGoogleConnection] = useState<GoogleConnectionState>("loading");
+  const [hasGoogleIntegration, setHasGoogleIntegration] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [taskFilter, setTaskFilter] = useState<"inbox" | "today">("inbox");
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -389,6 +392,8 @@ export function PlannerApp({
   const [search, setSearch] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const liveDataRef = useRef(false);
+  const calendarSyncInFlightRef = useRef<Promise<void> | null>(null);
+  const lastCalendarSyncAttemptRef = useRef(0);
 
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
@@ -400,6 +405,40 @@ export function PlannerApp({
   const isCurrentWeek = currentWeekStart === weekStart.getTime();
   const nowDay = now.getDay() === 0 ? 6 : now.getDay() - 1;
   const nowMinute = now.getHours() * 60 + now.getMinutes();
+
+  const runCalendarSync = useCallback((options: {
+    announce?: boolean;
+    force?: boolean;
+  } = {}) => {
+    if (calendarSyncInFlightRef.current) return calendarSyncInFlightRef.current;
+    if (!options.force
+      && Date.now() - lastCalendarSyncAttemptRef.current < AUTO_SYNC_MIN_GAP_MS) {
+      return Promise.resolve();
+    }
+
+    lastCalendarSyncAttemptRef.current = Date.now();
+    if (options.announce) setGoogleConnection("syncing");
+
+    const operation = syncGoogleCalendar()
+      .then(({ summary }) => {
+        setHasGoogleIntegration(true);
+        setGoogleConnection("connected");
+        setReloadKey((value) => value + 1);
+        if (options.announce) setToast(calendarSyncMessage(summary));
+      })
+      .catch(() => {
+        setGoogleConnection("error");
+        if (options.announce) {
+          setToast("Google Calendar sync failed · tap Retry");
+        }
+      })
+      .finally(() => {
+        calendarSyncInFlightRef.current = null;
+      });
+
+    calendarSyncInFlightRef.current = operation;
+    return operation;
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -440,7 +479,11 @@ export function PlannerApp({
   useEffect(() => {
     const controller = new AbortController();
     fetchGoogleIntegration(controller.signal)
-      .then((status) => setGoogleConnection(status?.connected ? "connected" : "not-connected"))
+      .then((status) => {
+        const connected = Boolean(status?.connected);
+        setHasGoogleIntegration(connected);
+        setGoogleConnection(connected ? "connected" : "not-connected");
+      })
       .catch(() => {
         if (!controller.signal.aborted) setGoogleConnection("error");
       });
@@ -452,18 +495,32 @@ export function PlannerApp({
     if (url.searchParams.get("google") !== "connected") return;
     url.searchParams.delete("google");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-    queueMicrotask(() => setGoogleConnection("syncing"));
-    syncGoogleCalendar()
-      .then(({ summary }) => {
-        setGoogleConnection("connected");
-        setReloadKey((value) => value + 1);
-        setToast(calendarSyncMessage(summary));
-      })
-      .catch(() => {
-        setGoogleConnection("error");
-        setToast("Calendar connected · first sync needs a retry");
-      });
-  }, []);
+    queueMicrotask(() => void runCalendarSync({ announce: true, force: true }));
+  }, [runCalendarSync]);
+
+  useEffect(() => {
+    if (connection !== "live" || !hasGoogleIntegration) return;
+
+    const syncWhenActive = () => {
+      if (document.visibilityState !== "visible") return;
+      void runCalendarSync();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") syncWhenActive();
+    };
+
+    const initialSync = window.setTimeout(syncWhenActive, 0);
+    const interval = window.setInterval(syncWhenActive, AUTO_SYNC_INTERVAL_MS);
+    window.addEventListener("focus", syncWhenActive);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearTimeout(initialSync);
+      window.clearInterval(interval);
+      window.removeEventListener("focus", syncWhenActive);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [connection, hasGoogleIntegration, runCalendarSync]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -707,17 +764,8 @@ export function PlannerApp({
       setReloadKey((value) => value + 1);
       return;
     }
-    if (googleConnection === "connected") {
-      setGoogleConnection("syncing");
-      try {
-        const { summary } = await syncGoogleCalendar();
-        setGoogleConnection("connected");
-        setReloadKey((value) => value + 1);
-        setToast(calendarSyncMessage(summary));
-      } catch {
-        setGoogleConnection("error");
-        setToast("Google Calendar sync failed · tap Retry");
-      }
+    if (hasGoogleIntegration) {
+      await runCalendarSync({ announce: true, force: true });
       return;
     }
     try {
@@ -752,10 +800,10 @@ export function PlannerApp({
           <div className="topbar-actions">
             <button
               className={`sync-status ${syncDisplay.state}`}
-              title={googleConnection === "connected"
+              title={hasGoogleIntegration
                 ? failedSyncCount > 0
                   ? `${failedSyncCount} Personal OS block${failedSyncCount === 1 ? "" : "s"} failed to sync; click to retry`
-                  : "Google Calendar is connected; click to sync now"
+                  : "Google Calendar auto-syncs while this tab is active; click to sync now"
                 : "Connect Google Calendar"}
               onClick={handleCalendarConnection}
               aria-live="polite"
