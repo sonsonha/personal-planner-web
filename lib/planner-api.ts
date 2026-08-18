@@ -18,16 +18,23 @@ export type ApiProject = {
   title: string;
   goalId: string | null;
   color: string;
+  lifeArea?: string;
+  description?: string;
   active: boolean;
+  revision?: number;
 };
 
 export type ApiGoal = {
   id: string;
   title: string;
   horizon: string;
+  lifeArea?: string;
   status: string;
   targetDate: string | null;
   parentId: string | null;
+  description?: string;
+  successCriteria?: string;
+  revision?: number;
 };
 
 export type ApiTimeBlock = {
@@ -198,6 +205,86 @@ export function updateTimeBlock(
 export function deleteTimeBlock(id: string) {
   return requestJson<{ id: string; deleted: true }>(
     `/api/time-blocks/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function createProject(input: {
+  title: string;
+  goalId?: string | null;
+  color?: string;
+  lifeArea?: string;
+  description?: string;
+  active?: boolean;
+}) {
+  return requestJson<ApiProject>("/api/projects", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateProject(
+  id: string,
+  input: Partial<{
+    title: string;
+    goalId: string | null;
+    color: string;
+    lifeArea: string;
+    description: string;
+    active: boolean;
+  }>,
+) {
+  return requestJson<ApiProject>(`/api/projects/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteProject(id: string) {
+  return requestJson<{ id: string; deleted: true }>(
+    `/api/projects/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function createGoal(input: {
+  title: string;
+  horizon?: string;
+  lifeArea?: string;
+  parentId?: string | null;
+  targetDate?: string | null;
+  description?: string;
+  successCriteria?: string;
+  status?: string;
+}) {
+  return requestJson<ApiGoal>("/api/goals", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateGoal(
+  id: string,
+  input: Partial<{
+    title: string;
+    horizon: string;
+    lifeArea: string;
+    parentId: string | null;
+    targetDate: string | null;
+    description: string;
+    successCriteria: string;
+    status: string;
+  }>,
+) {
+  return requestJson<ApiGoal>(`/api/goals/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteGoal(id: string) {
+  return requestJson<{ id: string; deleted: true }>(
+    `/api/goals/${encodeURIComponent(id)}`,
     { method: "DELETE" },
   );
 }

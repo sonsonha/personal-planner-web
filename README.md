@@ -33,7 +33,16 @@ npm run build
 
 ## Connect the backend
 
-Copy `.env.example` to `.env.local`, then set `PLANNER_API_BASE_URL`. Production uses `PLANNER_WEB_PRIVATE_KEY`, an Ed25519 PKCS#8 private key held only by the web host. Local development can continue using the shared `PLANNER_WEB_TOKEN` fallback.
+Copy `.env.example` to `.env.local`, then set `PLANNER_API_BASE_URL`.
+
+**Local web + Railway backend (recommended):** point at your deployed API and use the same `PLANNER_WEB_TOKEN` as Railway (minimum 32 characters). Restart `npm run dev` after changing `.env.local`.
+
+```env
+PLANNER_API_BASE_URL=https://soc-server-production.up.railway.app
+PLANNER_WEB_TOKEN=<matches Railway PLANNER_WEB_TOKEN>
+```
+
+Production ChatGPT Sites use `PLANNER_WEB_PRIVATE_KEY` (Ed25519) instead of the bearer token. Local dev can keep the shared token fallback.
 
 Credentials are read only by the web server proxy and are never shipped to browser JavaScript. Production pages and proxy calls also use the private Site's authenticated-user headers.
 

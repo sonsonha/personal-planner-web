@@ -46,10 +46,12 @@ import {
   syncGoogleCalendar,
   type CalendarSyncSummary,
   type ApiExternalEvent,
+  type ApiGoal,
   type ApiProject,
   type ApiTask,
   type ApiTimeBlock,
 } from "@/lib/planner-api";
+import { GoalsWorkspace, ProjectsWorkspace } from "./planner-workspaces";
 
 type TaskStatus = "inbox" | "scheduled" | "done";
 
@@ -84,7 +86,10 @@ type CalendarBlock = {
 type ProjectOption = { id: string | null; title: string; color: string };
 type ConnectionState = "loading" | "syncing" | "live" | "demo" | "error";
 type GoogleConnectionState = "loading" | "connected" | "not-connected" | "syncing" | "error";
-type ActiveSection = "calendar" | "tasks";
+type ActiveSection = "calendar" | "tasks" | "projects" | "goals";
+type CalendarView = "week" | "day" | "month";
+type ToastKind = "info" | "warning";
+type SlotPicker = { day: number; start: number };
 
 type DragPayload =
   | { kind: "task"; taskId: string }
@@ -395,6 +400,58 @@ function timeBlockFromApi(
   };
 }
 
+function startOfMonth(value: Date) {
+  const date = new Date(value);
+  date.setDate(1);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function daysInMonth(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth() + 1, 0).getDate();
+}
+
+function monthGridDays(anchor: Date) {
+  const first = startOfMonth(anchor);
+  const mondayOffset = first.getDay() === 0 ? -6 : 1 - first.getDay();
+  const start = addDays(first, mondayOffset);
+  return Array.from({ length: 42 }, (_, index) => addDays(start, index));
+}
+
+function sameDay(left: Date, right: Date) {
+  return left.getFullYear() === right.getFullYear()
+    && left.getMonth() === right.getMonth()
+    && left.getDate() === right.getDate();
+}
+
+function blocksOverlap(left: CalendarBlock, right: CalendarBlock) {
+  if (left.day !== right.day || left.type === "external" || right.type === "external") {
+    return false;
+  }
+  const leftEnd = left.start + left.duration;
+  const rightEnd = right.start + right.duration;
+  return left.start < rightEnd && right.start < leftEnd;
+}
+
+function conflictingBlocks(
+  candidate: CalendarBlock,
+  allBlocks: CalendarBlock[],
+  excludeId?: string,
+) {
+  return allBlocks.filter((block) =>
+    block.type === "task"
+    && block.id !== excludeId
+    && block.id !== candidate.id
+    && blocksOverlap(candidate, block),
+  );
+}
+
+function slotMinutesFromClick(clientY: number, rect: DOMRect) {
+  const y = Math.max(0, Math.min(rect.height, clientY - rect.top));
+  const minutesFromStart = Math.round((y / rect.height) * MINUTES_VISIBLE / SNAP_MINUTES) * SNAP_MINUTES;
+  return Math.min(END_HOUR * 60 - SNAP_MINUTES, START_HOUR * 60 + minutesFromStart);
+}
+
 function externalBlockFromApi(event: ApiExternalEvent, weekStart: Date): CalendarBlock {
   const start = new Date(event.startAt);
   const end = new Date(event.endAt);
@@ -429,7 +486,8 @@ export function PlannerApp({
   const [now] = useState(() => new Date());
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [activeSection, setActiveSection] = useState<ActiveSection>("calendar");
-  const [view, setView] = useState<"week" | "day">("week");
+  const [view, setView] = useState<CalendarView>("week");
+  const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(new Date()));
   const [activeDay, setActiveDay] = useState(() => {
     const day = new Date().getDay();
     return day === 0 ? 6 : day - 1;
@@ -437,6 +495,8 @@ export function PlannerApp({
   const [tasks, setTasks] = useState(initialTasks);
   const [blocks, setBlocks] = useState(initialBlocks);
   const [projects, setProjects] = useState<ProjectOption[]>(initialProjects);
+  const [goals, setGoals] = useState<ApiGoal[]>([]);
+  const [apiProjects, setApiProjects] = useState<ApiProject[]>([]);
   const [connection, setConnection] = useState<ConnectionState>("loading");
   const [googleConnection, setGoogleConnection] = useState<GoogleConnectionState>("loading");
   const [hasGoogleIntegration, setHasGoogleIntegration] = useState(false);
@@ -445,9 +505,15 @@ export function PlannerApp({
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [taskPanelOpen, setTaskPanelOpen] = useState(true);
+  const [slotPicker, setSlotPicker] = useState<SlotPicker | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastKind, setToastKind] = useState<ToastKind>("info");
   const [search, setSearch] = useState("");
+  const [showPlannerBlocks, setShowPlannerBlocks] = useState(true);
+  const [showExternalEvents, setShowExternalEvents] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const savedScrollRef = useRef(0);
   const liveDataRef = useRef(false);
   const calendarSyncInFlightRef = useRef<Promise<void> | null>(null);
   const lastCalendarSyncAttemptRef = useRef(0);
@@ -502,23 +568,29 @@ export function PlannerApp({
 
   useEffect(() => {
     const controller = new AbortController();
-    const from = new Date(weekStart);
-    const to = addDays(weekStart, 7);
+    const rangeStart = view === "month" ? startOfMonth(monthAnchor) : weekStart;
+    const rangeEnd = view === "month"
+      ? addDays(startOfMonth(monthAnchor), daysInMonth(monthAnchor))
+      : addDays(weekStart, 7);
     queueMicrotask(() => {
       if (!controller.signal.aborted) {
         setConnection((current) => current === "live" ? "syncing" : "loading");
       }
     });
 
-    fetchPlanner(from.toISOString(), to.toISOString(), controller.signal)
+    fetchPlanner(rangeStart.toISOString(), rangeEnd.toISOString(), controller.signal)
       .then((data) => {
         const nextProjects = projectOptions(data.projects);
+        setApiProjects(data.projects);
+        setGoals(data.goals);
         setProjects(nextProjects);
         setTasks(data.tasks.map((task) => taskFromApi(task, nextProjects)));
+        const referenceStart = view === "month" ? monthGridDays(monthAnchor)[0]! : weekStart;
+        const maxDay = view === "month" ? 42 : 7;
         setBlocks([
-          ...data.timeBlocks.map((block) => timeBlockFromApi(block, weekStart, nextProjects)),
-          ...data.externalEvents.map((event) => externalBlockFromApi(event, weekStart)),
-        ].filter((block) => block.day >= 0 && block.day < 7));
+          ...data.timeBlocks.map((block) => timeBlockFromApi(block, referenceStart, nextProjects)),
+          ...data.externalEvents.map((event) => externalBlockFromApi(event, referenceStart)),
+        ].filter((block) => block.day >= 0 && block.day < maxDay));
         liveDataRef.current = true;
         setConnection("live");
       })
@@ -534,7 +606,12 @@ export function PlannerApp({
       });
 
     return () => controller.abort();
-  }, [reloadKey, weekStart]);
+  }, [reloadKey, weekStart, view, monthAnchor]);
+
+  const showToast = useCallback((message: string, kind: ToastKind = "info") => {
+    setToastKind(kind);
+    setToast(message);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -584,16 +661,9 @@ export function PlannerApp({
   }, [connection, hasGoogleIntegration, runCalendarSync]);
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setQuickAddOpen(true);
-      }
-      if (event.key === "Escape") setQuickAddOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollTop = savedScrollRef.current;
+  }, [view, activeDay]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -618,20 +688,188 @@ export function PlannerApp({
   });
 
   const plannedMinutes = blocks
-    .filter((block) => block.type === "task")
+    .filter((block) => block.type === "task" && (view === "day" ? block.day === activeDay : true))
+    .reduce((total, block) => total + block.duration, 0);
+  const occupiedMinutes = blocks
+    .filter((block) => (view === "day" ? block.day === activeDay : true))
     .reduce((total, block) => total + block.duration, 0);
   const openMinutes = Math.max(
     0,
-    7 * MINUTES_VISIBLE - blocks.reduce((total, block) => total + block.duration, 0),
+    (view === "day" ? 1 : 7) * MINUTES_VISIBLE - occupiedMinutes,
   );
 
-  const changeWeek = (amount: number) => {
+  const weekOccupiedMinutes = blocks
+    .filter((block) => block.day >= 0 && block.day < 7)
+    .reduce((total, block) => total + block.duration, 0);
+  const weekPlannedPercent = Math.min(
+    100,
+    Math.round((weekOccupiedMinutes / (7 * MINUTES_VISIBLE)) * 100),
+  );
+  const weekScoreCaption = weekPlannedPercent >= 85
+    ? "Full week"
+    : weekPlannedPercent >= 60
+      ? "Healthy buffer"
+      : "Room to protect";
+
+  const calendarBlocks = blocks.filter((block) => {
+    if (block.type === "external" && !showExternalEvents) return false;
+    if (block.type === "task" && !showPlannerBlocks) return false;
+    return true;
+  });
+
+  const changePeriod = useCallback((amount: number) => {
+    if (view === "month") {
+      setMonthAnchor((current) => {
+        const next = new Date(current);
+        next.setMonth(next.getMonth() + amount);
+        return startOfMonth(next);
+      });
+      return;
+    }
     setWeekStart((current) => addDays(current, amount * 7));
-  };
+  }, [view]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = target?.closest("input, textarea, select, [contenteditable=true]");
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setQuickAddOpen(true);
+        return;
+      }
+      if (event.key === "Escape") {
+        setQuickAddOpen(false);
+        setSlotPicker(null);
+        setEditingTaskId(null);
+        return;
+      }
+      if (typing) return;
+      if (event.key === "/") {
+        event.preventDefault();
+        if (activeSection === "tasks") return;
+        searchRef.current?.focus();
+        return;
+      }
+      if (event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        setQuickAddOpen(true);
+        return;
+      }
+      if (event.key === "1") { setActiveSection("calendar"); return; }
+      if (event.key === "2") { setActiveSection("tasks"); return; }
+      if (event.key === "3") { setActiveSection("projects"); return; }
+      if (event.key === "4") { setActiveSection("goals"); return; }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        changePeriod(-1);
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        changePeriod(1);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeSection, changePeriod]);
 
   const goToday = () => {
     setWeekStart(startOfWeek(new Date()));
+    setMonthAnchor(startOfMonth(new Date()));
     setActiveDay(nowDay);
+  };
+
+  const warnIfConflict = (candidate: CalendarBlock, excludeId?: string) => {
+    const overlaps = conflictingBlocks(candidate, blocks, excludeId);
+    if (overlaps.length > 0) {
+      showToast(`Overlaps with “${overlaps[0]!.title}” · saved anyway`, "warning");
+      return true;
+    }
+    return false;
+  };
+
+  const onResizeBlock = async (blockId: string, nextDuration: number) => {
+    const previous = blocks.find((block) => block.id === blockId);
+    if (!previous || previous.type === "external") return;
+    const duration = Math.max(SNAP_MINUTES, nextDuration);
+    const candidate = { ...previous, duration };
+    setBlocks((current) =>
+      current.map((block) => (block.id === blockId ? candidate : block)),
+    );
+    warnIfConflict(candidate, blockId);
+    showToast(liveDataRef.current ? "Updating block length…" : "Block resized · demo mode");
+    if (!liveDataRef.current) return;
+
+    const startAt = slotDate(weekStart, previous.day, previous.start);
+    const endAt = new Date(startAt.getTime() + duration * 60_000);
+    try {
+      const saved = await updateTimeBlock(previous.id, { endAt: endAt.toISOString() });
+      const mapped = timeBlockFromApi(saved, weekStart, projects);
+      setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
+      if (saved.syncStatus === "FAILED") {
+        showToast("Block saved · Google sync needs attention", "warning");
+      } else {
+        showToast("Block length updated · calendar synced");
+      }
+    } catch {
+      setBlocks((current) => current.map((block) => block.id === previous.id ? previous : block));
+      setConnection("error");
+      showToast("Could not resize block · changes rolled back", "warning");
+    }
+  };
+
+  const scheduleTaskAtSlot = async (
+    task: PlannerTask,
+    day: number,
+    start: number,
+    pendingId: string,
+  ) => {
+    const block: CalendarBlock = {
+      id: pendingId,
+      title: task.title,
+      day,
+      start,
+      duration: task.duration,
+      color: task.color,
+      type: "task",
+      taskId: task.id,
+      projectId: task.projectId,
+      meta: task.project,
+      syncStatus: "PENDING",
+    };
+    warnIfConflict(block);
+    setBlocks((current) => [...current, block]);
+    setTasks((current) =>
+      current.map((item) => (item.id === task.id ? { ...item, status: "scheduled" } : item)),
+    );
+    showToast(liveDataRef.current ? "Scheduling task…" : "Task scheduled · demo mode");
+    if (!liveDataRef.current) return;
+
+    const startAt = slotDate(weekStart, day, start);
+    const endAt = new Date(startAt.getTime() + task.duration * 60_000);
+    try {
+      const saved = await createPlannerTimeBlock({
+        taskId: task.id,
+        projectId: task.projectId,
+        title: task.title,
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        color: task.color,
+      });
+      const mapped = timeBlockFromApi(saved, weekStart, projects);
+      setBlocks((current) => current.map((item) => item.id === pendingId ? mapped : item));
+      showToast(saved.syncStatus === "FAILED"
+        ? "Task scheduled · Google sync needs attention"
+        : "Task scheduled · calendar synced");
+    } catch {
+      setBlocks((current) => current.filter((item) => item.id !== pendingId));
+      setTasks((current) => current.map((item) =>
+        item.id === task.id ? { ...item, status: "inbox" } : item,
+      ));
+      setConnection("error");
+      showToast("Could not schedule task · changes rolled back", "warning");
+    }
   };
 
   const completeTask = async (taskId: string) => {
@@ -698,10 +936,12 @@ export function PlannerApp({
     if (payload.kind === "block") {
       const previous = blocks.find((block) => block.id === payload.blockId);
       if (!previous || previous.type === "external") return;
+      const candidate = { ...previous, day, start };
       setBlocks((current) =>
-        current.map((block) => (block.id === payload.blockId ? { ...block, day, start } : block)),
+        current.map((block) => (block.id === payload.blockId ? candidate : block)),
       );
-      setToast(liveDataRef.current ? "Moving time block…" : "Time block moved · demo mode");
+      warnIfConflict(candidate, previous.id);
+      showToast(liveDataRef.current ? "Moving time block…" : "Time block moved · demo mode");
       if (!liveDataRef.current) return;
       const startAt = slotDate(weekStart, day, start);
       const endAt = new Date(startAt.getTime() + previous.duration * 60_000);
@@ -740,11 +980,12 @@ export function PlannerApp({
       meta: task.project,
       syncStatus: "PENDING",
     };
+    warnIfConflict(block);
     setBlocks((current) => [...current, block]);
     setTasks((current) =>
       current.map((item) => (item.id === task.id ? { ...item, status: "scheduled" } : item)),
     );
-    setToast(liveDataRef.current ? "Scheduling task…" : "Task scheduled · demo mode");
+    showToast(liveDataRef.current ? "Scheduling task…" : "Task scheduled · demo mode");
     if (!liveDataRef.current) return;
 
     const startAt = slotDate(weekStart, day, start);
@@ -773,7 +1014,7 @@ export function PlannerApp({
     }
   };
 
-  const addTask = async (title: string, duration: number, projectId: string | null) => {
+  const addTask = async (title: string, duration: number, projectId: string | null): Promise<PlannerTask | null> => {
     const project = projects.find((item) => item.id === projectId) ?? projects.at(-1)!;
     const task: PlannerTask = {
       id: `pending-${crypto.randomUUID()}`,
@@ -793,7 +1034,7 @@ export function PlannerApp({
     setTaskPanelOpen(true);
     setQuickAddOpen(false);
     setToast(liveDataRef.current ? "Saving task…" : "Task added · demo mode");
-    if (!liveDataRef.current) return;
+    if (!liveDataRef.current) return task;
 
     try {
       const saved = await createPlannerTask({
@@ -805,10 +1046,12 @@ export function PlannerApp({
       const mapped = taskFromApi(saved, projects);
       setTasks((current) => current.map((item) => item.id === task.id ? mapped : item));
       setToast("Task saved to Inbox");
+      return mapped;
     } catch {
       setTasks((current) => current.filter((item) => item.id !== task.id));
       setConnection("error");
       setToast("Could not save task · changes rolled back");
+      return null;
     }
   };
 
@@ -856,32 +1099,70 @@ export function PlannerApp({
     }
   };
 
+  const taskCountByProject = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const task of tasks) {
+      if (!task.projectId || task.status === "done") continue;
+      counts.set(task.projectId, (counts.get(task.projectId) ?? 0) + 1);
+    }
+    return counts;
+  }, [tasks]);
+
+  const calendarReferenceStart = view === "month" ? monthGridDays(monthAnchor)[0]! : weekStart;
+  const monthCells = useMemo(() => monthGridDays(monthAnchor), [monthAnchor]);
+
+  const openDayFromMonth = (date: Date) => {
+    const monday = startOfWeek(date);
+    setWeekStart(monday);
+    const dayIndex = dayIndexFor(date.toISOString(), monday);
+    setActiveDay(Math.max(0, Math.min(6, dayIndex)));
+    setView("day");
+  };
+
+  const sectionTitle = {
+    calendar: "Calendar planner",
+    tasks: "Task workspace",
+    projects: "Projects",
+    goals: "Goals",
+  }[activeSection];
+
   return (
     <div className="app-shell">
       <Sidebar
         inboxCount={tasks.filter((task) => task.status === "inbox").length}
         activeSection={activeSection}
+        weekPlannedPercent={weekPlannedPercent}
+        weekScoreCaption={weekScoreCaption}
+        showPlannerBlocks={showPlannerBlocks}
+        showExternalEvents={showExternalEvents}
+        hasGoogleIntegration={hasGoogleIntegration}
+        onTogglePlannerBlocks={() => setShowPlannerBlocks((value) => !value)}
+        onToggleExternalEvents={() => setShowExternalEvents((value) => !value)}
         onNavigate={(section) => {
           setActiveSection(section);
           if (section === "calendar") goToday();
         }}
       />
 
-      <main className={`workspace ${activeSection === "tasks" ? "tasks-mode" : ""}`}>
+      <main className={`workspace ${activeSection !== "calendar" ? "tasks-mode" : ""}`}>
         <header className="topbar">
           <div className="mobile-brand">
             <div className="brand-mark">P</div>
             <strong>Personal OS</strong>
           </div>
           <div className="calendar-title-block">
-            <div className="eyebrow">{activeSection === "calendar" ? "Calendar planner" : "Task workspace"}</div>
+            <div className="eyebrow">{sectionTitle}</div>
             {activeSection === "calendar" ? (
               <h1>
-                {weekStart.toLocaleDateString("en-US", { month: "long" })}{" "}
-                <span>{weekStart.getFullYear()}</span>
+                {(view === "month" ? monthAnchor : weekStart).toLocaleDateString("en-US", { month: "long" })}{" "}
+                <span>{(view === "month" ? monthAnchor : weekStart).getFullYear()}</span>
               </h1>
-            ) : (
+            ) : activeSection === "tasks" ? (
               <h1>Tasks <span>{tasks.filter((task) => task.status !== "done").length} active</span></h1>
+            ) : activeSection === "projects" ? (
+              <h1>Projects <span>{apiProjects.filter((project) => project.active).length} active</span></h1>
+            ) : (
+              <h1>Goals <span>{goals.filter((goal) => goal.status === "ACTIVE").length} active</span></h1>
             )}
           </div>
 
@@ -915,17 +1196,23 @@ export function PlannerApp({
           <div className="toolbar-cluster">
             <button className="today-button" onClick={goToday}>Today</button>
             <div className="pager">
-              <button aria-label="Previous week" onClick={() => changeWeek(-1)}>
+              <button aria-label={view === "month" ? "Previous month" : "Previous week"} onClick={() => changePeriod(-1)}>
                 <ChevronLeft size={18} />
               </button>
-              <button aria-label="Next week" onClick={() => changeWeek(1)}>
+              <button aria-label={view === "month" ? "Next month" : "Next week"} onClick={() => changePeriod(1)}>
                 <ChevronRight size={18} />
               </button>
             </div>
             <div className="week-range">
-              {weekDays[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-              <span>—</span>
-              {weekDays[6].toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              {view === "month" ? (
+                monthAnchor.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+              ) : (
+                <>
+                  {weekDays[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  <span>—</span>
+                  {weekDays[6].toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                </>
+              )}
             </div>
           </div>
 
@@ -934,10 +1221,18 @@ export function PlannerApp({
               <span><strong>{durationLabel(plannedMinutes)}</strong> planned</span>
               <i />
               <span><strong>{durationLabel(openMinutes)}</strong> open</span>
+              {view === "day" && <small>Day capacity</small>}
             </div>
             <div className="view-switcher" aria-label="Calendar view">
-              <button className={view === "day" ? "active" : ""} onClick={() => setView("day")}>Day</button>
-              <button className={view === "week" ? "active" : ""} onClick={() => setView("week")}>Week</button>
+              <button className={view === "day" ? "active" : ""} onClick={() => {
+                if (scrollRef.current) savedScrollRef.current = scrollRef.current.scrollTop;
+                setView("day");
+              }}>Day</button>
+              <button className={view === "week" ? "active" : ""} onClick={() => {
+                if (scrollRef.current) savedScrollRef.current = scrollRef.current.scrollTop;
+                setView("week");
+              }}>Week</button>
+              <button className={view === "month" ? "active" : ""} onClick={() => setView("month")}>Month</button>
             </div>
             <button
               className={`tasks-toggle ${taskPanelOpen ? "active" : ""}`}
@@ -948,12 +1243,21 @@ export function PlannerApp({
           </div>
         </section>
 
-        <div className={`planner-layout ${taskPanelOpen ? "with-panel" : ""}`}>
+        <div className={`planner-layout ${taskPanelOpen && view !== "month" ? "with-panel" : ""}`}>
           <section
             className="calendar-card"
-            aria-label="Weekly calendar"
+            aria-label={view === "month" ? "Monthly calendar" : "Weekly calendar"}
             aria-busy={connection === "loading" || connection === "syncing"}
           >
+            {view === "month" ? (
+              <MonthCalendar
+                cells={monthCells}
+                anchor={monthAnchor}
+                blocks={calendarBlocks}
+                referenceStart={calendarReferenceStart}
+                onOpenDay={openDayFromMonth}
+              />
+            ) : <>
             <div className="calendar-days" style={{ "--day-count": visibleDays.length } as React.CSSProperties}>
               <div className="timezone">GMT+7</div>
               {visibleDays.map((date, index) => {
@@ -997,6 +1301,14 @@ export function PlannerApp({
                   <div
                     className="day-track"
                     key={dayIndex}
+                    role="presentation"
+                    onMouseDown={(event) => {
+                      if ((event.target as HTMLElement).closest(".calendar-event")) return;
+                      if (event.button !== 0) return;
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const start = slotMinutesFromClick(event.clientY, rect);
+                      setSlotPicker({ day: dayIndex, start });
+                    }}
                     onDragOver={(event) => {
                       event.preventDefault();
                       event.dataTransfer.dropEffect = "move";
@@ -1008,7 +1320,7 @@ export function PlannerApp({
                         <span>{minutesToTime(nowMinute)}</span>
                       </div>
                     )}
-                    {blocks
+                    {calendarBlocks
                       .filter((block) => block.day === dayIndex)
                       .map((block) => (
                         <CalendarEvent
@@ -1017,20 +1329,23 @@ export function PlannerApp({
                           onDragStart={onDragStart}
                           onComplete={completeTask}
                           onOpenTask={setEditingTaskId}
+                          onResize={onResizeBlock}
                         />
                       ))}
                   </div>
                 ))}
               </div>
             </div>
+            </>}
           </section>
 
-          {taskPanelOpen && (
+          {taskPanelOpen && view !== "month" && (
             <TaskPanel
               tasks={filteredTasks}
               count={tasks.filter((task) => task.status !== "done").length}
               filter={taskFilter}
               search={search}
+              searchRef={searchRef}
               onSearch={setSearch}
               onFilter={setTaskFilter}
               onClose={() => setTaskPanelOpen(false)}
@@ -1041,14 +1356,36 @@ export function PlannerApp({
             />
           )}
         </div>
-        </> : (
+        </> : activeSection === "tasks" ? (
           <TasksWorkspace
             tasks={tasks}
             blocks={blocks}
+            projects={projects}
             onQuickAdd={() => setQuickAddOpen(true)}
             onOpenTask={setEditingTaskId}
             onComplete={completeTask}
             onRestore={restoreTask}
+          />
+        ) : activeSection === "projects" ? (
+          <ProjectsWorkspace
+            projects={apiProjects}
+            goals={goals}
+            taskCountByProject={taskCountByProject}
+            live={connection === "live"}
+            onChanged={(message) => {
+              setReloadKey((value) => value + 1);
+              showToast(message);
+            }}
+          />
+        ) : (
+          <GoalsWorkspace
+            goals={goals}
+            projects={apiProjects}
+            live={connection === "live"}
+            onChanged={(message) => {
+              setReloadKey((value) => value + 1);
+              showToast(message);
+            }}
           />
         )}
       </main>
@@ -1080,8 +1417,32 @@ export function PlannerApp({
         />
       )}
 
+      {slotPicker && (
+        <SlotScheduleModal
+          slot={slotPicker}
+          tasks={tasks.filter((task) => task.status !== "done")}
+          projects={projects}
+          live={connection === "live"}
+          weekStart={weekStart}
+          onClose={() => setSlotPicker(null)}
+          onPickTask={(task) => {
+            const pendingId = `pending-${crypto.randomUUID()}`;
+            setSlotPicker(null);
+            void scheduleTaskAtSlot(task, slotPicker.day, slotPicker.start, pendingId);
+          }}
+          onCreateTask={async (title, duration, projectId) => {
+            const created = await addTask(title, duration, projectId);
+            const pendingId = `pending-${crypto.randomUUID()}`;
+            setSlotPicker(null);
+            if (created) {
+              void scheduleTaskAtSlot(created, slotPicker.day, slotPicker.start, pendingId);
+            }
+          }}
+        />
+      )}
+
       {toast && (
-        <div className="toast" role="status">
+        <div className={`toast ${toastKind === "warning" ? "warning" : ""}`} role="status">
           <CheckCircle2 size={18} /> {toast}
         </div>
       )}
@@ -1092,10 +1453,24 @@ export function PlannerApp({
 function Sidebar({
   inboxCount,
   activeSection,
+  weekPlannedPercent,
+  weekScoreCaption,
+  showPlannerBlocks,
+  showExternalEvents,
+  hasGoogleIntegration,
+  onTogglePlannerBlocks,
+  onToggleExternalEvents,
   onNavigate,
 }: {
   inboxCount: number;
   activeSection: ActiveSection;
+  weekPlannedPercent: number;
+  weekScoreCaption: string;
+  showPlannerBlocks: boolean;
+  showExternalEvents: boolean;
+  hasGoogleIntegration: boolean;
+  onTogglePlannerBlocks: () => void;
+  onToggleExternalEvents: () => void;
   onNavigate: (section: ActiveSection) => void;
 }) {
   return (
@@ -1116,21 +1491,43 @@ function Sidebar({
         <button className={activeSection === "tasks" ? "active" : ""} onClick={() => onNavigate("tasks")}>
           <ListTodo size={19} /><span>Tasks</span><em>{inboxCount}</em>
         </button>
-        <button><FolderKanban size={19} /><span>Projects</span></button>
-        <button><Target size={19} /><span>Goals</span></button>
+        <button className={activeSection === "projects" ? "active" : ""} onClick={() => onNavigate("projects")}>
+          <FolderKanban size={19} /><span>Projects</span>
+        </button>
+        <button className={activeSection === "goals" ? "active" : ""} onClick={() => onNavigate("goals")}>
+          <Target size={19} /><span>Goals</span></button>
       </nav>
 
       <div className="sidebar-section">
-        <div className="sidebar-label">My calendars</div>
-        <button className="calendar-source"><i className="source-dot personal" /><span>Personal Planner</span><Check size={14} /></button>
-        <button className="calendar-source"><i className="source-dot work" /><span>Work</span><Check size={14} /></button>
-        <button className="calendar-source"><i className="source-dot personal-calendar" /><span>Personal</span><Check size={14} /></button>
+        <div className="sidebar-label">Calendars</div>
+        <button
+          type="button"
+          className={`calendar-source ${showPlannerBlocks ? "active" : ""}`}
+          onClick={onTogglePlannerBlocks}
+          aria-pressed={showPlannerBlocks}
+        >
+          <i className="source-dot personal" />
+          <span>Personal OS blocks</span>
+          {showPlannerBlocks && <Check size={14} />}
+        </button>
+        <button
+          type="button"
+          className={`calendar-source ${showExternalEvents ? "active" : ""}`}
+          onClick={onToggleExternalEvents}
+          aria-pressed={showExternalEvents}
+          disabled={!hasGoogleIntegration}
+          title={hasGoogleIntegration ? "Toggle Google Calendar events" : "Connect Google Calendar first"}
+        >
+          <i className="source-dot work" />
+          <span>Google Calendar</span>
+          {showExternalEvents && hasGoogleIntegration && <Check size={14} />}
+        </button>
       </div>
 
       <div className="sidebar-bottom">
         <div className="week-score">
           <div className="score-icon"><Zap size={17} /></div>
-          <div><strong>68% planned</strong><span>Healthy buffer</span></div>
+          <div><strong>{weekPlannedPercent}% planned</strong><span>{weekScoreCaption}</span></div>
           <ChevronRight size={16} />
         </div>
         <button><Settings size={18} /><span>Settings</span></button>
@@ -1144,12 +1541,52 @@ function CalendarEvent({
   onDragStart,
   onComplete,
   onOpenTask,
+  onResize,
 }: {
   block: CalendarBlock;
   onDragStart: (event: React.DragEvent, payload: DragPayload) => void;
   onComplete: (taskId: string) => void;
   onOpenTask: (taskId: string) => void;
+  onResize: (blockId: string, duration: number) => void;
 }) {
+  const resizeStartRef = useRef<{ y: number; duration: number } | null>(null);
+  const previewRef = useRef<number | null>(null);
+  const [previewDuration, setPreviewDuration] = useState<number | null>(null);
+  const displayDuration = previewDuration ?? block.duration;
+
+  const onResizePointerDown = (event: React.PointerEvent) => {
+    if (block.type !== "task") return;
+    event.stopPropagation();
+    event.preventDefault();
+    resizeStartRef.current = { y: event.clientY, duration: block.duration };
+
+    const onMove = (moveEvent: PointerEvent) => {
+      if (!resizeStartRef.current) return;
+      const delta = moveEvent.clientY - resizeStartRef.current.y;
+      const deltaMinutes = Math.round((delta / 900) * MINUTES_VISIBLE / SNAP_MINUTES) * SNAP_MINUTES;
+      const nextDuration = Math.max(
+        SNAP_MINUTES,
+        Math.min(MINUTES_VISIBLE, resizeStartRef.current.duration + deltaMinutes),
+      );
+      previewRef.current = nextDuration;
+      setPreviewDuration(nextDuration);
+    };
+    const onUp = () => {
+      const start = resizeStartRef.current;
+      const finalDuration = previewRef.current;
+      resizeStartRef.current = null;
+      previewRef.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      if (start && finalDuration && finalDuration !== block.duration) {
+        onResize(block.id, finalDuration);
+      }
+      setPreviewDuration(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   return (
     <article
       className={`calendar-event ${block.type}`}
@@ -1157,7 +1594,7 @@ function CalendarEvent({
       title={block.syncStatus === "FAILED" ? "Saved in Personal OS; Google Calendar sync failed" : undefined}
       style={{
         top: block.start - START_HOUR * 60 + 3,
-        height: Math.max(28, block.duration - 6),
+        height: Math.max(28, displayDuration - 6),
         "--event-color": block.color,
       } as React.CSSProperties}
       draggable={block.type === "task"}
@@ -1184,7 +1621,154 @@ function CalendarEvent({
         {block.syncStatus === "FAILED" && <em className="sync-warning">!</em>}
       </div>
       {block.duration >= 45 && <span>{minutesToTime(block.start)} · {block.meta}</span>}
+      {block.type === "task" && (
+        <button
+          type="button"
+          className="event-resize-handle"
+          aria-label={`Resize ${block.title}`}
+          onPointerDown={onResizePointerDown}
+        />
+      )}
     </article>
+  );
+}
+
+function MonthCalendar({
+  cells,
+  anchor,
+  blocks,
+  referenceStart,
+  onOpenDay,
+}: {
+  cells: Date[];
+  anchor: Date;
+  blocks: CalendarBlock[];
+  referenceStart: Date;
+  onOpenDay: (date: Date) => void;
+}) {
+  const today = new Date();
+  return (
+    <div className="month-calendar" aria-label="Month view">
+      <div className="month-weekdays">
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
+          <span key={label}>{label}</span>
+        ))}
+      </div>
+      <div className="month-grid">
+        {cells.map((date) => {
+          const dayIndex = dayIndexFor(date.toISOString(), referenceStart);
+          const dayBlocks = blocks.filter((block) => block.day === dayIndex);
+          const inMonth = date.getMonth() === anchor.getMonth();
+          const isToday = sameDay(date, today);
+          return (
+            <button
+              key={date.toISOString()}
+              className={`month-cell ${inMonth ? "" : "muted"} ${isToday ? "today" : ""}`}
+              onClick={() => onOpenDay(date)}
+            >
+              <strong>{date.getDate()}</strong>
+              <div className="month-events">
+                {dayBlocks.slice(0, 3).map((block) => (
+                  <i key={block.id} style={{ background: block.color }} title={block.title} />
+                ))}
+                {dayBlocks.length > 3 && <small>+{dayBlocks.length - 3}</small>}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SlotScheduleModal({
+  slot,
+  tasks,
+  projects,
+  live,
+  weekStart,
+  onClose,
+  onPickTask,
+  onCreateTask,
+}: {
+  slot: SlotPicker;
+  tasks: PlannerTask[];
+  projects: ProjectOption[];
+  live: boolean;
+  weekStart: Date;
+  onClose: () => void;
+  onPickTask: (task: PlannerTask) => void;
+  onCreateTask: (title: string, duration: number, projectId: string | null) => Promise<void>;
+}) {
+  const [mode, setMode] = useState<"pick" | "create">("pick");
+  const [title, setTitle] = useState("");
+  const [duration, setDuration] = useState(30);
+  const [projectId, setProjectId] = useState<string | null>(projects[0]?.id ?? null);
+  const slotDateValue = slotDate(weekStart, slot.day, slot.start);
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!title.trim()) return;
+    await onCreateTask(title.trim(), duration, projectId);
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <button className="modal-dismiss" type="button" aria-label="Close slot scheduler" onClick={onClose} />
+      <div className="slot-schedule-modal" role="dialog" aria-modal="true" aria-label="Schedule time block">
+        <div className="slot-schedule-header">
+          <div>
+            <div className="eyebrow">Schedule time</div>
+            <strong>{slotDateValue.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · {minutesToTime(slot.start)}</strong>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </div>
+        <div className="slot-schedule-tabs">
+          <button className={mode === "pick" ? "active" : ""} onClick={() => setMode("pick")}>Existing task</button>
+          <button className={mode === "create" ? "active" : ""} onClick={() => setMode("create")}>Quick create</button>
+        </div>
+        {mode === "pick" ? (
+          <div className="slot-task-list">
+            {tasks.filter((task) => task.status !== "scheduled").map((task) => (
+              <button key={task.id} type="button" className="slot-task-row" onClick={() => onPickTask(task)}>
+                <i style={{ background: task.color }} />
+                <span>{task.title}</span>
+                <small>{durationLabel(task.duration)}</small>
+              </button>
+            ))}
+            {tasks.filter((task) => task.status !== "scheduled").length === 0 && (
+              <p className="slot-empty">No inbox tasks · quick create one instead.</p>
+            )}
+          </div>
+        ) : (
+          <form className="slot-create-form" onSubmit={submitCreate}>
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Task title" />
+            <div className="slot-create-fields">
+              <label>
+                <span>Duration</span>
+                <select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>
+                  <option value={15}>15 minutes</option>
+                  <option value={30}>30 minutes</option>
+                  <option value={45}>45 minutes</option>
+                  <option value={60}>1 hour</option>
+                </select>
+              </label>
+              <label>
+                <span>Project</span>
+                <select value={projectId ?? ""} onChange={(event) => setProjectId(event.target.value || null)}>
+                  {projects.map((project) => (
+                    <option key={project.id ?? "inbox"} value={project.id ?? ""}>{project.title}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <button type="submit" className="primary-button" disabled={!title.trim()}>
+              {live ? "Create & schedule" : "Create & schedule · demo"}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1193,6 +1777,7 @@ function TaskPanel({
   count,
   filter,
   search,
+  searchRef,
   onSearch,
   onFilter,
   onClose,
@@ -1205,6 +1790,7 @@ function TaskPanel({
   count: number;
   filter: "inbox" | "today";
   search: string;
+  searchRef: React.RefObject<HTMLInputElement | null>;
   onSearch: (value: string) => void;
   onFilter: (value: "inbox" | "today") => void;
   onClose: () => void;
@@ -1233,7 +1819,7 @@ function TaskPanel({
 
       <label className="task-search">
         <Search size={16} />
-        <input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search tasks" />
+        <input ref={searchRef} value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search tasks" />
       </label>
 
       <div className="task-tabs">
@@ -1287,6 +1873,7 @@ function TaskPanel({
 function TasksWorkspace({
   tasks,
   blocks,
+  projects,
   onQuickAdd,
   onOpenTask,
   onComplete,
@@ -1294,12 +1881,14 @@ function TasksWorkspace({
 }: {
   tasks: PlannerTask[];
   blocks: CalendarBlock[];
+  projects: ProjectOption[];
   onQuickAdd: () => void;
   onOpenTask: (taskId: string) => void;
   onComplete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
 }) {
   const [filter, setFilter] = useState<"open" | "inbox" | "scheduled" | "done">("open");
+  const [projectFilterId, setProjectFilterId] = useState<string | "all">("all");
   const [query, setQuery] = useState("");
   const today = new Date();
   const normalizedQuery = query.trim().toLowerCase();
@@ -1311,6 +1900,13 @@ function TasksWorkspace({
     .filter((task) => {
       if (filter === "open" && task.status === "done") return false;
       if (filter !== "open" && task.status !== filter) return false;
+      if (projectFilterId !== "all") {
+        if (projectFilterId === "inbox") {
+          if (task.projectId !== null) return false;
+        } else if (task.projectId !== projectFilterId) {
+          return false;
+        }
+      }
       if (!normalizedQuery) return true;
       return `${task.title} ${task.notes} ${task.project}`.toLowerCase().includes(normalizedQuery);
     })
@@ -1355,6 +1951,23 @@ function TasksWorkspace({
           <label className="task-workspace-search">
             <Search size={16} />
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks" />
+          </label>
+          <label className="task-project-filter">
+            <span className="sr-only">Filter by project</span>
+            <select
+              value={projectFilterId}
+              onChange={(event) => {
+                const value = event.target.value;
+                setProjectFilterId(value === "all" ? "all" : value === "inbox" ? "inbox" : value);
+              }}
+              aria-label="Filter by project"
+            >
+              <option value="all">All projects</option>
+              {projects.filter((project) => project.id).map((project) => (
+                <option key={project.id!} value={project.id!}>{project.title}</option>
+              ))}
+              <option value="inbox">Inbox only</option>
+            </select>
           </label>
         </div>
 
