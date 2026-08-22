@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss/index.css";
 @import "../styles/planner-tokens.css";
 @import "../components/planner/planner-ui.css";
 

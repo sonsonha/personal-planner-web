@@ -33,7 +33,12 @@ function plannerConfig() {
 
 export async function proxyPlannerRequest({ method, path, request }: ProxyOptions) {
   const viewer = await getChatGPTUser();
-  if (process.env.NODE_ENV === "production" && !viewer) {
+  // ChatGPT Sites set PLANNER_REQUIRE_CHATGPT_USER=1. Standalone Vercel
+  // dogfood authenticates web→Railway via PLANNER_WEB_TOKEN only.
+  const requireChatGPTUser =
+    process.env.PLANNER_REQUIRE_CHATGPT_USER === "1" ||
+    process.env.PLANNER_REQUIRE_CHATGPT_USER === "true";
+  if (process.env.NODE_ENV === "production" && requireChatGPTUser && !viewer) {
     return jsonError(401, "UNAUTHORIZED", "Sign in to access your planner");
   }
 

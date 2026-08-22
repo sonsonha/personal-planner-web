@@ -1,34 +1,98 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 
-async function render() {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+const webRoot = fileURLToPath(new URL("..", import.meta.url));
 
-  return worker.fetch(
-    new Request("http://localhost/", { headers: { accept: "text/html" } }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
+async function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close();
+        reject(new Error("Could not allocate port"));
+        return;
+      }
+      const { port } = address;
+      server.close((error) => (error ? reject(error) : resolve(port)));
+    });
+  });
+}
+
+async function withProdServer(run, env = {}) {
+  const port = await freePort();
+  const child = spawn(process.execPath, [".output/server/index.mjs"], {
+    cwd: webRoot,
+    env: {
+      ...process.env,
+      ...env,
+      PORT: String(port),
+      HOST: "127.0.0.1",
+      NODE_ENV: "production",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let ready = false;
+  const started = Date.now();
+  while (Date.now() - started < 15_000) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/calendar`, {
+        headers: { accept: "text/html" },
+      });
+      if (response.status === 200 || response.status === 500) {
+        ready = true;
+        break;
+      }
+    } catch {
+      // server still booting
+    }
+    await delay(150);
+  }
+
+  if (!ready) {
+    child.kill("SIGKILL");
+    throw new Error("Nitro production server failed to start");
+  }
+
+  try {
+    return await run(port);
+  } finally {
+    child.kill("SIGTERM");
+    await delay(200);
+    if (!child.killed) child.kill("SIGKILL");
+  }
 }
 
 test("server-renders the Personal OS calendar planner", async () => {
-  const response = await render();
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+  await withProdServer(async (port) => {
+    const response = await fetch(`http://127.0.0.1:${port}/calendar`, {
+      headers: { accept: "text/html" },
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
-  const html = await response.text();
-  assert.match(html, /<title>Personal OS — Calendar Planner<\/title>/i);
-  assert.match(html, /Calendar planner/);
-  assert.match(html, /Google Calendar/);
-  // Default calendar side-panel filter is "today" (not inbox).
-  // Apostrophe may be HTML-escaped in SSR output (Today&#x27;s work).
-  assert.match(html, /Today(?:&#x27;|&apos;|')s work/);
-  // Side panel still teaches drag-to-schedule (copy may evolve with Make migration).
-  assert.match(html, /Drag onto free time to schedule|Drag a task onto free time/);
-  assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
+    const html = await response.text();
+    assert.match(html, /<title>Personal OS — Calendar Planner<\/title>/i);
+    assert.match(html, /Calendar planner/);
+    assert.match(html, /Google Calendar/);
+    assert.match(html, /Today(?:&#x27;|&apos;|')s work/);
+    assert.match(html, /Drag onto free time to schedule|Drag a task onto free time/);
+    assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
+
+    const root = await fetch(`http://127.0.0.1:${port}/`, { redirect: "manual" });
+    assert.equal(root.status, 307);
+    assert.match(root.headers.get("location") ?? "", /\/calendar$/);
+  }, {
+    PLANNER_API_BASE_URL: "",
+    PLANNER_WEB_TOKEN: "",
+    PLANNER_WEB_PRIVATE_KEY: "",
+  });
 });
 
 test("ships the core planning interactions", async () => {
@@ -47,6 +111,7 @@ test("ships the core planning interactions", async () => {
     tasksWorkspaceView,
     quickAddView,
     taskEditorView,
+    viteConfig,
   ] = await Promise.all([
     readFile(new URL("../app/planner-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/(planner)/page.tsx", import.meta.url), "utf8"),
@@ -62,11 +127,12 @@ test("ships the core planning interactions", async () => {
     readFile(new URL("../components/planner/tasks/TasksWorkspaceView.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/planner/tasks/QuickAddView.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/planner/tasks/TaskEditorView.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../vite.config.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(plannerLayout, /getChatGPTUser/);
   assert.match(plannerLayout, /<PlannerApp/);
-  assert.match(page, /return null/);
+  assert.match(page, /redirect\(["']\/calendar["']\)/);
   assert.match(layout, /Personal OS — Calendar Planner/);
   assert.match(source, /onCalendarDrop/);
   assert.match(source, /application\/x-personal-os/);
@@ -103,12 +169,9 @@ test("ships the core planning interactions", async () => {
   assert.match(source, /showExternalEvents/);
   assert.match(source, /projectFilterId/);
 
-  // Calendar side-panel still supports both filter modes (source contract).
   assert.match(source, /Today's work/);
   assert.match(source, /Unscheduled work/);
 
-  // Progress: completed/planned/target lives in goal-progress-display + ProgressWorkspace
-  // (replaces obsolete planner-app weekPlannedPercent symbol after Batch 2 extraction).
   assert.match(progressDisplay, /processOnTargetSummary/);
   assert.match(progressDisplay, /processBucketCompact/);
   assert.match(progressDisplay, /completed/);
@@ -117,7 +180,6 @@ test("ships the core planning interactions", async () => {
   assert.match(progressWorkspace, /GlobalProgressView/);
   assert.match(progressWorkspace, /processBucketCompact/);
 
-  // Tasks UI: presentational components after Batch 3 extraction.
   assert.match(source, /TasksWorkspaceView/);
   assert.match(source, /QuickAddView/);
   assert.match(source, /TaskEditorView/);
@@ -136,19 +198,23 @@ test("ships the core planning interactions", async () => {
   assert.match(proxy, /PLANNER_WEB_TOKEN/);
   assert.doesNotMatch(proxy, /NEXT_PUBLIC_PLANNER_WEB_TOKEN/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
+  assert.match(packageJson, /"nitro"/);
+  assert.doesNotMatch(packageJson, /@cloudflare\/vite-plugin/);
+  assert.match(viteConfig, /nitro\(\)/);
+  assert.doesNotMatch(viteConfig, /cloudflare\(/);
 });
 
 test("returns a safe setup response while the planner backend is not configured", async () => {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("api-test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
-  const response = await worker.fetch(
-    new Request("http://localhost/api/planner?from=2026-08-10T00%3A00%3A00.000Z&to=2026-08-17T00%3A00%3A00.000Z"),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
-
-  assert.equal(response.status, 401);
-  const payload = await response.json();
-  assert.equal(payload.error.code, "UNAUTHORIZED");
+  await withProdServer(async (port) => {
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/planner?from=2026-08-10T00%3A00%3A00.000Z&to=2026-08-17T00%3A00%3A00.000Z`,
+    );
+    assert.equal(response.status, 503);
+    const payload = await response.json();
+    assert.equal(payload.error.code, "PLANNER_NOT_CONFIGURED");
+  }, {
+    PLANNER_API_BASE_URL: "",
+    PLANNER_WEB_TOKEN: "",
+    PLANNER_WEB_PRIVATE_KEY: "",
+  });
 });

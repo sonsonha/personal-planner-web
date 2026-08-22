@@ -23,13 +23,25 @@ npm install
 npm run dev
 ```
 
+Production-shaped local server (Nitro Node preset):
+
+```bash
+npm run build:node
+npm start
+```
+
 Validation:
 
 ```bash
 npm run lint
 npm test
-npm run build
 ```
+
+## Deploy (Vercel)
+
+See [docs/deployment/vercel.md](./docs/deployment/vercel.md).
+
+Build command: `npm run build` (Nitro `vercel` preset → `.vercel/output`). Leave **Output Directory** empty in the Vercel dashboard.
 
 ## Connect the backend
 
@@ -42,9 +54,9 @@ PLANNER_API_BASE_URL=https://soc-server-production.up.railway.app
 PLANNER_WEB_TOKEN=<matches Railway PLANNER_WEB_TOKEN>
 ```
 
-Production ChatGPT Sites use `PLANNER_WEB_PRIVATE_KEY` (Ed25519) instead of the bearer token. Local dev can keep the shared token fallback.
+Production ChatGPT Sites use `PLANNER_WEB_PRIVATE_KEY` (Ed25519) instead of the bearer token and may set `PLANNER_REQUIRE_CHATGPT_USER=1`. Standalone Vercel dogfood uses the shared token only.
 
-Credentials are read only by the web server proxy and are never shipped to browser JavaScript. Production pages and proxy calls also use the private Site's authenticated-user headers.
+Credentials are read only by the web server proxy and are never shipped to browser JavaScript.
 
 ## Product boundary
 
