@@ -1,0 +1,115 @@
+/* Personal OS V2 — Figma Make tokens (Batch 1)
+   Visual SoT: Figma Make. Do not invent alternate palettes. */
+
+:root {
+  /* Surfaces */
+  --pos-sidebar: #0b0e1a;
+  --pos-canvas: #f3f1eb;
+  --pos-surface-alt: #f9f8f5;
+  --pos-card: #ffffff;
+  --pos-border: #e4dfd4;
+  --pos-border-light: #ede9e0;
+
+  /* Text */
+  --pos-ink: #111827;
+  --pos-ink-secondary: #4b5563;
+  --pos-ink-muted: #9ca3af;
+  --pos-ink-faint: #d1d5db;
+
+  /* Brand / accents */
+  --pos-primary: #4338ca;
+  --pos-primary-hover: #3730a3;
+  --pos-primary-soft: #eef2ff;
+  --pos-primary-ring: #c7d2fe;
+  --pos-blue: #2563eb;
+  --pos-blue-soft: #dbeafe;
+  --pos-emerald: #059669;
+  --pos-emerald-soft: #d1fae5;
+  --pos-amber: #d97706;
+  --pos-amber-soft: #fef3c7;
+  --pos-danger: #dc2626;
+  --pos-danger-soft: #fef2f2;
+  --pos-cyan: #0891b2;
+  --pos-cyan-soft: #e0f2fe;
+
+  /* Focus / Maintain / Explore */
+  --pos-focus: #4338ca;
+  --pos-focus-soft: #eef2ff;
+  --pos-maintain: #0891b2;
+  --pos-maintain-soft: #e0f2fe;
+  --pos-maintain-text: #0e7490;
+  --pos-explore: #6b7280;
+  --pos-explore-soft: #f3f4f6;
+  --pos-explore-text: #4b5563;
+
+  /* Process palette (cycle by index) */
+  --pos-proc-a: #059669;
+  --pos-proc-a-soft: #d1fae5;
+  --pos-proc-b: #2563eb;
+  --pos-proc-b-soft: #dbeafe;
+  --pos-proc-c: #d97706;
+  --pos-proc-c-soft: #fef3c7;
+  --pos-proc-d: #7c3aed;
+  --pos-proc-d-soft: #ede9fe;
+  --pos-proc-e: #db2777;
+  --pos-proc-e-soft: #fce7f3;
+
+  /* Sidebar chrome */
+  --pos-sidebar-text: #94a3b8;
+  --pos-sidebar-text-hover: #e2e8f0;
+  --pos-sidebar-muted: #64748b;
+  --pos-sidebar-faint: #475569;
+  --pos-sidebar-hover: rgba(255, 255, 255, 0.05);
+  --pos-sidebar-divider: rgba(255, 255, 255, 0.05);
+
+  /* Radius / shadow / spacing */
+  --pos-radius-sm: 8px;
+  --pos-radius-md: 12px;
+  --pos-radius-lg: 16px;
+  --pos-radius-xl: 16px;
+  --pos-shadow-sm: 0 1px 2px rgba(11, 14, 26, 0.04);
+  --pos-shadow-md: 0 8px 24px rgba(11, 14, 26, 0.08);
+  --pos-shadow-lg: 0 24px 64px -12px rgba(11, 14, 26, 0.35);
+  --pos-sidebar-width: 220px;
+  --pos-sidebar-collapsed: 52px;
+  --pos-space-1: 4px;
+  --pos-space-2: 8px;
+  --pos-space-3: 12px;
+  --pos-space-4: 16px;
+  --pos-space-5: 20px;
+  --pos-space-6: 24px;
+  --pos-space-8: 32px;
+
+  /* Typography stacks (wired from next/font variables) */
+  --pos-font-sans: var(--font-inter), var(--font-geist-sans), system-ui, sans-serif;
+  --pos-font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --pos-font-mono: var(--font-jetbrains), var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Map legacy tokens → Make canvas so the shell updates without orphan gray SaaS */
+  --ink: var(--pos-ink);
+  --muted: var(--pos-ink-secondary);
+  --faint: var(--pos-ink-muted);
+  --line: var(--pos-border);
+  --soft-line: var(--pos-border-light);
+  --canvas: var(--pos-canvas);
+  --panel: var(--pos-card);
+  --panel-strong: var(--pos-card);
+  --panel-soft: var(--pos-surface-alt);
+  --panel-tint: var(--pos-card);
+  --violet: var(--pos-primary);
+  --violet-dark: var(--pos-primary-hover);
+  --violet-soft: var(--pos-primary-soft);
+  --blue: var(--pos-blue);
+  --green: var(--pos-emerald);
+  --green-soft: var(--pos-emerald-soft);
+  --amber: var(--pos-amber);
+  --amber-soft: var(--pos-amber-soft);
+  --danger: var(--pos-danger);
+  --danger-soft: var(--pos-danger-soft);
+  --shadow-sm: var(--pos-shadow-sm);
+  --shadow-md: var(--pos-shadow-md);
+  --shadow-lg: var(--pos-shadow-lg);
+  --sidebar: var(--pos-sidebar);
+  --sidebar-muted: var(--pos-sidebar-muted);
+  --radius: var(--pos-radius-lg);
+}

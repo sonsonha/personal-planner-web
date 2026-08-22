@@ -23,25 +23,50 @@ test("server-renders the Personal OS calendar planner", async () => {
   assert.match(html, /<title>Personal OS — Calendar Planner<\/title>/i);
   assert.match(html, /Calendar planner/);
   assert.match(html, /Google Calendar/);
-  assert.match(html, /Unscheduled work/);
-  assert.match(html, /Drag a task onto free time/);
+  // Default calendar side-panel filter is "today" (not inbox).
+  // Apostrophe may be HTML-escaped in SSR output (Today&#x27;s work).
+  assert.match(html, /Today(?:&#x27;|&apos;|')s work/);
+  // Side panel still teaches drag-to-schedule (copy may evolve with Make migration).
+  assert.match(html, /Drag onto free time to schedule|Drag a task onto free time/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
 test("ships the core planning interactions", async () => {
-  const [source, page, layout, packageJson, apiClient, proxy, taskRoute, taskBlocksRoute] = await Promise.all([
+  const [
+    source,
+    page,
+    layout,
+    plannerLayout,
+    packageJson,
+    apiClient,
+    proxy,
+    taskRoute,
+    taskBlocksRoute,
+    progressDisplay,
+    progressWorkspace,
+    tasksWorkspaceView,
+    quickAddView,
+    taskEditorView,
+  ] = await Promise.all([
     readFile(new URL("../app/planner-app.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/(planner)/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/(planner)/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../lib/planner-api.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/planner-backend.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/tasks/[id]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/tasks/[id]/time-blocks/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/goal-progress-display.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/progress-workspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/planner/tasks/TasksWorkspaceView.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/planner/tasks/QuickAddView.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/planner/tasks/TaskEditorView.tsx", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /getChatGPTUser/);
-  assert.match(page, /<PlannerApp/);
+  assert.match(plannerLayout, /getChatGPTUser/);
+  assert.match(plannerLayout, /<PlannerApp/);
+  assert.match(page, /return null/);
   assert.match(layout, /Personal OS — Calendar Planner/);
   assert.match(source, /onCalendarDrop/);
   assert.match(source, /application\/x-personal-os/);
@@ -67,15 +92,41 @@ test("ships the core planning interactions", async () => {
   assert.match(source, /SlotScheduleModal/);
   assert.match(source, /function MonthCalendar/);
   assert.match(source, /event-resize-handle/);
+  assert.match(source, /resolveOverlapLayout/);
+  assert.match(source, /PersonalOsBlockPopover|GoogleEventPopover/);
   assert.match(source, /activeSection === "projects"/);
-  assert.match(source, /activeSection === "goals"/);
+  assert.match(source, /activeSection === "progress"/);
+  assert.match(source, /ProgressWorkspace/);
   assert.match(source, /event\.key === "1"/);
   assert.match(source, /event\.key === "\/"/);
   assert.match(source, /view === "month"/);
-  assert.match(source, /weekPlannedPercent/);
   assert.match(source, /showExternalEvents/);
   assert.match(source, /projectFilterId/);
-  assert.match(source, /task-project-filter/);
+
+  // Calendar side-panel still supports both filter modes (source contract).
+  assert.match(source, /Today's work/);
+  assert.match(source, /Unscheduled work/);
+
+  // Progress: completed/planned/target lives in goal-progress-display + ProgressWorkspace
+  // (replaces obsolete planner-app weekPlannedPercent symbol after Batch 2 extraction).
+  assert.match(progressDisplay, /processOnTargetSummary/);
+  assert.match(progressDisplay, /processBucketCompact/);
+  assert.match(progressDisplay, /completed/);
+  assert.match(progressDisplay, /planned/);
+  assert.match(progressDisplay, /target/);
+  assert.match(progressWorkspace, /GlobalProgressView/);
+  assert.match(progressWorkspace, /processBucketCompact/);
+
+  // Tasks UI: presentational components after Batch 3 extraction.
+  assert.match(source, /TasksWorkspaceView/);
+  assert.match(source, /QuickAddView/);
+  assert.match(source, /TaskEditorView/);
+  assert.match(tasksWorkspaceView, /task-project-filter/);
+  assert.match(tasksWorkspaceView, /Search tasks/);
+  assert.match(quickAddView, /forHorizon|Planning period|For/);
+  assert.match(taskEditorView, /Planning period/);
+  assert.match(taskEditorView, /Unschedule/);
+
   assert.match(apiClient, /createProject/);
   assert.match(apiClient, /deleteGoal/);
   assert.match(apiClient, /fetchTaskTimeBlocks/);

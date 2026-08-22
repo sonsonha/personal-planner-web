@@ -11,10 +11,8 @@ import {
   Circle,
   Clock3,
   Command,
-  Crosshair,
   Flag,
   FileText,
-  FolderKanban,
   GripVertical,
   ListTodo,
   LockKeyhole,
@@ -23,14 +21,24 @@ import {
   RotateCcw,
   Save,
   Search,
-  Settings,
   Sparkles,
-  Target,
   Trash2,
   X,
-  Zap,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { PlannerSidebar, type SidebarGoogleState } from "@/components/planner/PlannerSidebar";
+import {
+  QuickAddView,
+  TaskEditorView,
+  TasksWorkspaceView,
+} from "@/components/planner/tasks";
+import {
+  GoogleEventPopover,
+  PersonalOsBlockPopover,
+  overlapGeometry,
+  resolveOverlapLayout,
+} from "@/components/planner/calendar";
 import {
   createTask as createPlannerTask,
   createTimeBlock as createPlannerTimeBlock,
@@ -51,22 +59,29 @@ import {
   type ApiTask,
   type ApiTimeBlock,
 } from "@/lib/planner-api";
-import { GoalsWorkspace, ProjectsWorkspace } from "./planner-workspaces";
+import { GoalsWorkspace, ProgressWorkspace, ProjectsWorkspace, type HorizonScope } from "./planner-workspaces";
+import { parsePlannerPath, plannerPath, type PlannerSection } from "./planner-routes";
 
 type TaskStatus = "inbox" | "scheduled" | "done";
+type TaskPriority = "p1" | "p2" | "p3" | "p4";
 
 type PlannerTask = {
   id: string;
   title: string;
   notes: string;
   projectId: string | null;
+  goalId?: string | null;
+  goalProcessId?: string | null;
   project: string;
   color: string;
   duration: number;
-  priority: "high" | "normal" | "low";
+  priority: TaskPriority;
   status: TaskStatus;
   dueAt: string | null;
   due?: string;
+  dueHorizon?: "day" | "week" | "month" | null;
+  completedAt?: string | null;
+  updatedAt?: string | null;
 };
 
 type CalendarBlock = {
@@ -81,12 +96,19 @@ type CalendarBlock = {
   projectId?: string | null;
   meta?: string;
   syncStatus?: "PENDING" | "SYNCED" | "FAILED";
+  startAt?: string;
 };
 
-type ProjectOption = { id: string | null; title: string; color: string };
+type ProjectOption = {
+  id: string | null;
+  title: string;
+  color: string;
+  goalId?: string | null;
+  defaultGoalProcessId?: string | null;
+};
 type ConnectionState = "loading" | "syncing" | "live" | "demo" | "error";
 type GoogleConnectionState = "loading" | "connected" | "not-connected" | "syncing" | "error";
-type ActiveSection = "calendar" | "tasks" | "projects" | "goals";
+type ActiveSection = PlannerSection;
 type CalendarView = "week" | "day" | "month";
 type ToastKind = "info" | "warning";
 type SlotPicker = { day: number; start: number };
@@ -125,6 +147,37 @@ const COLORS = {
   amber: "#F3A712",
 };
 
+const PRIORITY_LEVELS = [
+  { id: "p1" as const, label: "Do now", hint: "Urgent · important", color: "#B33A22", api: "HIGH" as const },
+  { id: "p2" as const, label: "Schedule", hint: "Important", color: "#2F86C7", api: "NORMAL" as const },
+  { id: "p3" as const, label: "Delegate", hint: "Urgent", color: "#3E8F3A", api: "LOW" as const },
+  { id: "p4" as const, label: "Drop", hint: "Neither", color: "#C99212", api: "DROP" as const },
+];
+
+function priorityFromApi(value: string): TaskPriority {
+  const normalized = value.toUpperCase();
+  if (normalized === "P1" || normalized === "HIGH") return "p1";
+  if (normalized === "P3" || normalized === "LOW") return "p3";
+  if (normalized === "P4" || normalized === "DROP") return "p4";
+  return "p2";
+}
+
+function priorityToApi(value: TaskPriority) {
+  return PRIORITY_LEVELS.find((level) => level.id === value)?.api ?? "NORMAL";
+}
+
+function priorityMeta(value: TaskPriority) {
+  return PRIORITY_LEVELS.find((level) => level.id === value) ?? PRIORITY_LEVELS[1];
+}
+
+function priorityColor(value: TaskPriority) {
+  return priorityMeta(value).color;
+}
+
+function priorityRank(value: TaskPriority) {
+  return PRIORITY_LEVELS.findIndex((level) => level.id === value);
+}
+
 const initialProjects: ProjectOption[] = [
   { id: "demo-personal-os", title: "Personal OS", color: COLORS.violet },
   { id: "demo-rover", title: "Landfill Rover", color: COLORS.coral },
@@ -142,7 +195,7 @@ const initialTasks: PlannerTask[] = [
     project: "Personal OS",
     color: COLORS.violet,
     duration: 60,
-    priority: "high",
+    priority: "p1",
     status: "inbox",
     dueAt: new Date().toISOString(),
     due: "Today",
@@ -155,7 +208,7 @@ const initialTasks: PlannerTask[] = [
     project: "Systems depth",
     color: COLORS.blue,
     duration: 45,
-    priority: "normal",
+    priority: "p2",
     status: "scheduled",
     dueAt: null,
     due: "This week",
@@ -168,7 +221,7 @@ const initialTasks: PlannerTask[] = [
     project: "Landfill Rover",
     color: COLORS.coral,
     duration: 90,
-    priority: "high",
+    priority: "p1",
     status: "inbox",
     dueAt: null,
     due: "Friday",
@@ -181,7 +234,7 @@ const initialTasks: PlannerTask[] = [
     project: "Career capital",
     color: COLORS.cyan,
     duration: 30,
-    priority: "normal",
+    priority: "p3",
     status: "inbox",
     dueAt: null,
   },
@@ -193,9 +246,35 @@ const initialTasks: PlannerTask[] = [
     project: "Life admin",
     color: COLORS.amber,
     duration: 30,
-    priority: "normal",
+    priority: "p4",
     status: "inbox",
     dueAt: null,
+  },
+  {
+    id: "task-done-review",
+    title: "Weekly review notes",
+    notes: "",
+    projectId: "demo-personal-os",
+    project: "Personal OS",
+    color: COLORS.violet,
+    duration: 45,
+    priority: "p2",
+    status: "done",
+    dueAt: null,
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: "task-done-english",
+    title: "English shadowing session",
+    notes: "",
+    projectId: "demo-career",
+    project: "Career capital",
+    color: COLORS.cyan,
+    duration: 30,
+    priority: "p3",
+    status: "done",
+    dueAt: null,
+    updatedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
   },
 ];
 
@@ -310,8 +389,89 @@ function dayIndexFor(dateValue: string, weekStart: Date) {
   return Math.round((localDate.getTime() - localWeek.getTime()) / 86_400_000);
 }
 
-function dueLabel(value: string | null) {
-  if (!value) return undefined;
+function dueHorizonFromApi(value?: string | null, dueAt?: string | null): "day" | "week" | "month" | null {
+  if (value === "WEEK") return "week";
+  if (value === "MONTH") return "month";
+  if (value === "DAY") return "day";
+  if (!dueAt) return null;
+  const due = new Date(dueAt);
+  if (Number.isNaN(due.getTime())) return null;
+  const onTheHour = due.getMinutes() === 0;
+  const midnightOrNoon = due.getHours() === 0 || due.getHours() === 12;
+  if (onTheHour && midnightOrNoon && due.getDate() === 1) return "month";
+  if (onTheHour && midnightOrNoon && due.getTime() === startOfWeek(due).getTime()) return "week";
+  if (onTheHour && due.getHours() === 12 && due.getDay() === 1) return "week";
+  return "day";
+}
+
+function dueHorizonToApi(value: "day" | "week" | "month" | null | undefined) {
+  if (value === "week") return "WEEK" as const;
+  if (value === "month") return "MONTH" as const;
+  if (value === "day") return "DAY" as const;
+  return null;
+}
+
+function duePeriodForDate(date: Date, horizon: "day" | "week" | "month") {
+  if (horizon === "day") {
+    const end = startOfDay(date);
+    end.setHours(23, 59, 0, 0);
+    return { dueAt: end.toISOString(), dueHorizon: "day" as const };
+  }
+  if (horizon === "week") {
+    const start = startOfWeek(date);
+    start.setHours(12, 0, 0, 0);
+    return { dueAt: start.toISOString(), dueHorizon: "week" as const };
+  }
+  const start = startOfMonth(date);
+  start.setHours(12, 0, 0, 0);
+  return { dueAt: start.toISOString(), dueHorizon: "month" as const };
+}
+
+function duePeriodForScope(scope: HorizonScope | null, now: Date) {
+  if (!scope || scope === "all") {
+    return { dueAt: null as string | null, dueHorizon: null as "day" | "week" | "month" | null };
+  }
+  return duePeriodForDate(now, scope);
+}
+
+function captureHint(scope: HorizonScope | null, anchor: Date = new Date()) {
+  if (scope === "day") {
+    return sameDay(anchor, new Date())
+      ? "Saved to today · no calendar time yet"
+      : `Saved to ${anchor.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · no calendar time yet`;
+  }
+  if (scope === "week") {
+    const start = startOfWeek(anchor);
+    const current = start.getTime() === startOfWeek(new Date()).getTime();
+    return current
+      ? "Saved to this week · pick a day later if you want"
+      : `Saved to week of ${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · pick a day later if you want`;
+  }
+  if (scope === "month") {
+    const current = startOfMonth(anchor).getTime() === startOfMonth(new Date()).getTime();
+    return current
+      ? "Saved to this month · no calendar time yet"
+      : `Saved to ${anchor.toLocaleDateString("en-US", { month: "long" })} · no calendar time yet`;
+  }
+  return "Saved to Inbox · drag it into your calendar next";
+}
+
+function horizonLabel(value: string | null, horizon?: "day" | "week" | "month" | null) {
+  if (horizon === "week") {
+    if (!value) return "This week";
+    const start = startOfWeek(new Date(value));
+    if (start.getTime() === startOfWeek(new Date()).getTime()) return "This week";
+    return `Week of ${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  }
+  if (horizon === "month") {
+    if (!value) return "This month";
+    return new Date(value).toLocaleDateString("en-US", { month: "long" });
+  }
+  return undefined;
+}
+
+function dueLabel(value: string | null, horizon?: "day" | "week" | "month" | null) {
+  if (!value || horizon === "week" || horizon === "month") return undefined;
   const due = new Date(value);
   const today = new Date();
   if (due.toDateString() === today.toDateString()) return "Today";
@@ -325,6 +485,23 @@ function dateInputValue(value: string | null) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function localDateInput(date: Date) {
+  return dateInputValue(date.toISOString());
+}
+
+function monthInputValue(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function parseLocalDateInput(value: string) {
+  return startOfDay(new Date(`${value}T12:00:00`));
+}
+
+function parseMonthInput(value: string) {
+  const [year, month] = value.split("-").map(Number);
+  return startOfDay(new Date(year, (month || 1) - 1, 1));
 }
 
 function timeInputValue(value: string) {
@@ -355,7 +532,13 @@ function projectOptions(projects: ApiProject[]): ProjectOption[] {
   return [
     ...projects
       .filter((project) => project.active)
-      .map((project) => ({ id: project.id, title: project.title, color: project.color })),
+      .map((project) => ({
+        id: project.id,
+        title: project.title,
+        color: project.color,
+        goalId: project.goalId,
+        defaultGoalProcessId: project.defaultGoalProcessId ?? null,
+      })),
     { id: null, title: "Inbox", color: COLORS.violet },
   ];
 }
@@ -367,13 +550,18 @@ function taskFromApi(task: ApiTask, projects: ProjectOption[]): PlannerTask {
     title: task.title,
     notes: task.notes,
     projectId: task.projectId,
+    goalId: task.goalId ?? project.goalId ?? null,
+    goalProcessId: task.goalProcessId ?? null,
     project: project.title,
     color: project.color,
     duration: task.durationMinutes,
-    priority: task.priority === "HIGH" ? "high" : task.priority === "LOW" ? "low" : "normal",
+    priority: priorityFromApi(task.priority),
     status: task.status.toLowerCase() as TaskStatus,
     dueAt: task.dueAt,
-    due: dueLabel(task.dueAt),
+    dueHorizon: dueHorizonFromApi(task.dueHorizon, task.dueAt),
+    due: dueLabel(task.dueAt, dueHorizonFromApi(task.dueHorizon, task.dueAt)),
+    completedAt: task.completedAt ?? null,
+    updatedAt: task.updatedAt ?? null,
   };
 }
 
@@ -397,6 +585,7 @@ function timeBlockFromApi(
     projectId: block.projectId,
     meta: project?.title ?? "Personal Planner",
     syncStatus: block.syncStatus,
+    startAt: block.startAt,
   };
 }
 
@@ -422,6 +611,96 @@ function sameDay(left: Date, right: Date) {
   return left.getFullYear() === right.getFullYear()
     && left.getMonth() === right.getMonth()
     && left.getDate() === right.getDate();
+}
+
+function startOfDay(value: Date) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function horizonWindow(scope: HorizonScope, now: Date): { start: Date; end: Date } | null {
+  if (scope === "all") return null;
+  if (scope === "day") {
+    const start = startOfDay(now);
+    return { start, end: addDays(start, 1) };
+  }
+  if (scope === "week") {
+    const start = startOfWeek(now);
+    return { start, end: addDays(start, 7) };
+  }
+  const start = startOfMonth(now);
+  return { start, end: addDays(start, daysInMonth(now)) };
+}
+
+function dateInHorizon(date: Date, scope: HorizonScope, now: Date) {
+  const window = horizonWindow(scope, now);
+  if (!window) return true;
+  const time = date.getTime();
+  return time >= window.start.getTime() && time < window.end.getTime();
+}
+
+function taskDueHorizon(task: PlannerTask): "day" | "week" | "month" | null {
+  if (task.dueHorizon) return task.dueHorizon;
+  return dueHorizonFromApi(null, task.dueAt);
+}
+
+function taskBelongsToHorizon(
+  task: PlannerTask,
+  horizon: HorizonScope,
+  anchor: Date,
+  blocks: CalendarBlock[],
+  weekStart: Date,
+  today: Date,
+) {
+  if (horizon === "all") return true;
+  const hasBlockHere = blocks.some((block) =>
+    block.type === "task"
+    && block.taskId === task.id
+    && dateInHorizon(blockInstant(block, weekStart), horizon, anchor),
+  );
+  if (hasBlockHere) return true;
+
+  const due = parseDateValue(task.dueAt);
+  const dueHorizon = taskDueHorizon(task);
+  if (!due || !dueHorizon) return false;
+  if (horizon === "day" && dueHorizon !== "day") return false;
+  if (horizon === "week" && dueHorizon === "month") return false;
+  if (dateInHorizon(due, horizon, anchor)) return true;
+  if (task.status === "done") return false;
+
+  const window = horizonWindow(horizon, anchor);
+  if (!window || due.getTime() >= window.start.getTime()) return false;
+  if (window.start.getTime() > startOfDay(today).getTime()) return false;
+  if (horizon === "day") return dueHorizon === "day";
+  if (horizon === "week") return dueHorizon === "day" || dueHorizon === "week";
+  return true;
+}
+
+function parseDateValue(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value.length <= 10 ? `${value}T12:00:00` : value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function blockInstant(block: CalendarBlock, weekStart: Date) {
+  if (block.startAt) return new Date(block.startAt);
+  return slotDate(weekStart, block.day, block.start);
+}
+
+function horizonCaption(scope: HorizonScope, now: Date) {
+  if (scope === "day") {
+    return now.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  }
+  if (scope === "week") {
+    const start = startOfWeek(now);
+    const end = addDays(start, 6);
+    return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} — ${end.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  }
+  if (scope === "month") {
+    return now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  }
+  return "Every horizon";
 }
 
 function blocksOverlap(left: CalendarBlock, right: CalendarBlock) {
@@ -464,6 +743,7 @@ function externalBlockFromApi(event: ApiExternalEvent, weekStart: Date): Calenda
     color: "#94A3B8",
     type: "external",
     meta: event.location || "Google Calendar",
+    startAt: event.startAt,
   };
 }
 
@@ -483,9 +763,16 @@ export function PlannerApp({
 }: {
   viewer: { displayName: string; email: string } | null;
 }) {
+  const pathname = usePathname() ?? "/";
+  const router = useRouter();
+  const { section: activeSection, entityId } = parsePlannerPath(pathname);
+  const goTo = useCallback((section: ActiveSection, id?: string | null) => {
+    const href = plannerPath(section, id);
+    if (pathname === href) return;
+    router.push(href);
+  }, [pathname, router]);
   const [now] = useState(() => new Date());
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
-  const [activeSection, setActiveSection] = useState<ActiveSection>("calendar");
   const [view, setView] = useState<CalendarView>("week");
   const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(new Date()));
   const [activeDay, setActiveDay] = useState(() => {
@@ -501,11 +788,19 @@ export function PlannerApp({
   const [googleConnection, setGoogleConnection] = useState<GoogleConnectionState>("loading");
   const [hasGoogleIntegration, setHasGoogleIntegration] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [taskFilter, setTaskFilter] = useState<"inbox" | "today">("inbox");
+  const [evidenceEpoch, setEvidenceEpoch] = useState(0);
+  const [taskFilter, setTaskFilter] = useState<"inbox" | "today">("today");
+  const [taskHorizon, setTaskHorizon] = useState<HorizonScope>("week");
+  const [taskAnchor, setTaskAnchor] = useState(() => startOfDay(new Date()));
+  const [captureScope, setCaptureScope] = useState<HorizonScope | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [taskPanelOpen, setTaskPanelOpen] = useState(true);
   const [slotPicker, setSlotPicker] = useState<SlotPicker | null>(null);
+  const [blockPopover, setBlockPopover] = useState<{
+    blockId: string;
+    rect: DOMRect;
+  } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [toastKind, setToastKind] = useState<ToastKind>("info");
   const [search, setSearch] = useState("");
@@ -513,6 +808,7 @@ export function PlannerApp({
   const [showExternalEvents, setShowExternalEvents] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const tasksSearchRef = useRef<HTMLInputElement>(null);
   const savedScrollRef = useRef(0);
   const liveDataRef = useRef(false);
   const calendarSyncInFlightRef = useRef<Promise<void> | null>(null);
@@ -568,10 +864,17 @@ export function PlannerApp({
 
   useEffect(() => {
     const controller = new AbortController();
-    const rangeStart = view === "month" ? startOfMonth(monthAnchor) : weekStart;
-    const rangeEnd = view === "month"
-      ? addDays(startOfMonth(monthAnchor), daysInMonth(monthAnchor))
-      : addDays(weekStart, 7);
+    const needsWideRange = activeSection === "tasks"
+      || activeSection === "goals"
+      || activeSection === "progress";
+    const rangeStart = needsWideRange
+      ? startOfWeek(addDays(now, -7))
+      : view === "month" ? startOfMonth(monthAnchor) : weekStart;
+    const rangeEnd = needsWideRange
+      ? addDays(startOfMonth(now), daysInMonth(now))
+      : view === "month"
+        ? addDays(startOfMonth(monthAnchor), daysInMonth(monthAnchor))
+        : addDays(weekStart, 7);
     queueMicrotask(() => {
       if (!controller.signal.aborted) {
         setConnection((current) => current === "live" ? "syncing" : "loading");
@@ -587,10 +890,11 @@ export function PlannerApp({
         setTasks(data.tasks.map((task) => taskFromApi(task, nextProjects)));
         const referenceStart = view === "month" ? monthGridDays(monthAnchor)[0]! : weekStart;
         const maxDay = view === "month" ? 42 : 7;
+        const keepAllBlocks = needsWideRange;
         setBlocks([
           ...data.timeBlocks.map((block) => timeBlockFromApi(block, referenceStart, nextProjects)),
           ...data.externalEvents.map((event) => externalBlockFromApi(event, referenceStart)),
-        ].filter((block) => block.day >= 0 && block.day < maxDay));
+        ].filter((block) => keepAllBlocks || (block.day >= 0 && block.day < maxDay)));
         liveDataRef.current = true;
         setConnection("live");
       })
@@ -606,7 +910,7 @@ export function PlannerApp({
       });
 
     return () => controller.abort();
-  }, [reloadKey, weekStart, view, monthAnchor]);
+  }, [reloadKey, weekStart, view, monthAnchor, activeSection, now]);
 
   const showToast = useCallback((message: string, kind: ToastKind = "info") => {
     setToastKind(kind);
@@ -676,16 +980,35 @@ export function PlannerApp({
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const filteredTasks = tasks.filter((task) => {
-    if (task.status === "done") return false;
-    if (taskFilter === "inbox" && task.status === "scheduled") return false;
-    if (taskFilter === "today") {
-      if (!blocks.some((block) => block.taskId === task.id && block.day === nowDay)) {
-        return false;
-      }
-    }
-    return task.title.toLowerCase().includes(search.toLowerCase());
-  });
+  const rangeReferenceStart = view === "month" ? monthGridDays(monthAnchor)[0]! : weekStart;
+  const isTaskBlockOnDate = (taskId: string, date: Date) =>
+    blocks.some((block) =>
+      block.type === "task"
+      && block.taskId === taskId
+      && sameDay(addDays(rangeReferenceStart, block.day), date),
+    );
+
+  const filteredTasks = tasks
+    .filter((task) => {
+      if (!task.title.toLowerCase().includes(search.toLowerCase())) return false;
+      if (taskFilter === "inbox") return task.status === "inbox";
+      if (isTaskBlockOnDate(task.id, now)) return true;
+      return task.status !== "done" && Boolean(task.dueAt && sameDay(new Date(task.dueAt), now));
+    })
+    .sort((left, right) => {
+      if (left.status === "done" && right.status !== "done") return 1;
+      if (left.status !== "done" && right.status === "done") return -1;
+      const byPriority = priorityRank(left.priority) - priorityRank(right.priority);
+      if (byPriority !== 0) return byPriority;
+      const startOf = (taskId: string) =>
+        blocks.find((block) =>
+          block.type === "task"
+          && block.taskId === taskId
+          && sameDay(addDays(rangeReferenceStart, block.day), now),
+        )?.start ?? Number.MAX_SAFE_INTEGER;
+      return startOf(left.id) - startOf(right.id);
+    });
+  const doneTaskIds = new Set(tasks.filter((task) => task.status === "done").map((task) => task.id));
 
   const plannedMinutes = blocks
     .filter((block) => block.type === "task" && (view === "day" ? block.day === activeDay : true))
@@ -698,24 +1021,17 @@ export function PlannerApp({
     (view === "day" ? 1 : 7) * MINUTES_VISIBLE - occupiedMinutes,
   );
 
-  const weekOccupiedMinutes = blocks
-    .filter((block) => block.day >= 0 && block.day < 7)
-    .reduce((total, block) => total + block.duration, 0);
-  const weekPlannedPercent = Math.min(
-    100,
-    Math.round((weekOccupiedMinutes / (7 * MINUTES_VISIBLE)) * 100),
-  );
-  const weekScoreCaption = weekPlannedPercent >= 85
-    ? "Full week"
-    : weekPlannedPercent >= 60
-      ? "Healthy buffer"
-      : "Room to protect";
-
-  const calendarBlocks = blocks.filter((block) => {
-    if (block.type === "external" && !showExternalEvents) return false;
-    if (block.type === "task" && !showPlannerBlocks) return false;
-    return true;
-  });
+  const calendarBlocks = blocks
+    .filter((block) => {
+      if (block.type === "external" && !showExternalEvents) return false;
+      if (block.type === "task" && !showPlannerBlocks) return false;
+      return true;
+    })
+    .map((block) => {
+      if (block.type !== "task" || !block.taskId) return block;
+      const task = tasks.find((item) => item.id === block.taskId);
+      return task ? { ...block, color: priorityColor(task.priority) } : block;
+    });
 
   const changePeriod = useCallback((amount: number) => {
     if (view === "month") {
@@ -735,6 +1051,7 @@ export function PlannerApp({
       const typing = target?.closest("input, textarea, select, [contenteditable=true]");
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        setCaptureScope(activeSection === "tasks" ? taskHorizon : null);
         setQuickAddOpen(true);
         return;
       }
@@ -742,24 +1059,30 @@ export function PlannerApp({
         setQuickAddOpen(false);
         setSlotPicker(null);
         setEditingTaskId(null);
+        setBlockPopover(null);
         return;
       }
       if (typing) return;
       if (event.key === "/") {
         event.preventDefault();
-        if (activeSection === "tasks") return;
+        if (activeSection === "tasks") {
+          tasksSearchRef.current?.focus();
+          return;
+        }
         searchRef.current?.focus();
         return;
       }
       if (event.key.toLowerCase() === "n") {
         event.preventDefault();
+        setCaptureScope(activeSection === "tasks" ? taskHorizon : null);
         setQuickAddOpen(true);
         return;
       }
-      if (event.key === "1") { setActiveSection("calendar"); return; }
-      if (event.key === "2") { setActiveSection("tasks"); return; }
-      if (event.key === "3") { setActiveSection("projects"); return; }
-      if (event.key === "4") { setActiveSection("goals"); return; }
+      if (event.key === "1") { goTo("calendar"); return; }
+      if (event.key === "2") { goTo("tasks"); return; }
+      if (event.key === "3") { goTo("projects"); return; }
+      if (event.key === "4") { goTo("goals"); return; }
+      if (event.key === "5") { goTo("progress"); return; }
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         changePeriod(-1);
@@ -772,7 +1095,7 @@ export function PlannerApp({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeSection, changePeriod]);
+  }, [activeSection, changePeriod, goTo, taskHorizon]);
 
   const goToday = () => {
     setWeekStart(startOfWeek(new Date()));
@@ -812,6 +1135,7 @@ export function PlannerApp({
       } else {
         showToast("Block length updated · calendar synced");
       }
+      setEvidenceEpoch((value) => value + 1);
     } catch {
       setBlocks((current) => current.map((block) => block.id === previous.id ? previous : block));
       setConnection("error");
@@ -831,7 +1155,7 @@ export function PlannerApp({
       day,
       start,
       duration: task.duration,
-      color: task.color,
+      color: priorityColor(task.priority),
       type: "task",
       taskId: task.id,
       projectId: task.projectId,
@@ -839,14 +1163,25 @@ export function PlannerApp({
       syncStatus: "PENDING",
     };
     warnIfConflict(block);
+    const startAt = slotDate(weekStart, day, start);
+    const period = duePeriodForDate(startAt, "day");
     setBlocks((current) => [...current, block]);
     setTasks((current) =>
-      current.map((item) => (item.id === task.id ? { ...item, status: "scheduled" } : item)),
+      current.map((item) => (item.id === task.id ? {
+        ...item,
+        status: "scheduled",
+        dueAt: period.dueAt,
+        dueHorizon: "day",
+        due: dueLabel(period.dueAt, "day"),
+      } : item)),
     );
+    if (isCurrentWeek && day === nowDay) {
+      setTaskFilter("today");
+      setTaskPanelOpen(true);
+    }
     showToast(liveDataRef.current ? "Scheduling task…" : "Task scheduled · demo mode");
     if (!liveDataRef.current) return;
 
-    const startAt = slotDate(weekStart, day, start);
     const endAt = new Date(startAt.getTime() + task.duration * 60_000);
     try {
       const saved = await createPlannerTimeBlock({
@@ -855,8 +1190,9 @@ export function PlannerApp({
         title: task.title,
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
-        color: task.color,
+        color: priorityColor(task.priority),
       });
+      void updateTask(task.id, { dueAt: period.dueAt, dueHorizon: "DAY" });
       const mapped = timeBlockFromApi(saved, weekStart, projects);
       setBlocks((current) => current.map((item) => item.id === pendingId ? mapped : item));
       showToast(saved.syncStatus === "FAILED"
@@ -874,23 +1210,24 @@ export function PlannerApp({
 
   const completeTask = async (taskId: string) => {
     const previousTasks = tasks;
-    const previousBlocks = blocks;
     setTasks((current) =>
-      current.map((task) => (task.id === taskId ? { ...task, status: "done" } : task)),
+      current.map((task) => (task.id === taskId ? {
+        ...task,
+        status: "done",
+        completedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } : task)),
     );
-    setBlocks((current) => current.filter((block) => block.taskId !== taskId));
-    setToast(liveDataRef.current ? "Completing task…" : "Task completed · demo mode");
+    setTaskFilter("today");
+    setToast(liveDataRef.current ? "Marking task done…" : "Task done · demo mode");
     if (!liveDataRef.current) return;
 
     try {
-      const linkedBlocks = await fetchTaskTimeBlocks(taskId);
-      await Promise.all(linkedBlocks.map((block) => deleteTimeBlock(block.id)));
       await updateTask(taskId, { status: "DONE" });
-      setToast("Task completed · calendar updated");
-      setReloadKey((value) => value + 1);
+      setToast("Task marked done");
+      setEvidenceEpoch((value) => value + 1);
     } catch {
       setTasks(previousTasks);
-      setBlocks(previousBlocks);
       setConnection("error");
       setToast("Could not complete task · changes rolled back");
     }
@@ -898,15 +1235,17 @@ export function PlannerApp({
 
   const restoreTask = async (taskId: string) => {
     const previousTasks = tasks;
+    const hasBlock = blocks.some((block) => block.type === "task" && block.taskId === taskId);
+    const nextStatus: TaskStatus = hasBlock ? "scheduled" : "inbox";
     setTasks((current) => current.map((task) =>
-      task.id === taskId ? { ...task, status: "inbox" } : task,
+      task.id === taskId ? { ...task, status: nextStatus, completedAt: null } : task,
     ));
     setToast(liveDataRef.current ? "Restoring task…" : "Task restored · demo mode");
     if (!liveDataRef.current) return;
     try {
-      await updateTask(taskId, { status: "INBOX" });
-      setToast("Task restored to Inbox");
-      setReloadKey((value) => value + 1);
+      await updateTask(taskId, { status: hasBlock ? "SCHEDULED" : "INBOX" });
+      setToast(hasBlock ? "Task restored on calendar" : "Task restored to Inbox");
+      setEvidenceEpoch((value) => value + 1);
     } catch {
       setTasks(previousTasks);
       setToast("Could not restore task · changes rolled back");
@@ -918,16 +1257,70 @@ export function PlannerApp({
     event.dataTransfer.setData("application/x-personal-os", JSON.stringify(payload));
   };
 
-  const onCalendarDrop = async (event: React.DragEvent, day: number) => {
-    event.preventDefault();
+  const parseDragPayload = (event: React.DragEvent): DragPayload | null => {
     const raw = event.dataTransfer.getData("application/x-personal-os");
-    if (!raw) return;
-    let payload: DragPayload;
+    if (!raw) return null;
     try {
-      payload = JSON.parse(raw) as DragPayload;
+      return JSON.parse(raw) as DragPayload;
     } catch {
+      return null;
+    }
+  };
+
+  const unscheduleBlock = async (blockId: string) => {
+    const block = blocks.find((item) => item.id === blockId);
+    if (!block || block.type === "external") return;
+    if (!block.taskId) {
+      const previousBlocks = blocks;
+      setBlocks((current) => current.filter((item) => item.id !== blockId));
+      showToast(liveDataRef.current ? "Removing time block…" : "Block removed · demo mode");
+      if (!liveDataRef.current) return;
+      try {
+        await deleteTimeBlock(block.id);
+        showToast("Time block removed from calendar");
+      } catch {
+        setBlocks(previousBlocks);
+        setConnection("error");
+        showToast("Could not remove block · changes rolled back", "warning");
+      }
       return;
     }
+
+    const taskId = block.taskId;
+    const previousTasks = tasks;
+    const previousBlocks = blocks;
+    setBlocks((current) => current.filter((item) => item.id !== blockId));
+    setTasks((current) =>
+      current.map((task) => (task.id === taskId ? { ...task, status: "inbox" } : task)),
+    );
+    setTaskFilter("inbox");
+    setTaskPanelOpen(true);
+    showToast(liveDataRef.current ? "Removing from Calendar…" : "Removed from Calendar · demo mode");
+    if (!liveDataRef.current) return;
+
+    try {
+      await deleteTimeBlock(block.id);
+      await updateTask(taskId, { status: "INBOX" });
+      showToast("Removed from Calendar — task kept");
+    } catch {
+      setTasks(previousTasks);
+      setBlocks(previousBlocks);
+      setConnection("error");
+      showToast("Could not unschedule task · changes rolled back", "warning");
+    }
+  };
+
+  const onTaskPanelDrop = async (event: React.DragEvent) => {
+    event.preventDefault();
+    const payload = parseDragPayload(event);
+    if (!payload || payload.kind !== "block") return;
+    await unscheduleBlock(payload.blockId);
+  };
+
+  const onCalendarDrop = async (event: React.DragEvent, day: number) => {
+    event.preventDefault();
+    const payload = parseDragPayload(event);
+    if (!payload) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
     const minutesFromStart = Math.round((y / rect.height) * MINUTES_VISIBLE / SNAP_MINUTES) * SNAP_MINUTES;
@@ -966,14 +1359,49 @@ export function PlannerApp({
     }
 
     const task = tasks.find((item) => item.id === payload.taskId);
-    if (!task) return;
+    if (!task || task.status === "done") return;
+    const existing = blocks.find((item) => item.type === "task" && item.taskId === task.id);
+    if (existing) {
+      const candidate = { ...existing, day, start };
+      setBlocks((current) =>
+        current.map((block) => (block.id === existing.id ? candidate : block)),
+      );
+      if (isCurrentWeek && day === nowDay) {
+        setTaskFilter("today");
+        setTaskPanelOpen(true);
+      }
+      warnIfConflict(candidate, existing.id);
+      showToast(liveDataRef.current ? "Moving time block…" : "Time block moved · demo mode");
+      if (!liveDataRef.current) return;
+      const movedStart = slotDate(weekStart, day, start);
+      const movedEnd = new Date(movedStart.getTime() + existing.duration * 60_000);
+      try {
+        const saved = await updateTimeBlock(existing.id, {
+          startAt: movedStart.toISOString(),
+          endAt: movedEnd.toISOString(),
+        });
+        const mapped = timeBlockFromApi(saved, weekStart, projects);
+        setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
+        setToast(saved.syncStatus === "FAILED"
+          ? "Block saved · Google sync needs attention"
+          : "Time block moved · calendar synced");
+      } catch {
+        setBlocks((current) => current.map((block) =>
+          block.id === existing.id ? existing : block,
+        ));
+        setConnection("error");
+        setToast("Could not move block · changes rolled back");
+      }
+      return;
+    }
+
     const block: CalendarBlock = {
       id: `pending-${crypto.randomUUID()}`,
       title: task.title,
       day,
       start,
       duration: task.duration,
-      color: task.color,
+      color: priorityColor(task.priority),
       type: "task",
       taskId: task.id,
       projectId: task.projectId,
@@ -981,14 +1409,25 @@ export function PlannerApp({
       syncStatus: "PENDING",
     };
     warnIfConflict(block);
+    const startAt = slotDate(weekStart, day, start);
+    const period = duePeriodForDate(startAt, "day");
     setBlocks((current) => [...current, block]);
     setTasks((current) =>
-      current.map((item) => (item.id === task.id ? { ...item, status: "scheduled" } : item)),
+      current.map((item) => (item.id === task.id ? {
+        ...item,
+        status: "scheduled",
+        dueAt: period.dueAt,
+        dueHorizon: "day",
+        due: dueLabel(period.dueAt, "day"),
+      } : item)),
     );
+    if (isCurrentWeek && day === nowDay) {
+      setTaskFilter("today");
+      setTaskPanelOpen(true);
+    }
     showToast(liveDataRef.current ? "Scheduling task…" : "Task scheduled · demo mode");
     if (!liveDataRef.current) return;
 
-    const startAt = slotDate(weekStart, day, start);
     const endAt = new Date(startAt.getTime() + task.duration * 60_000);
     try {
       const saved = await createPlannerTimeBlock({
@@ -997,8 +1436,9 @@ export function PlannerApp({
         title: task.title,
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
-        color: task.color,
+        color: priorityColor(task.priority),
       });
+      void updateTask(task.id, { dueAt: period.dueAt, dueHorizon: "DAY" });
       const mapped = timeBlockFromApi(saved, weekStart, projects);
       setBlocks((current) => current.map((item) => item.id === block.id ? mapped : item));
       setToast(saved.syncStatus === "FAILED"
@@ -1014,44 +1454,112 @@ export function PlannerApp({
     }
   };
 
-  const addTask = async (title: string, duration: number, projectId: string | null): Promise<PlannerTask | null> => {
+  const openQuickAdd = (scope: HorizonScope | null = activeSection === "tasks" ? taskHorizon : null) => {
+    setCaptureScope(scope);
+    setQuickAddOpen(true);
+  };
+
+  const addTask = async (
+    title: string,
+    duration: number,
+    projectId: string | null,
+    priority: TaskPriority = "p2",
+    scope: HorizonScope | null = captureScope,
+    when: Date = taskAnchor,
+  ): Promise<PlannerTask | null> => {
     const project = projects.find((item) => item.id === projectId) ?? projects.at(-1)!;
+    const inheritedGoalId = project.goalId ?? null;
+    const inheritedGoalProcessId = project.defaultGoalProcessId ?? null;
+    const resolvedScope = scope && scope !== "all" ? scope : "day";
+    const periodAnchor = startOfDay(when);
+    const period = duePeriodForScope(resolvedScope, periodAnchor);
     const task: PlannerTask = {
       id: `pending-${crypto.randomUUID()}`,
       title,
       notes: "",
       projectId,
+      goalId: inheritedGoalId,
+      goalProcessId: inheritedGoalProcessId,
       project: project.title,
       color: project.color,
       duration,
-      priority: "normal",
+      priority,
       status: "inbox",
-      dueAt: null,
-      due: "Today",
+      dueAt: period.dueAt,
+      dueHorizon: period.dueHorizon,
+      due: dueLabel(period.dueAt, period.dueHorizon),
     };
     setTasks((current) => [task, ...current]);
-    setTaskFilter("inbox");
-    setTaskPanelOpen(true);
     setQuickAddOpen(false);
-    setToast(liveDataRef.current ? "Saving task…" : "Task added · demo mode");
+    const savedWhere = period.dueHorizon === "week"
+      ? (startOfWeek(periodAnchor).getTime() === startOfWeek(now).getTime()
+        ? "this week"
+        : `week of ${startOfWeek(periodAnchor).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`)
+      : period.dueHorizon === "month"
+        ? (startOfMonth(periodAnchor).getTime() === startOfMonth(now).getTime()
+          ? "this month"
+          : periodAnchor.toLocaleDateString("en-US", { month: "long" }))
+        : period.dueHorizon === "day"
+          ? (sameDay(periodAnchor, now)
+            ? "today"
+            : periodAnchor.toLocaleDateString("en-US", { month: "short", day: "numeric" }))
+          : "Inbox";
+    setToast(liveDataRef.current ? "Saving task…" : `Task added to ${savedWhere} · demo mode`);
     if (!liveDataRef.current) return task;
 
     try {
       const saved = await createPlannerTask({
         title,
         projectId,
+        goalId: inheritedGoalId,
+        goalProcessId: inheritedGoalProcessId,
         durationMinutes: duration,
-        priority: "NORMAL",
+        priority: priorityToApi(priority),
+        dueAt: period.dueAt,
+        dueHorizon: dueHorizonToApi(period.dueHorizon),
       });
       const mapped = taskFromApi(saved, projects);
-      setTasks((current) => current.map((item) => item.id === task.id ? mapped : item));
-      setToast("Task saved to Inbox");
+      const dueHorizon = period.dueHorizon ?? mapped.dueHorizon;
+      setTasks((current) => current.map((item) => item.id === task.id ? {
+        ...mapped,
+        dueHorizon,
+        due: dueLabel(mapped.dueAt, dueHorizon),
+      } : item));
+      setToast(`Task saved to ${savedWhere}`);
       return mapped;
     } catch {
       setTasks((current) => current.filter((item) => item.id !== task.id));
       setConnection("error");
       setToast("Could not save task · changes rolled back");
       return null;
+    }
+  };
+
+  const setTaskPriority = async (taskId: string, priority: TaskPriority) => {
+    const previousTasks = tasks;
+    const previousBlocks = blocks;
+    const color = priorityColor(priority);
+    const linked = blocks.filter((block) => block.type === "task" && block.taskId === taskId);
+    setTasks((current) =>
+      current.map((task) => (task.id === taskId ? { ...task, priority } : task)),
+    );
+    setBlocks((current) =>
+      current.map((block) => (block.taskId === taskId && block.type === "task"
+        ? { ...block, color }
+        : block)),
+    );
+    if (!liveDataRef.current) return;
+    try {
+      await updateTask(taskId, { priority: priorityToApi(priority) });
+      await Promise.all(
+        linked
+          .filter((block) => !block.id.startsWith("pending-"))
+          .map((block) => updateTimeBlock(block.id, { color })),
+      );
+    } catch {
+      setTasks(previousTasks);
+      setBlocks(previousBlocks);
+      showToast("Could not update priority · changes rolled back", "warning");
     }
   };
 
@@ -1124,27 +1632,49 @@ export function PlannerApp({
     tasks: "Task workspace",
     projects: "Projects",
     goals: "Goals",
+    progress: "Progress",
   }[activeSection];
 
   return (
     <div className="app-shell">
-      <Sidebar
+      <PlannerSidebar
         inboxCount={tasks.filter((task) => task.status === "inbox").length}
         activeSection={activeSection}
-        weekPlannedPercent={weekPlannedPercent}
-        weekScoreCaption={weekScoreCaption}
         showPlannerBlocks={showPlannerBlocks}
         showExternalEvents={showExternalEvents}
         hasGoogleIntegration={hasGoogleIntegration}
+        showCalendarLayers={activeSection === "calendar"}
+        googleState={
+          (connection !== "live"
+            ? connection === "error" ? "error" : connection === "loading" || connection === "syncing" ? "loading" : "demo"
+            : googleConnection === "connected" && failedSyncCount > 0 ? "error"
+              : googleConnection === "connected" ? "live"
+                : googleConnection === "not-connected" ? "demo"
+                  : googleConnection === "syncing" || googleConnection === "loading" ? "syncing"
+                    : "error") as SidebarGoogleState
+        }
+        googleLabel={
+          connection !== "live" ? (connection === "demo" ? "Demo mode" : connection === "error" ? "Retry connection" : "Checking…")
+            : googleConnection === "connected" && failedSyncCount > 0 ? `${failedSyncCount} failed · tap to retry`
+              : googleConnection === "connected" ? "Synced"
+                : googleConnection === "not-connected" ? "Connect"
+                  : googleConnection === "syncing" ? "Syncing…"
+                    : googleConnection === "loading" ? "Checking…"
+                      : "Retry"
+        }
         onTogglePlannerBlocks={() => setShowPlannerBlocks((value) => !value)}
         onToggleExternalEvents={() => setShowExternalEvents((value) => !value)}
-        onNavigate={(section) => {
-          setActiveSection(section);
-          if (section === "calendar") goToday();
+        onGoToday={() => {
+          goTo("calendar");
+          goToday();
+        }}
+        onGoogleClick={() => {
+          void handleCalendarConnection();
         }}
       />
 
-      <main className={`workspace ${activeSection !== "calendar" ? "tasks-mode" : ""}`}>
+      <main className={`workspace ${activeSection !== "calendar" ? "tasks-mode" : ""}${activeSection === "goals" && entityId ? " goal-detail-mode" : ""}`}>
+        {!(activeSection === "goals" && entityId) && (
         <header className="topbar">
           <div className="mobile-brand">
             <div className="brand-mark">P</div>
@@ -1161,8 +1691,10 @@ export function PlannerApp({
               <h1>Tasks <span>{tasks.filter((task) => task.status !== "done").length} active</span></h1>
             ) : activeSection === "projects" ? (
               <h1>Projects <span>{apiProjects.filter((project) => project.active).length} active</span></h1>
-            ) : (
+            ) : activeSection === "goals" ? (
               <h1>Goals <span>{goals.filter((goal) => goal.status === "ACTIVE").length} active</span></h1>
+            ) : (
+              <h1>Progress</h1>
             )}
           </div>
 
@@ -1190,9 +1722,10 @@ export function PlannerApp({
             </button>
           </div>
         </header>
+        )}
 
         {activeSection === "calendar" ? <>
-        <section className="calendar-toolbar" aria-label="Calendar controls">
+        <section className="calendar-toolbar pos-cal-toolbar" aria-label="Calendar controls">
           <div className="toolbar-cluster">
             <button className="today-button" onClick={goToday}>Today</button>
             <div className="pager">
@@ -1203,7 +1736,7 @@ export function PlannerApp({
                 <ChevronRight size={18} />
               </button>
             </div>
-            <div className="week-range">
+            <div className="week-range pos-mono">
               {view === "month" ? (
                 monthAnchor.toLocaleDateString("en-US", { month: "long", year: "numeric" })
               ) : (
@@ -1218,9 +1751,9 @@ export function PlannerApp({
 
           <div className="toolbar-cluster toolbar-right">
             <div className="capacity-summary">
-              <span><strong>{durationLabel(plannedMinutes)}</strong> planned</span>
+              <span><strong className="pos-mono">{durationLabel(plannedMinutes)}</strong> planned</span>
               <i />
-              <span><strong>{durationLabel(openMinutes)}</strong> open</span>
+              <span><strong className="pos-mono">{durationLabel(openMinutes)}</strong> open</span>
               {view === "day" && <small>Day capacity</small>}
             </div>
             <div className="view-switcher" aria-label="Calendar view">
@@ -1238,14 +1771,14 @@ export function PlannerApp({
               className={`tasks-toggle ${taskPanelOpen ? "active" : ""}`}
               onClick={() => setTaskPanelOpen((open) => !open)}
             >
-              <ListTodo size={17} /> Tasks
+              <ListTodo size={17} /> {taskFilter === "inbox" ? "Inbox" : "Today"}
             </button>
           </div>
         </section>
 
         <div className={`planner-layout ${taskPanelOpen && view !== "month" ? "with-panel" : ""}`}>
           <section
-            className="calendar-card"
+            className="calendar-card pos-cal"
             aria-label={view === "month" ? "Monthly calendar" : "Weekly calendar"}
             aria-busy={connection === "loading" || connection === "syncing"}
           >
@@ -1297,9 +1830,12 @@ export function PlannerApp({
                   ))}
                 </div>
 
-                {visibleIndexes.map((dayIndex) => (
+                {visibleIndexes.map((dayIndex) => {
+                  const dayBlocks = calendarBlocks.filter((block) => block.day === dayIndex);
+                  const laidOut = resolveOverlapLayout(dayBlocks);
+                  return (
                   <div
-                    className="day-track"
+                    className={`day-track${isCurrentWeek && dayIndex === nowDay ? " today" : ""}`}
                     key={dayIndex}
                     role="presentation"
                     onMouseDown={(event) => {
@@ -1317,23 +1853,30 @@ export function PlannerApp({
                   >
                     {isCurrentWeek && dayIndex === nowDay && nowMinute >= START_HOUR * 60 && nowMinute <= END_HOUR * 60 && (
                       <div className="now-line" style={{ top: nowMinute - START_HOUR * 60 }}>
-                        <span>{minutesToTime(nowMinute)}</span>
+                        <span className="pos-mono">{minutesToTime(nowMinute)}</span>
                       </div>
                     )}
-                    {calendarBlocks
-                      .filter((block) => block.day === dayIndex)
-                      .map((block) => (
+                    {laidOut.map((block) => {
+                      const geometry = overlapGeometry(block.col, block.numCols);
+                      return (
                         <CalendarEvent
                           key={block.id}
                           block={block}
+                          done={Boolean(block.taskId && doneTaskIds.has(block.taskId))}
+                          layout={geometry}
+                          selected={blockPopover?.blockId === block.id}
                           onDragStart={onDragStart}
                           onComplete={completeTask}
+                          onRestore={restoreTask}
                           onOpenTask={setEditingTaskId}
                           onResize={onResizeBlock}
+                          onSelect={(rect) => setBlockPopover({ blockId: block.id, rect })}
                         />
-                      ))}
+                      );
+                    })}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
             </>}
@@ -1342,17 +1885,23 @@ export function PlannerApp({
           {taskPanelOpen && view !== "month" && (
             <TaskPanel
               tasks={filteredTasks}
-              count={tasks.filter((task) => task.status !== "done").length}
+              count={filteredTasks.filter((task) => task.status !== "done").length}
               filter={taskFilter}
               search={search}
               searchRef={searchRef}
               onSearch={setSearch}
               onFilter={setTaskFilter}
               onClose={() => setTaskPanelOpen(false)}
-              onQuickAdd={() => setQuickAddOpen(true)}
+              onQuickAdd={() => {
+                setCaptureScope(null);
+                setQuickAddOpen(true);
+              }}
               onDragStart={onDragStart}
               onComplete={completeTask}
+              onRestore={restoreTask}
+              onPriorityChange={setTaskPriority}
               onOpenTask={setEditingTaskId}
+              onDropBlock={onTaskPanelDrop}
             />
           )}
         </div>
@@ -1361,7 +1910,15 @@ export function PlannerApp({
             tasks={tasks}
             blocks={blocks}
             projects={projects}
-            onQuickAdd={() => setQuickAddOpen(true)}
+            weekStart={weekStart}
+            now={now}
+            horizon={taskHorizon}
+            anchor={taskAnchor}
+            selectedTaskId={editingTaskId}
+            searchInputRef={tasksSearchRef}
+            onHorizonChange={setTaskHorizon}
+            onAnchorChange={setTaskAnchor}
+            onQuickAdd={() => openQuickAdd(taskHorizon)}
             onOpenTask={setEditingTaskId}
             onComplete={completeTask}
             onRestore={restoreTask}
@@ -1370,18 +1927,61 @@ export function PlannerApp({
           <ProjectsWorkspace
             projects={apiProjects}
             goals={goals}
-            taskCountByProject={taskCountByProject}
+            tasks={tasks}
+            blocks={blocks}
+            now={now}
+            live={connection === "live"}
+            initialDetailId={entityId}
+            onDetailClose={() => goTo("projects")}
+            onOpenDetail={(projectId) => goTo("projects", projectId)}
+            onChanged={(message) => {
+              setReloadKey((value) => value + 1);
+              showToast(message);
+            }}
+            onOpenTask={setEditingTaskId}
+            onGoCalendar={() => goTo("calendar")}
+            onOpenGoal={(goalId) => goTo("goals", goalId)}
+            evidenceEpoch={evidenceEpoch}
+          />
+        ) : activeSection === "goals" ? (
+          <GoalsWorkspace
+            goals={goals}
+            projects={apiProjects}
+            tasks={tasks}
+            blocks={blocks}
+            now={now}
             live={connection === "live"}
             onChanged={(message) => {
               setReloadKey((value) => value + 1);
               showToast(message);
             }}
+            onOpenTask={setEditingTaskId}
+            onGoCalendar={() => goTo("calendar")}
+            onOpenProject={(projectId) => goTo("projects", projectId)}
+            onViewFullProgress={(goalId) => goTo("progress", goalId)}
+            initialDetailId={entityId}
+            onOpenGoal={(goalId) => goTo("goals", goalId)}
+            onDetailClose={() => goTo("goals")}
+            evidenceEpoch={evidenceEpoch}
+            onAddWeekTask={(projectId, title) => {
+              void addTask(title, 60, projectId, "p2", "week", startOfWeek(now));
+            }}
           />
         ) : (
-          <GoalsWorkspace
-            goals={goals}
+          <ProgressWorkspace
+            tasks={tasks}
+            blocks={blocks}
             projects={apiProjects}
+            goals={goals}
+            now={now}
+            weekStart={weekStart}
+            evidenceEpoch={evidenceEpoch}
             live={connection === "live"}
+            initialGoalId={entityId}
+            onClearGoal={() => goTo("progress")}
+            onOpenGoal={(goalId) => goTo("progress", goalId)}
+            onOpenTask={setEditingTaskId}
+            onOpenProject={(projectId) => goTo("projects", projectId)}
             onChanged={(message) => {
               setReloadKey((value) => value + 1);
               showToast(message);
@@ -1390,13 +1990,15 @@ export function PlannerApp({
         )}
       </main>
 
-      <button className="quick-add-fab" onClick={() => setQuickAddOpen(true)} aria-label="Quick add">
+      <button className="quick-add-fab" onClick={() => openQuickAdd()} aria-label="Quick add">
         <Plus size={22} />
       </button>
 
       {quickAddOpen && (
         <QuickAdd
           projects={projects}
+          scope={captureScope}
+          anchor={taskAnchor}
           onClose={() => setQuickAddOpen(false)}
           onAdd={addTask}
         />
@@ -1407,8 +2009,11 @@ export function PlannerApp({
           key={editingTask.id}
           task={editingTask}
           projects={projects}
+          goals={goals}
           live={connection === "live"}
           onClose={() => setEditingTaskId(null)}
+          onComplete={() => completeTask(editingTask.id)}
+          onRestore={() => restoreTask(editingTask.id)}
           onChanged={(message) => {
             setEditingTaskId(null);
             setReloadKey((value) => value + 1);
@@ -1441,6 +2046,46 @@ export function PlannerApp({
         />
       )}
 
+      {blockPopover && (() => {
+        const popBlock = blocks.find((block) => block.id === blockPopover.blockId);
+        if (!popBlock) return null;
+        const done = Boolean(popBlock.taskId && doneTaskIds.has(popBlock.taskId));
+        if (popBlock.type === "external") {
+          return (
+            <GoogleEventPopover
+              block={popBlock}
+              anchor={blockPopover.rect}
+              onClose={() => setBlockPopover(null)}
+            />
+          );
+        }
+        return (
+          <PersonalOsBlockPopover
+            block={popBlock}
+            done={done}
+            anchor={blockPopover.rect}
+            onClose={() => setBlockPopover(null)}
+            onComplete={() => {
+              if (popBlock.taskId) void completeTask(popBlock.taskId);
+            }}
+            onRestore={() => {
+              if (popBlock.taskId) void restoreTask(popBlock.taskId);
+            }}
+            onOpenTask={() => {
+              if (popBlock.taskId) setEditingTaskId(popBlock.taskId);
+            }}
+            onUnschedule={() => {
+              void unscheduleBlock(popBlock.id);
+            }}
+            onRetrySync={
+              popBlock.syncStatus === "FAILED"
+                ? () => { void handleCalendarConnection(); }
+                : undefined
+            }
+          />
+        );
+      })()}
+
       {toast && (
         <div className={`toast ${toastKind === "warning" ? "warning" : ""}`} role="status">
           <CheckCircle2 size={18} /> {toast}
@@ -1450,109 +2095,40 @@ export function PlannerApp({
   );
 }
 
-function Sidebar({
-  inboxCount,
-  activeSection,
-  weekPlannedPercent,
-  weekScoreCaption,
-  showPlannerBlocks,
-  showExternalEvents,
-  hasGoogleIntegration,
-  onTogglePlannerBlocks,
-  onToggleExternalEvents,
-  onNavigate,
-}: {
-  inboxCount: number;
-  activeSection: ActiveSection;
-  weekPlannedPercent: number;
-  weekScoreCaption: string;
-  showPlannerBlocks: boolean;
-  showExternalEvents: boolean;
-  hasGoogleIntegration: boolean;
-  onTogglePlannerBlocks: () => void;
-  onToggleExternalEvents: () => void;
-  onNavigate: (section: ActiveSection) => void;
-}) {
-  return (
-    <aside className="sidebar">
-      <div className="brand">
-        <div className="brand-mark">P</div>
-        <div>
-          <strong>Personal OS</strong>
-          <span>Your time, aligned</span>
-        </div>
-      </div>
-
-      <nav className="primary-nav" aria-label="Primary navigation">
-        <button onClick={() => onNavigate("calendar")}><Crosshair size={19} /><span>Today</span></button>
-        <button className={activeSection === "calendar" ? "active" : ""} onClick={() => onNavigate("calendar")}>
-          <CalendarDays size={19} /><span>Calendar</span>
-        </button>
-        <button className={activeSection === "tasks" ? "active" : ""} onClick={() => onNavigate("tasks")}>
-          <ListTodo size={19} /><span>Tasks</span><em>{inboxCount}</em>
-        </button>
-        <button className={activeSection === "projects" ? "active" : ""} onClick={() => onNavigate("projects")}>
-          <FolderKanban size={19} /><span>Projects</span>
-        </button>
-        <button className={activeSection === "goals" ? "active" : ""} onClick={() => onNavigate("goals")}>
-          <Target size={19} /><span>Goals</span></button>
-      </nav>
-
-      <div className="sidebar-section">
-        <div className="sidebar-label">Calendars</div>
-        <button
-          type="button"
-          className={`calendar-source ${showPlannerBlocks ? "active" : ""}`}
-          onClick={onTogglePlannerBlocks}
-          aria-pressed={showPlannerBlocks}
-        >
-          <i className="source-dot personal" />
-          <span>Personal OS blocks</span>
-          {showPlannerBlocks && <Check size={14} />}
-        </button>
-        <button
-          type="button"
-          className={`calendar-source ${showExternalEvents ? "active" : ""}`}
-          onClick={onToggleExternalEvents}
-          aria-pressed={showExternalEvents}
-          disabled={!hasGoogleIntegration}
-          title={hasGoogleIntegration ? "Toggle Google Calendar events" : "Connect Google Calendar first"}
-        >
-          <i className="source-dot work" />
-          <span>Google Calendar</span>
-          {showExternalEvents && hasGoogleIntegration && <Check size={14} />}
-        </button>
-      </div>
-
-      <div className="sidebar-bottom">
-        <div className="week-score">
-          <div className="score-icon"><Zap size={17} /></div>
-          <div><strong>{weekPlannedPercent}% planned</strong><span>{weekScoreCaption}</span></div>
-          <ChevronRight size={16} />
-        </div>
-        <button><Settings size={18} /><span>Settings</span></button>
-      </div>
-    </aside>
-  );
-}
-
 function CalendarEvent({
   block,
+  done,
+  layout,
+  selected = false,
   onDragStart,
   onComplete,
+  onRestore,
   onOpenTask,
   onResize,
+  onSelect,
 }: {
   block: CalendarBlock;
+  done: boolean;
+  layout: { left: string; right: string };
+  selected?: boolean;
   onDragStart: (event: React.DragEvent, payload: DragPayload) => void;
   onComplete: (taskId: string) => void;
+  onRestore: (taskId: string) => void;
   onOpenTask: (taskId: string) => void;
   onResize: (blockId: string, duration: number) => void;
+  onSelect: (rect: DOMRect) => void;
 }) {
   const resizeStartRef = useRef<{ y: number; duration: number } | null>(null);
   const previewRef = useRef<number | null>(null);
   const [previewDuration, setPreviewDuration] = useState<number | null>(null);
   const displayDuration = previewDuration ?? block.duration;
+  const isExternal = block.type === "external";
+  const isFailed = block.syncStatus === "FAILED";
+  const isPending = block.syncStatus === "PENDING";
+  const isTiny = displayDuration <= 20;
+  const isCompact = displayDuration <= 35;
+  const showTime = displayDuration >= 25;
+  const showMeta = displayDuration >= 45;
 
   const onResizePointerDown = (event: React.PointerEvent) => {
     if (block.type !== "task") return;
@@ -1589,39 +2165,87 @@ function CalendarEvent({
 
   return (
     <article
-      className={`calendar-event ${block.type}`}
+      className={[
+        "calendar-event",
+        block.type,
+        done ? "done" : "",
+        isFailed ? "sync-failed" : "",
+        isPending ? "sync-pending" : "",
+        selected ? "selected" : "",
+        isTiny ? "tiny" : isCompact ? "compact" : "",
+      ].filter(Boolean).join(" ")}
       data-sync={block.syncStatus?.toLowerCase()}
-      title={block.syncStatus === "FAILED" ? "Saved in Personal OS; Google Calendar sync failed" : undefined}
+      role="button"
+      tabIndex={0}
+      aria-label={
+        isExternal
+          ? `${block.title}, Google Calendar, read-only`
+          : done
+            ? `${block.title}, completed`
+            : block.title
+      }
+      title={
+        isExternal
+          ? "Google Calendar · read-only"
+          : isFailed
+            ? "Saved in Personal OS; Google Calendar sync failed"
+            : undefined
+      }
       style={{
-        top: block.start - START_HOUR * 60 + 3,
-        height: Math.max(28, displayDuration - 6),
+        top: block.start - START_HOUR * 60 + 1,
+        height: Math.max(isTiny ? 18 : 28, displayDuration - 2),
+        left: layout.left,
+        right: layout.right,
         "--event-color": block.color,
       } as React.CSSProperties}
-      draggable={block.type === "task"}
+      draggable={block.type === "task" && !done}
       onDragStart={(event) => onDragStart(event, { kind: "block", blockId: block.id })}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect(event.currentTarget.getBoundingClientRect());
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          event.stopPropagation();
+          onSelect(event.currentTarget.getBoundingClientRect());
+        }
+      }}
       onDoubleClick={() => {
         if (block.taskId) onOpenTask(block.taskId);
       }}
     >
-      <div className="event-title-row">
-        {block.type === "external" && <LockKeyhole size={11} />}
+      <div className={`event-title-row${isTiny ? " inline" : ""}`}>
+        {isExternal && <LockKeyhole size={10} aria-hidden="true" />}
+        {done && !isExternal && <CheckCircle2 size={10} aria-hidden="true" />}
+        {isFailed && <em className="sync-warning" aria-label="Sync failed">!</em>}
         <strong>{block.title}</strong>
-        {block.taskId && (
+        {block.taskId && !isTiny && (
           <button
             className="event-complete"
-            aria-label={`Complete ${block.title}`}
+            aria-label={done ? `Restore ${block.title}` : `Complete ${block.title}`}
             onClick={(event) => {
               event.stopPropagation();
-              onComplete(block.taskId!);
+              if (done) onRestore(block.taskId!);
+              else onComplete(block.taskId!);
             }}
           >
-            <Check size={11} />
+            {done ? <CheckCircle2 size={11} /> : <Check size={11} />}
           </button>
         )}
-        {block.syncStatus === "FAILED" && <em className="sync-warning">!</em>}
       </div>
-      {block.duration >= 45 && <span>{minutesToTime(block.start)} · {block.meta}</span>}
-      {block.type === "task" && (
+      {showTime && (
+        <span className="event-time pos-mono">
+          {isCompact
+            ? minutesToTime(block.start)
+            : `${minutesToTime(block.start)} · ${durationLabel(displayDuration)}`}
+        </span>
+      )}
+      {showMeta && block.meta && <span className="event-meta">{block.meta}</span>}
+      {isFailed && displayDuration >= 60 && (
+        <span className="event-sync-note">Saved locally · sync failed</span>
+      )}
+      {block.type === "task" && !done && (
         <button
           type="button"
           className="event-resize-handle"
@@ -1648,7 +2272,7 @@ function MonthCalendar({
 }) {
   const today = new Date();
   return (
-    <div className="month-calendar" aria-label="Month view">
+    <div className="month-calendar pos-cal-month" aria-label="Month view">
       <div className="month-weekdays">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
           <span key={label}>{label}</span>
@@ -1658,24 +2282,47 @@ function MonthCalendar({
         {cells.map((date) => {
           const dayIndex = dayIndexFor(date.toISOString(), referenceStart);
           const dayBlocks = blocks.filter((block) => block.day === dayIndex);
+          const personal = dayBlocks.filter((block) => block.type === "task");
+          const google = dayBlocks.filter((block) => block.type === "external");
           const inMonth = date.getMonth() === anchor.getMonth();
           const isToday = sameDay(date, today);
+          const labels = personal.slice(0, 2);
           return (
             <button
               key={date.toISOString()}
               className={`month-cell ${inMonth ? "" : "muted"} ${isToday ? "today" : ""}`}
               onClick={() => onOpenDay(date)}
             >
-              <strong>{date.getDate()}</strong>
+              <div className="month-cell-head">
+                <strong>{date.getDate()}</strong>
+                <span className="month-density" aria-hidden="true">
+                  {personal.length > 0 && <i className="os" />}
+                  {google.length > 0 && <i className="gcal" />}
+                </span>
+              </div>
               <div className="month-events">
-                {dayBlocks.slice(0, 3).map((block) => (
-                  <i key={block.id} style={{ background: block.color }} title={block.title} />
+                {labels.map((block) => (
+                  <span key={block.id} className="month-event-chip os" title={block.title}>
+                    {block.title}
+                  </span>
                 ))}
-                {dayBlocks.length > 3 && <small>+{dayBlocks.length - 3}</small>}
+                {google.length > 0 && labels.length === 0 && (
+                  <span className="month-event-chip gcal">
+                    {google.length} Google
+                  </span>
+                )}
+                {dayBlocks.length > labels.length + (labels.length === 0 && google.length > 0 ? 1 : 0) && (
+                  <small>+{dayBlocks.length - Math.max(labels.length, labels.length === 0 && google.length > 0 ? 1 : 0)} more</small>
+                )}
               </div>
             </button>
           );
         })}
+      </div>
+      <div className="month-legend">
+        <span><i className="os" /> Personal OS</span>
+        <span><i className="gcal" /> Google Calendar</span>
+        <em>Click a day to open Day view</em>
       </div>
     </div>
   );
@@ -1715,10 +2362,10 @@ function SlotScheduleModal({
   return (
     <div className="modal-backdrop">
       <button className="modal-dismiss" type="button" aria-label="Close slot scheduler" onClick={onClose} />
-      <div className="slot-schedule-modal" role="dialog" aria-modal="true" aria-label="Schedule time block">
+      <div className="slot-schedule-modal pos-cal-slot" role="dialog" aria-modal="true" aria-label="Schedule time block">
         <div className="slot-schedule-header">
           <div>
-            <div className="eyebrow">Schedule time</div>
+            <div className="eyebrow">Schedule work</div>
             <strong>{slotDateValue.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · {minutesToTime(slot.start)}</strong>
           </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
@@ -1784,7 +2431,10 @@ function TaskPanel({
   onQuickAdd,
   onDragStart,
   onComplete,
+  onRestore,
+  onPriorityChange: _onPriorityChange,
   onOpenTask,
+  onDropBlock,
 }: {
   tasks: PlannerTask[];
   count: number;
@@ -1797,72 +2447,127 @@ function TaskPanel({
   onQuickAdd: () => void;
   onDragStart: (event: React.DragEvent, payload: DragPayload) => void;
   onComplete: (taskId: string) => void;
+  onRestore: (taskId: string) => void;
+  onPriorityChange: (taskId: string, priority: TaskPriority) => void;
   onOpenTask: (taskId: string) => void;
+  onDropBlock: (event: React.DragEvent) => void;
 }) {
+  const [dropActive, setDropActive] = useState(false);
+
+  const onDragOver = (event: React.DragEvent) => {
+    if (!event.dataTransfer.types.includes("application/x-personal-os")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDropActive(true);
+  };
+
+  const onDragLeave = (event: React.DragEvent) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setDropActive(false);
+  };
+
+  const onDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    setDropActive(false);
+    onDropBlock(event);
+  };
+
   return (
-    <aside className="task-panel">
+    <aside
+      className={`task-panel pos-cal-side ${dropActive ? "drop-target" : ""}`}
+      aria-label={filter === "today" ? "Today's work" : "Unscheduled work"}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {dropActive && (
+        <div className="pos-cal-unschedule-banner" role="status">
+          <strong>Remove from Calendar</strong>
+          <span>Task will remain in Tasks</span>
+        </div>
+      )}
       <div className="task-panel-header">
-        <div>
-          <div className="eyebrow">Unscheduled work</div>
-          <h2>Tasks <span>{count}</span></h2>
+        <div className="task-tabs" role="tablist" aria-label="Calendar side panel">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={filter === "today"}
+            className={filter === "today" ? "active" : ""}
+            onClick={() => onFilter("today")}
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={filter === "inbox"}
+            className={filter === "inbox" ? "active" : ""}
+            onClick={() => onFilter("inbox")}
+          >
+            Inbox
+            {count > 0 && <span className="pos-mono pos-cal-side-count">{count}</span>}
+          </button>
         </div>
-        <div className="task-panel-actions">
-          <button className="icon-button" aria-label="Task menu"><MoreHorizontal size={18} /></button>
-          <button className="icon-button" aria-label="Close task panel" onClick={onClose}><X size={18} /></button>
-        </div>
+        <button className="icon-button" aria-label="Close task panel" onClick={onClose}><X size={16} /></button>
       </div>
 
       <button className="quick-capture" onClick={onQuickAdd}>
-        <span><Plus size={17} /> Add task</span>
+        <span><Plus size={15} /> Add task</span>
         <kbd>⌘ K</kbd>
       </button>
 
       <label className="task-search">
-        <Search size={16} />
+        <Search size={14} />
         <input ref={searchRef} value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search tasks" />
       </label>
 
-      <div className="task-tabs">
-        <button className={filter === "inbox" ? "active" : ""} onClick={() => onFilter("inbox")}>
-          Inbox
-        </button>
-        <button className={filter === "today" ? "active" : ""} onClick={() => onFilter("today")}>
-          Today
-        </button>
+      <div className="drag-hint">
+        <GripVertical size={14} />
+        {filter === "today"
+          ? "Drag onto free time to schedule"
+          : "Drag onto the grid to schedule · drop here to unschedule"}
       </div>
 
-      <div className="drag-hint"><GripVertical size={14} /> Drag a task onto free time</div>
-
       <div className="task-list">
-        {tasks.map((task) => (
+        {tasks.map((task) => {
+          const priority = priorityMeta(task.priority);
+          return (
           <article
-            className="task-card"
+            className={`task-card${task.status === "done" ? " done" : ""}`}
             key={task.id}
-            draggable
+            draggable={task.status !== "done"}
             onDragStart={(event) => onDragStart(event, { kind: "task", taskId: task.id })}
+            style={{ "--priority-color": priority.color } as React.CSSProperties}
           >
-            <button className="task-check" onClick={() => onComplete(task.id)} aria-label={`Complete ${task.title}`}>
-              <Circle size={18} />
+            <button
+              className="task-check"
+              onClick={() => task.status === "done" ? onRestore(task.id) : onComplete(task.id)}
+              aria-label={task.status === "done" ? `Restore ${task.title}` : `Complete ${task.title}`}
+            >
+              {task.status === "done" ? <CheckCircle2 size={16} /> : <Circle size={16} />}
             </button>
             <div className="task-content">
               <button className="task-title-button" type="button" onClick={() => onOpenTask(task.id)}>
                 {task.title}
               </button>
-              <div className="task-project"><i style={{ background: task.color }} />{task.project}</div>
               <div className="task-meta">
-                <span><Clock3 size={13} />{durationLabel(task.duration)}</span>
-                {task.due && <span className={task.priority === "high" ? "urgent" : ""}><Flag size={13} />{task.due}</span>}
+                <span className="task-project"><i style={{ background: task.color }} />{task.project}</span>
+                <span className="pos-mono">{durationLabel(task.duration)}</span>
               </div>
             </div>
-            <GripVertical className="drag-handle" size={17} />
+            {task.status !== "done" && <GripVertical className="drag-handle" size={15} />}
           </article>
-        ))}
+          );
+        })}
 
         {tasks.length === 0 && (
           <div className="empty-tasks">
-            <div><Sparkles size={20} /></div>
-            <strong>Clear for now</strong>
-            <span>Capture something new or enjoy the open time.</span>
+            <strong>{filter === "today" ? "Nothing for today yet" : "Inbox is clear"}</strong>
+            <span>
+              {filter === "today"
+                ? "Drag from Inbox or add a task to protect time."
+                : "Capture something new or enjoy the open time."}
+            </span>
           </div>
         )}
       </div>
@@ -1870,10 +2575,211 @@ function TaskPanel({
   );
 }
 
+function WeekRangeField({
+  labelClass,
+  rangeText,
+  value,
+  onChange,
+}: {
+  labelClass?: string;
+  rangeText: string;
+  value: Date;
+  onChange: (value: Date) => void;
+}) {
+  const selectedStart = startOfWeek(value);
+  const [open, setOpen] = useState(false);
+  const [month, setMonth] = useState(() => startOfMonth(value));
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+
+  const weeks = useMemo(() => {
+    const days = monthGridDays(month);
+    return Array.from({ length: 6 }, (_, index) => days.slice(index * 7, index * 7 + 7));
+  }, [month]);
+
+  useEffect(() => {
+    if (!open) return;
+    setMonth(startOfMonth(value));
+    const place = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const height = 312;
+      const top = rect.bottom + height > window.innerHeight - 12
+        ? Math.max(12, rect.top - height - 6)
+        : rect.bottom + 6;
+      const left = Math.min(rect.left, window.innerWidth - 268);
+      setCoords({ top, left: Math.max(12, left) });
+    };
+    place();
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("resize", place);
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("resize", place);
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, value]);
+
+  const pickWeek = (day: Date) => {
+    onChange(startOfWeek(day));
+    setOpen(false);
+  };
+
+  return (
+    <div className="week-range-field" ref={rootRef}>
+      <span className={labelClass}>Week</span>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={`week-range-control${open ? " open" : ""}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`Week ${rangeText}`}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="week-range-display">{rangeText}</span>
+      </button>
+      {open && (
+        <div className="week-picker" role="dialog" aria-label="Choose a week" style={{ top: coords.top, left: coords.left }}>
+          <div className="week-picker-header">
+            <strong>{month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</strong>
+            <div className="pager">
+              <button type="button" aria-label="Previous month" onClick={() => setMonth(startOfMonth(addDays(month, -1)))}>
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                type="button"
+                aria-label="Next month"
+                onClick={() => {
+                  const next = new Date(month);
+                  next.setMonth(next.getMonth() + 1);
+                  setMonth(startOfMonth(next));
+                }}
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+          <div className="week-picker-weekdays" aria-hidden="true">
+            {["M", "T", "W", "T", "F", "S", "S"].map((label, index) => (
+              <span key={`${label}-${index}`}>{label}</span>
+            ))}
+          </div>
+          <div className="week-picker-grid">
+            {weeks.map((week) => {
+              const start = week[0]!;
+              const selected = start.getTime() === selectedStart.getTime();
+              const isCurrent = start.getTime() === startOfWeek(new Date()).getTime();
+              return (
+                <button
+                  key={start.toISOString()}
+                  type="button"
+                  className={`week-picker-row${selected ? " selected" : ""}${isCurrent ? " current" : ""}`}
+                  onClick={() => pickWeek(start)}
+                >
+                  {week.map((day) => (
+                    <span
+                      key={day.toISOString()}
+                      className={`week-picker-day${day.getMonth() !== month.getMonth() ? " muted" : ""}${sameDay(day, new Date()) ? " today" : ""}`}
+                    >
+                      {day.getDate()}
+                    </span>
+                  ))}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            className="week-picker-this"
+            onClick={() => pickWeek(new Date())}
+          >
+            This week
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PeriodFields({
+  horizon,
+  value,
+  onChange,
+  compact = false,
+}: {
+  horizon: "day" | "week" | "month";
+  value: Date;
+  onChange: (value: Date) => void;
+  compact?: boolean;
+}) {
+  const weekStart = startOfWeek(value);
+  const weekEnd = addDays(weekStart, 6);
+  const labelClass = compact ? "sr-only" : undefined;
+
+  if (horizon === "month") {
+    return (
+      <label>
+        <span className={labelClass}>Month</span>
+        <input
+          type="month"
+          value={monthInputValue(value)}
+          onChange={(event) => {
+            if (!event.target.value) return;
+            onChange(parseMonthInput(event.target.value));
+          }}
+        />
+      </label>
+    );
+  }
+
+  if (horizon === "week") {
+    const rangeText = `${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${weekEnd.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+    return (
+      <WeekRangeField
+        labelClass={labelClass}
+        rangeText={rangeText}
+        value={weekStart}
+        onChange={onChange}
+      />
+    );
+  }
+
+  return (
+    <label>
+      <span className={labelClass}>Date</span>
+      <input
+        type="date"
+        value={localDateInput(value)}
+        onChange={(event) => {
+          if (!event.target.value) return;
+          onChange(parseLocalDateInput(event.target.value));
+        }}
+      />
+    </label>
+  );
+}
+
 function TasksWorkspace({
   tasks,
   blocks,
   projects,
+  weekStart,
+  now,
+  horizon,
+  anchor,
+  selectedTaskId = null,
+  searchInputRef,
+  onHorizonChange,
+  onAnchorChange,
   onQuickAdd,
   onOpenTask,
   onComplete,
@@ -1882,24 +2788,32 @@ function TasksWorkspace({
   tasks: PlannerTask[];
   blocks: CalendarBlock[];
   projects: ProjectOption[];
+  weekStart: Date;
+  now: Date;
+  horizon: HorizonScope;
+  anchor: Date;
+  selectedTaskId?: string | null;
+  searchInputRef?: React.RefObject<HTMLInputElement | null>;
+  onHorizonChange: (value: HorizonScope) => void;
+  onAnchorChange: (value: Date) => void;
   onQuickAdd: () => void;
   onOpenTask: (taskId: string) => void;
   onComplete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
 }) {
-  const [filter, setFilter] = useState<"open" | "inbox" | "scheduled" | "done">("open");
+  const [showCompleted, setShowCompleted] = useState(false);
   const [projectFilterId, setProjectFilterId] = useState<string | "all">("all");
   const [query, setQuery] = useState("");
-  const today = new Date();
+  const today = startOfDay(now);
+  const viewingToday = sameDay(anchor, now);
+  const viewingThisWeek = startOfWeek(anchor).getTime() === startOfWeek(now).getTime();
+  const viewingThisMonth = startOfMonth(anchor).getTime() === startOfMonth(now).getTime();
   const normalizedQuery = query.trim().toLowerCase();
-  const active = tasks.filter((task) => task.status !== "done");
-  const overdue = active.filter((task) => task.dueAt && new Date(task.dueAt) < today).length;
-  const scheduled = active.filter((task) => task.status === "scheduled").length;
-  const completed = tasks.filter((task) => task.status === "done").length;
-  const visible = tasks
+
+  const scoped = tasks.filter((task) => taskBelongsToHorizon(task, horizon, anchor, blocks, weekStart, now));
+  const visible = scoped
     .filter((task) => {
-      if (filter === "open" && task.status === "done") return false;
-      if (filter !== "open" && task.status !== filter) return false;
+      if (!showCompleted && task.status === "done") return false;
       if (projectFilterId !== "all") {
         if (projectFilterId === "inbox") {
           if (task.projectId !== null) return false;
@@ -1911,137 +2825,147 @@ function TasksWorkspace({
       return `${task.title} ${task.notes} ${task.project}`.toLowerCase().includes(normalizedQuery);
     })
     .sort((left, right) => {
-      if (left.priority !== right.priority) {
-        const rank = { high: 0, normal: 1, low: 2 };
-        return rank[left.priority] - rank[right.priority];
-      }
+      const byDone = Number(left.status === "done") - Number(right.status === "done");
+      if (byDone !== 0) return byDone;
+      const byPriority = priorityRank(left.priority) - priorityRank(right.priority);
+      if (byPriority !== 0) return byPriority;
       return (left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER)
         - (right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER);
     });
 
+  const scheduleCopy = (task: PlannerTask, block?: CalendarBlock) => {
+    if (task.status === "done") {
+      return block ? scheduleLabel(block) : "Done";
+    }
+    if (block) return scheduleLabel(block);
+    if (task.status === "scheduled") return "Scheduled";
+    return "";
+  };
+
+  const periodLabelForTask = (task: PlannerTask) => {
+    const dueHorizon = taskDueHorizon(task);
+    const overdue = Boolean(
+      task.dueAt
+      && dueHorizon === "day"
+      && new Date(task.dueAt) < today
+      && task.status !== "done",
+    );
+    if (overdue) {
+      return `Overdue${task.due ? ` · ${task.due}` : ""}`;
+    }
+    if (dueHorizon === "day") {
+      return task.due ? `Due ${task.due}` : (dueLabel(task.dueAt, "day") ?? "Day");
+    }
+    if (dueHorizon === "week") {
+      return horizonLabel(task.dueAt, "week") ?? "This week";
+    }
+    if (dueHorizon === "month") {
+      const month = horizonLabel(task.dueAt, "month") ?? "This month";
+      return `${month} · No specific day`;
+    }
+    return null;
+  };
+
+  const shiftAnchor = (amount: number) => {
+    if (horizon === "week") {
+      onAnchorChange(addDays(anchor, amount * 7));
+      return;
+    }
+    if (horizon === "month") {
+      const next = new Date(anchor);
+      next.setMonth(next.getMonth() + amount);
+      onAnchorChange(startOfDay(next));
+      return;
+    }
+    onAnchorChange(addDays(anchor, amount));
+  };
+
+  const canJumpCurrent = horizon !== "all" && !(
+    horizon === "day" ? viewingToday : horizon === "week" ? viewingThisWeek : viewingThisMonth
+  );
+
+  const footerHint = horizon === "week"
+    ? "WEEK tasks belong to this week — no specific day until scheduled. DAY tasks have a real due date. Unscheduled ≠ deleted."
+    : horizon === "month"
+      ? "MONTH tasks are planning inventory — not due on the 1st. Assign week or calendar time when ready."
+      : horizon === "day"
+        ? "Showing DAY tasks for this date and calendar blocks on this day. WEEK tasks appear only when scheduled here."
+        : undefined;
+
   return (
-    <section className="tasks-workspace" aria-label="Task workspace">
-      <div className="tasks-hero">
-        <div>
-          <div className="eyebrow">Plan the work, then protect the time</div>
-          <h2>Your tasks</h2>
-          <p>Capture everything here. Schedule only what deserves time on your calendar.</p>
-        </div>
-        <button className="primary-button task-add-button" onClick={onQuickAdd}>
-          <Plus size={17} /> Add task
-        </button>
-      </div>
-
-      <div className="task-metrics" aria-label="Task summary">
-        <div><span>Open</span><strong>{active.length}</strong><small>ready to plan</small></div>
-        <div><span>Scheduled</span><strong>{scheduled}</strong><small>protected on calendar</small></div>
-        <div className={overdue ? "attention" : ""}><span>Overdue</span><strong>{overdue}</strong><small>needs a decision</small></div>
-        <div><span>Completed</span><strong>{completed}</strong><small>all-time progress</small></div>
-      </div>
-
-      <div className="task-board">
-        <div className="task-board-toolbar">
-          <div className="task-board-tabs">
-            {(["open", "inbox", "scheduled", "done"] as const).map((value) => (
-              <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>
-                {value === "done" ? "Completed" : value[0].toUpperCase() + value.slice(1)}
-              </button>
-            ))}
-          </div>
-          <label className="task-workspace-search">
-            <Search size={16} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tasks" />
-          </label>
-          <label className="task-project-filter">
-            <span className="sr-only">Filter by project</span>
-            <select
-              value={projectFilterId}
-              onChange={(event) => {
-                const value = event.target.value;
-                setProjectFilterId(value === "all" ? "all" : value === "inbox" ? "inbox" : value);
-              }}
-              aria-label="Filter by project"
-            >
-              <option value="all">All projects</option>
-              {projects.filter((project) => project.id).map((project) => (
-                <option key={project.id!} value={project.id!}>{project.title}</option>
-              ))}
-              <option value="inbox">Inbox only</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="task-table-heading" aria-hidden="true">
-          <span>Task</span><span>Project</span><span>Schedule</span><span>Due</span><span />
-        </div>
-        <div className="task-workspace-list">
-          {visible.map((task) => {
-            const block = blocks.find((candidate) => candidate.taskId === task.id);
-            const isOverdue = Boolean(task.dueAt && new Date(task.dueAt) < today && task.status !== "done");
-            return (
-              <article className={`task-workspace-row ${task.status === "done" ? "completed" : ""}`} key={task.id}>
-                <button
-                  className="workspace-task-check"
-                  aria-label={task.status === "done" ? `Restore ${task.title}` : `Complete ${task.title}`}
-                  onClick={() => task.status === "done" ? onRestore(task.id) : onComplete(task.id)}
-                >
-                  {task.status === "done" ? <RotateCcw size={15} /> : <Circle size={19} />}
-                </button>
-                <button className="workspace-task-title" onClick={() => onOpenTask(task.id)}>
-                  <strong>{task.title}</strong>
-                  <span>{task.notes || `${durationLabel(task.duration)} focus block`}</span>
-                </button>
-                <div className="workspace-task-project"><i style={{ background: task.color }} />{task.project}</div>
-                <div className={`workspace-task-status ${task.status}`}>
-                  {task.status === "scheduled" ? <CalendarClock size={14} /> : <FileText size={14} />}
-                  {task.status === "scheduled" ? scheduleLabel(block) : task.status === "done" ? "Completed" : "Inbox"}
-                </div>
-                <div className={`workspace-task-due ${isOverdue ? "overdue" : ""}`}>
-                  {task.due ? <><Flag size={13} />{task.due}</> : "—"}
-                </div>
-                <button className="row-more" aria-label={`Edit ${task.title}`} onClick={() => onOpenTask(task.id)}>
-                  <MoreHorizontal size={18} />
-                </button>
-              </article>
-            );
-          })}
-
-          {visible.length === 0 && (
-            <div className="task-workspace-empty">
-              <div><Sparkles size={22} /></div>
-              <strong>No tasks in this view</strong>
-              <span>Switch filters or capture your next action.</span>
-              <button onClick={onQuickAdd}><Plus size={15} /> Add task</button>
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
+    <div className="tasks-workspace" data-task-project-filter="task-project-filter">
+      <TasksWorkspaceView
+        horizon={horizon}
+        periodCaption={horizon === "all" ? "All tasks" : horizonCaption(horizon, anchor)}
+        onHorizonChange={onHorizonChange}
+        tasks={visible}
+        blocks={blocks}
+        projects={projects}
+        showCompleted={showCompleted}
+        onShowCompleted={setShowCompleted}
+        query={query}
+        onQuery={setQuery}
+        searchInputRef={searchInputRef}
+        projectFilterId={projectFilterId}
+        onProjectFilter={setProjectFilterId}
+        selectedTaskId={selectedTaskId}
+        onAdd={onQuickAdd}
+        onOpenTask={onOpenTask}
+        onComplete={onComplete}
+        onRestore={onRestore}
+        onPrevPeriod={horizon === "all" ? undefined : () => shiftAnchor(-1)}
+        onNextPeriod={horizon === "all" ? undefined : () => shiftAnchor(1)}
+        onJumpCurrent={canJumpCurrent ? () => onAnchorChange(startOfDay(now)) : undefined}
+        canJumpCurrent={canJumpCurrent}
+        jumpCurrentLabel={horizon === "week" ? "This week" : horizon === "month" ? "This month" : "Today"}
+        periodControl={horizon === "all" ? undefined : (
+          <PeriodFields horizon={horizon} value={anchor} onChange={onAnchorChange} compact />
+        )}
+        footerHint={footerHint}
+        today={today}
+        getHorizon={(task) => taskDueHorizon(task as PlannerTask)}
+        getScheduleLabel={(task, block) => scheduleCopy(task as PlannerTask, block as CalendarBlock | undefined)}
+        getHorizonLabel={(task) => periodLabelForTask(task as PlannerTask)}
+        isOverdue={(task) => Boolean(
+          task.dueAt
+          && taskDueHorizon(task as PlannerTask) === "day"
+          && new Date(task.dueAt) < today
+          && task.status !== "done",
+        )}
+      />
+    </div>
   );
 }
 
 function TaskEditor({
   task,
   projects,
+  goals,
   live,
   onClose,
+  onComplete,
+  onRestore,
   onChanged,
 }: {
   task: PlannerTask;
   projects: ProjectOption[];
+  goals: ApiGoal[];
   live: boolean;
   onClose: () => void;
+  onComplete?: () => void;
+  onRestore?: () => void;
   onChanged: (message: string) => void;
 }) {
   const suggestedStart = defaultScheduleStart();
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes);
   const [projectId, setProjectId] = useState<string | null>(task.projectId);
+  const [goalId, setGoalId] = useState<string | null>(task.goalId ?? null);
+  const [goalProcessId, setGoalProcessId] = useState<string | null>(task.goalProcessId ?? null);
   const [dueDate, setDueDate] = useState(dateInputValue(task.dueAt));
+  const [dueScope, setDueScope] = useState<"none" | "day" | "week" | "month">(task.dueHorizon ?? "none");
   const [duration, setDuration] = useState(task.duration);
-  const [priority, setPriority] = useState<"LOW" | "NORMAL" | "HIGH">(
-    task.priority === "high" ? "HIGH" : task.priority === "low" ? "LOW" : "NORMAL",
-  );
+  const [priority, setPriority] = useState<TaskPriority>(task.priority);
   const [taskBlocks, setTaskBlocks] = useState<ApiTimeBlock[]>([]);
   const [scheduleDate, setScheduleDate] = useState(dateInputValue(suggestedStart.toISOString()));
   const [scheduleTime, setScheduleTime] = useState(timeInputValue(suggestedStart.toISOString()));
@@ -2049,11 +2973,19 @@ function TaskEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const titleRef = useRef<HTMLInputElement>(null);
   const scheduledBlock = taskBlocks[0];
+  const selectedProject = projects.find((project) => project.id === projectId);
+  const effectiveGoalId = goalId ?? selectedProject?.goalId ?? null;
+  const selectedGoal = goals.find((goal) => goal.id === effectiveGoalId);
+  const goalProcesses = (selectedGoal?.processes ?? []).filter((process) => process.active);
+  const inherited = Boolean(
+    goalProcessId
+    && selectedProject?.defaultGoalProcessId
+    && goalProcessId === selectedProject.defaultGoalProcessId,
+  );
+  const inheritedProcess = goalProcesses.find((process) => process.id === goalProcessId);
 
   useEffect(() => {
-    titleRef.current?.focus();
     if (!live) {
       queueMicrotask(() => setLoadingSchedule(false));
       return;
@@ -2076,17 +3008,28 @@ function TaskEditor({
     return () => controller.abort();
   }, [live, task.id]);
 
-  const taskPayload = () => ({
+  const duePayload = (pinDate?: Date) => {
+    if (pinDate) {
+      const period = duePeriodForDate(pinDate, "day");
+      return { dueAt: period.dueAt, dueHorizon: dueHorizonToApi(period.dueHorizon) };
+    }
+    if (dueScope === "none" || !dueDate) {
+      return { dueAt: null as string | null, dueHorizon: null };
+    }
+    const period = duePeriodForDate(new Date(`${dueDate}T12:00:00`), dueScope);
+    return { dueAt: period.dueAt, dueHorizon: dueHorizonToApi(period.dueHorizon) };
+  };
+
+  const taskPayload = (pinDate?: Date) => ({
     title: title.trim(),
     notes: notes.trim(),
     projectId,
-    dueAt: dueDate ? new Date(`${dueDate}T23:59:00`).toISOString() : null,
+    goalId: effectiveGoalId,
+    goalProcessId,
+    ...duePayload(pinDate),
     durationMinutes: duration,
-    priority,
+    priority: priorityToApi(priority),
   });
-
-  const selectedProject = projects.find((project) => project.id === projectId)
-    ?? projects.at(-1)!;
 
   const saveTask = async (schedule: boolean) => {
     if (!title.trim()) {
@@ -2104,15 +3047,15 @@ function TaskEditor({
       return;
     }
     try {
-      await updateTask(task.id, taskPayload());
-      if (schedule || scheduledBlock) {
-        const startAt = scheduleStart(scheduleDate, scheduleTime);
+      const startAt = (schedule || scheduledBlock) ? scheduleStart(scheduleDate, scheduleTime) : undefined;
+      await updateTask(task.id, taskPayload(startAt));
+      if (startAt) {
         const endAt = new Date(startAt.getTime() + duration * 60_000);
         if (scheduledBlock) {
           await updateTimeBlock(scheduledBlock.id, {
             title: title.trim(),
             projectId,
-            color: selectedProject.color,
+            color: priorityColor(priority),
             startAt: startAt.toISOString(),
             endAt: endAt.toISOString(),
           });
@@ -2121,7 +3064,7 @@ function TaskEditor({
             taskId: task.id,
             projectId,
             title: title.trim(),
-            color: selectedProject.color,
+            color: priorityColor(priority),
             startAt: startAt.toISOString(),
             endAt: endAt.toISOString(),
           });
@@ -2142,13 +3085,13 @@ function TaskEditor({
     setSaving(true);
     setError(null);
     if (!live) {
-      onChanged("Task returned to Inbox · demo mode");
+      onChanged("Unschedule · demo mode");
       return;
     }
     try {
       await Promise.all(taskBlocks.map((block) => deleteTimeBlock(block.id)));
       await updateTask(task.id, { status: "INBOX" });
-      onChanged("Task removed from calendar and returned to Inbox");
+      onChanged("Unschedule complete — planning period kept");
     } catch {
       setSaving(false);
       setError("Could not remove this task from the calendar.");
@@ -2175,158 +3118,194 @@ function TaskEditor({
     }
   };
 
+  const scheduleDisplay = scheduledBlock
+    ? (() => {
+      const start = new Date(scheduledBlock.startAt);
+      const end = new Date(scheduledBlock.endAt);
+      const day = start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const fmt = (date: Date) => date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+      return `${day} · ${fmt(start)}–${fmt(end)}`;
+    })()
+    : null;
+
+  const goalOptions = goals.map((goal) => ({
+    id: goal.id,
+    title: goal.title,
+    outcome: goal.outcome,
+    status: goal.status,
+    processes: (goal.processes ?? []).map((process) => ({
+      id: process.id,
+      name: process.name,
+      active: process.active,
+    })),
+  }));
+
   return (
-    <div className="task-editor-backdrop">
-      <button className="modal-dismiss" type="button" aria-label="Close task editor" onClick={onClose} />
-      <aside className="task-editor" role="dialog" aria-modal="true" aria-label={`Edit ${task.title}`}>
-        <div className="task-editor-header">
-          <div>
-            <div className="eyebrow">Task detail</div>
-            <span className={`task-state-pill ${scheduledBlock ? "scheduled" : task.status}`}>
-              {scheduledBlock ? "Scheduled" : task.status === "done" ? "Completed" : "Inbox"}
-            </span>
-          </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
-        </div>
-
-        <div className="task-editor-body">
-          <label className="editor-title-field">
-            <span>Task</span>
-            <input ref={titleRef} value={title} onChange={(event) => setTitle(event.target.value)} />
-          </label>
-          <label className="editor-notes-field">
-            <span>Notes</span>
-            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Context, links, or the definition of done…" />
-          </label>
-
-          <div className="editor-field-grid">
-            <label><span>Project</span>
-              <select value={projectId ?? ""} onChange={(event) => setProjectId(event.target.value || null)}>
-                {projects.map((project) => <option key={project.id ?? "inbox"} value={project.id ?? ""}>{project.title}</option>)}
-              </select>
-            </label>
-            <label><span>Priority</span>
-              <select value={priority} onChange={(event) => setPriority(event.target.value as "LOW" | "NORMAL" | "HIGH")}>
-                <option value="HIGH">High</option><option value="NORMAL">Normal</option><option value="LOW">Low</option>
-              </select>
-            </label>
-            <label><span>Duration</span>
-              <select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>
-                <option value={15}>15 minutes</option><option value={30}>30 minutes</option><option value={45}>45 minutes</option>
-                <option value={60}>1 hour</option><option value={90}>1.5 hours</option><option value={120}>2 hours</option>
-              </select>
-            </label>
-            <label><span>Due date</span><input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
-          </div>
-
-          <section className="editor-schedule-section">
-            <div className="editor-section-heading">
-              <div><CalendarClock size={17} /><span>Calendar time</span></div>
-              {loadingSchedule && <small>Checking schedule…</small>}
-            </div>
-            <div className="editor-schedule-fields">
-              <label><span>Date</span><input type="date" value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} /></label>
-              <label><span>Start</span><input type="time" value={scheduleTime} onChange={(event) => setScheduleTime(event.target.value)} /></label>
-              <div><span>Length</span><strong>{durationLabel(duration)}</strong></div>
-            </div>
-            <p>{scheduledBlock
-              ? "Saving will update this time block in Personal OS and Google Calendar."
-              : "Schedule this task when you are ready to protect time for it."}</p>
-          </section>
-
-          {error && <div className="editor-error" role="alert">{error}</div>}
-        </div>
-
-        <div className="task-editor-footer">
-          <button className={`delete-task-button ${confirmDelete ? "confirm" : ""}`} type="button" onClick={removeTask} disabled={saving}>
-            <Trash2 size={15} /> {confirmDelete ? "Click again to delete" : "Delete"}
-          </button>
-          <div>
-            {scheduledBlock && <button className="secondary-button" type="button" onClick={unscheduleTask} disabled={saving}>Unschedule</button>}
-            <button className="secondary-button" type="button" onClick={() => saveTask(false)} disabled={saving || loadingSchedule}>
-              <Save size={15} /> Save details
-            </button>
-            <button className="primary-button" type="button" onClick={() => saveTask(true)} disabled={saving || loadingSchedule}>
-              <CalendarClock size={15} /> {saving ? "Saving…" : scheduledBlock ? "Save & sync" : "Schedule task"}
-            </button>
-          </div>
-        </div>
-      </aside>
-    </div>
+    <TaskEditorView
+      title={title}
+      onTitleChange={setTitle}
+      notes={notes}
+      onNotesChange={setNotes}
+      status={task.status}
+      scheduled={Boolean(scheduledBlock) || task.status === "scheduled"}
+      scheduleDisplay={scheduleDisplay}
+      projectId={projectId}
+      onProjectChange={(nextProjectId) => {
+        const nextProject = projects.find((project) => project.id === nextProjectId);
+        setProjectId(nextProjectId);
+        setGoalId(nextProject?.goalId ?? null);
+        setGoalProcessId(nextProject?.defaultGoalProcessId ?? null);
+      }}
+      projects={projects}
+      goalId={effectiveGoalId}
+      onGoalChange={(nextGoalId) => {
+        setGoalId(nextGoalId);
+        setGoalProcessId(null);
+      }}
+      goals={goalOptions}
+      goalProcessId={goalProcessId}
+      onGoalProcessChange={setGoalProcessId}
+      inherited={inherited}
+      inheritedProcessLabel={inheritedProcess?.name ?? null}
+      inheritedFromProjectTitle={selectedProject?.title ?? null}
+      forScope={dueScope}
+      onForScopeChange={(scope) => {
+        setDueScope(scope);
+        if (scope !== "none" && !dueDate) setDueDate(dateInputValue(new Date().toISOString()));
+      }}
+      forDate={dueDate}
+      onForDateChange={setDueDate}
+      priority={priority}
+      onPriorityChange={setPriority}
+      duration={duration}
+      onDurationChange={setDuration}
+      scheduleDate={scheduleDate}
+      onScheduleDateChange={setScheduleDate}
+      scheduleTime={scheduleTime}
+      onScheduleTimeChange={setScheduleTime}
+      syncStatus={scheduledBlock?.syncStatus ?? null}
+      syncMessage={
+        scheduledBlock?.syncStatus === "FAILED"
+          ? "Google Calendar sync failed for this block."
+          : scheduledBlock?.syncStatus === "PENDING"
+            ? "Waiting to sync with Google Calendar."
+            : null
+      }
+      loadingSchedule={loadingSchedule}
+      saving={saving}
+      error={error}
+      confirmDelete={confirmDelete}
+      onComplete={onComplete}
+      onRestore={onRestore}
+      onUnschedule={scheduledBlock ? unscheduleTask : undefined}
+      onDelete={removeTask}
+      onSaveDetails={() => saveTask(false)}
+      onSchedule={() => saveTask(true)}
+      onClose={onClose}
+    />
   );
 }
 
 function QuickAdd({
   projects,
+  scope,
+  anchor,
   onClose,
   onAdd,
 }: {
   projects: ProjectOption[];
+  scope: HorizonScope | null;
+  anchor: Date;
   onClose: () => void;
-  onAdd: (title: string, duration: number, projectId: string | null) => void;
+  onAdd: (
+    title: string,
+    duration: number,
+    projectId: string | null,
+    priority: TaskPriority,
+    scope: HorizonScope | null,
+    when: Date,
+  ) => void;
 }) {
+  const defaultHorizon: Exclude<HorizonScope, "all"> =
+    scope === "week" || scope === "month" || scope === "day" ? scope : "day";
   const [title, setTitle] = useState("");
   const [duration, setDuration] = useState(30);
   const [projectId, setProjectId] = useState<string | null>(projects[0]?.id ?? null);
-  const titleRef = useRef<HTMLInputElement>(null);
+  const [priority, setPriority] = useState<TaskPriority>("p2");
+  const [horizon, setHorizon] = useState<Exclude<HorizonScope, "all">>(defaultHorizon);
+  const [when, setWhen] = useState(() => startOfDay(anchor));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    titleRef.current?.focus();
-  }, []);
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (!title.trim()) return;
-    onAdd(title.trim(), duration, projectId);
+  const submit = () => {
+    if (!title.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    onAdd(title.trim(), duration, projectId, priority, horizon, when);
   };
 
   return (
-    <div className="modal-backdrop">
-      <button className="modal-dismiss" type="button" aria-label="Close quick add" onClick={onClose} />
-      <form className="quick-add-modal" onSubmit={submit}>
-        <div className="quick-add-heading">
-          <div className="command-icon"><Command size={19} /></div>
-          <div><span>Quick add</span><strong>Capture without breaking flow</strong></div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
-        </div>
-        <input
-          ref={titleRef}
-          className="quick-add-title"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="What needs to get done?"
-          aria-label="Task title"
-        />
-        <div className="quick-add-fields">
-          <label>
-            <span>Duration</span>
-            <select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>
-              <option value={15}>15 minutes</option>
-              <option value={30}>30 minutes</option>
-              <option value={45}>45 minutes</option>
-              <option value={60}>1 hour</option>
-              <option value={90}>1.5 hours</option>
-            </select>
-          </label>
-          <label>
-            <span>Project</span>
-            <select
-              value={projectId ?? ""}
-              onChange={(event) => setProjectId(event.target.value || null)}
-            >
-              {projects.map((project) => (
-                <option key={project.id ?? "inbox"} value={project.id ?? ""}>
-                  {project.title}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="quick-add-footer">
-          <span>Saved to Inbox · drag it into your calendar next</span>
-          <button type="submit" className="primary-button">Add task <span>↵</span></button>
-        </div>
-      </form>
+    <QuickAddView
+      title={title}
+      onTitleChange={setTitle}
+      projectId={projectId}
+      onProjectChange={setProjectId}
+      projects={projects}
+      forHorizon={horizon}
+      onForHorizonChange={setHorizon}
+      duration={duration}
+      onDurationChange={setDuration}
+      priority={priority}
+      onPriorityChange={setPriority}
+      periodControl={<PeriodFields horizon={horizon} value={when} onChange={setWhen} />}
+      contextHint={captureHint(horizon, when)}
+      saving={saving}
+      error={error}
+      onSubmit={submit}
+      onClose={onClose}
+    />
+  );
+}
+
+function PriorityPicker({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: TaskPriority;
+  onChange: (value: TaskPriority) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`priority-picker${compact ? " compact" : ""}`}
+      role="group"
+      aria-label="Priority"
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      {PRIORITY_LEVELS.map((level) => (
+        <button
+          key={level.id}
+          type="button"
+          className={value === level.id ? "active" : ""}
+          style={{ "--priority-color": level.color } as React.CSSProperties}
+          aria-label={`${level.label}: ${level.hint}`}
+          title={`${level.label} · ${level.hint}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onChange(level.id);
+          }}
+        >
+          <i />
+          {!compact && (
+            <span>
+              <strong>{level.label}</strong>
+              <small>{level.hint}</small>
+            </span>
+          )}
+        </button>
+      ))}
     </div>
   );
 }

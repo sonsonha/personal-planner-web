@@ -1,25 +1,110 @@
 export type ApiTaskStatus = "INBOX" | "SCHEDULED" | "DONE";
-export type ApiPriority = "LOW" | "NORMAL" | "HIGH";
+export type ApiPriority =
+  | "LOW"
+  | "NORMAL"
+  | "HIGH"
+  | "DROP"
+  | "P1"
+  | "P2"
+  | "P3"
+  | "P4";
 
 export type ApiTask = {
   id: string;
   title: string;
   notes: string;
   projectId: string | null;
+  goalId?: string | null;
+  goalProcessId?: string | null;
   dueAt: string | null;
+  dueHorizon?: "DAY" | "WEEK" | "MONTH" | null;
   durationMinutes: number;
   priority: ApiPriority;
   status: ApiTaskStatus;
+  completedAt?: string | null;
   revision: number;
+  updatedAt?: string;
+};
+
+export type GoalFocusType = "FOCUS" | "MAINTAIN" | "EXPLORE";
+
+export type GoalMilestone = {
+  id: string;
+  title: string;
+  status: "pending" | "current" | "done";
+};
+
+export type GoalSystem = {
+  id: string;
+  title: string;
+  cadence?: string;
+};
+
+export type GoalProcess = {
+  id: string;
+  name: string;
+  measurementType: "COUNT" | "DURATION" | "BINARY" | "CUSTOM_METRIC";
+  targetValue: number;
+  unit?: string;
+  period: "DAY" | "WEEK" | "MONTH";
+  active: boolean;
+};
+
+export type GoalMetricObservation = {
+  id: string;
+  observedAt: string;
+  value: number;
+  note?: string;
+  label?: string;
+};
+
+export type GoalReflection = {
+  seriousAttempt?: "NOT_REALLY" | "PARTLY" | "YES" | null;
+  worked?: string;
+  didntWork?: string;
+  outsideControl?: string;
+  learned?: string;
+  differently?: string;
+  nextAction?: "ARCHIVE" | "EXTEND" | "REVISE" | "FOLLOW_UP" | "MAINTAIN" | "STOP" | null;
+  reviewedAt?: string | null;
+};
+
+export type GoalOutcomeStatus =
+  | "ACTIVE"
+  | "ACHIEVED_ON_TIME"
+  | "ACHIEVED_LATE"
+  | "PARTIALLY_ACHIEVED"
+  | "NOT_ACHIEVED"
+  | "STOPPED_INTENTIONALLY"
+  | "NO_LONGER_RELEVANT";
+
+export type GoalReviewSnapshot = {
+  generatedAt: string;
+  outcomeStatus: GoalOutcomeStatus;
+  targetDate: string | null;
+  achievedAt: string | null;
+  processSummary: Array<{
+    processId: string;
+    name: string;
+    completed: number;
+    planned: number;
+    target: number;
+    unit?: string;
+  }>;
+  consistency: { metWeeks: number; totalWeeks: number; threshold: number };
+  milestones: Array<{ id: string; title: string; status: string }>;
+  latestObservation?: GoalMetricObservation | null;
 };
 
 export type ApiProject = {
   id: string;
   title: string;
   goalId: string | null;
+  defaultGoalProcessId?: string | null;
   color: string;
   lifeArea?: string;
   description?: string;
+  targetDate?: string | null;
   active: boolean;
   revision?: number;
 };
@@ -34,7 +119,57 @@ export type ApiGoal = {
   parentId: string | null;
   description?: string;
   successCriteria?: string;
+  outcome?: string;
+  why?: string;
+  metric?: string;
+  focusType?: GoalFocusType;
+  outcomeStatus?: GoalOutcomeStatus;
+  achievedAt?: string | null;
+  closedAt?: string | null;
+  currentMilestoneId?: string | null;
+  milestones?: GoalMilestone[];
+  systems?: GoalSystem[];
+  processes?: GoalProcess[];
+  metricObservations?: GoalMetricObservation[];
+  reflection?: GoalReflection | null;
+  reviewSnapshot?: GoalReviewSnapshot | null;
   revision?: number;
+};
+
+export type ApiGoalProgress = {
+  goal: ApiGoal;
+  progress: {
+    processes: Array<{
+      id: string;
+      name: string;
+      measurementType: GoalProcess["measurementType"];
+      period: GoalProcess["period"];
+      unit?: string;
+      thisWeek: { target: number; planned: number; completed: number; unit?: string };
+      thisMonth: { target: number; planned: number; completed: number; unit?: string };
+      allTime: { target: number; planned: number; completed: number; unit?: string };
+    }>;
+    consistency: {
+      threshold: number;
+      weeks: Array<{ startAt: string; ratio: number; met: boolean }>;
+      metWeeks: number;
+      totalWeeks: number;
+    };
+    latestObservation: GoalMetricObservation | null;
+    observationTrend: "improving" | "stable" | "declining" | "insufficient_data";
+    activity: Array<{
+      taskId: string;
+      title: string;
+      processId: string | null;
+      completedAt: string | null;
+      plannedMinutes: number;
+    }>;
+    insight: {
+      processState: "none" | "low" | "mixed" | "strong";
+      outcomeState: "none" | "insufficient_data" | "improving" | "stable" | "declining";
+      message: string;
+    };
+  };
 };
 
 export type ApiTimeBlock = {
@@ -131,7 +266,10 @@ export function createTask(input: {
   title: string;
   notes?: string;
   projectId: string | null;
+  goalId?: string | null;
+  goalProcessId?: string | null;
   dueAt?: string | null;
+  dueHorizon?: "DAY" | "WEEK" | "MONTH" | null;
   durationMinutes: number;
   priority: ApiPriority;
 }) {
@@ -145,7 +283,10 @@ export function updateTask(id: string, input: Partial<{
   title: string;
   notes: string;
   projectId: string | null;
+  goalId: string | null;
+  goalProcessId: string | null;
   dueAt: string | null;
+  dueHorizon: "DAY" | "WEEK" | "MONTH" | null;
   durationMinutes: number;
   priority: ApiPriority;
   status: ApiTaskStatus;
@@ -212,10 +353,12 @@ export function deleteTimeBlock(id: string) {
 export function createProject(input: {
   title: string;
   goalId?: string | null;
+  defaultGoalProcessId?: string | null;
   color?: string;
   lifeArea?: string;
   description?: string;
   active?: boolean;
+  targetDate?: string | null;
 }) {
   return requestJson<ApiProject>("/api/projects", {
     method: "POST",
@@ -228,10 +371,12 @@ export function updateProject(
   input: Partial<{
     title: string;
     goalId: string | null;
+    defaultGoalProcessId: string | null;
     color: string;
     lifeArea: string;
     description: string;
     active: boolean;
+    targetDate: string | null;
   }>,
 ) {
   return requestJson<ApiProject>(`/api/projects/${encodeURIComponent(id)}`, {
@@ -256,6 +401,20 @@ export function createGoal(input: {
   description?: string;
   successCriteria?: string;
   status?: string;
+  outcome?: string;
+  why?: string;
+  metric?: string;
+  focusType?: GoalFocusType;
+  outcomeStatus?: GoalOutcomeStatus;
+  achievedAt?: string | null;
+  closedAt?: string | null;
+  currentMilestoneId?: string | null;
+  milestones?: GoalMilestone[];
+  systems?: GoalSystem[];
+  processes?: GoalProcess[];
+  metricObservations?: GoalMetricObservation[];
+  reflection?: GoalReflection | null;
+  reviewSnapshot?: GoalReviewSnapshot | null;
 }) {
   return requestJson<ApiGoal>("/api/goals", {
     method: "POST",
@@ -274,12 +433,31 @@ export function updateGoal(
     description: string;
     successCriteria: string;
     status: string;
+    outcome: string;
+    why: string;
+    metric: string;
+    focusType: GoalFocusType;
+    outcomeStatus: GoalOutcomeStatus;
+    achievedAt: string | null;
+    closedAt: string | null;
+    currentMilestoneId: string | null;
+    milestones: GoalMilestone[];
+    systems: GoalSystem[];
+    processes: GoalProcess[];
+    metricObservations: GoalMetricObservation[];
+    reflection: GoalReflection | null;
+    reviewSnapshot: GoalReviewSnapshot | null;
   }>,
 ) {
   return requestJson<ApiGoal>(`/api/goals/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+export function fetchGoalProgress(id: string, now?: string) {
+  const query = now ? `?${new URLSearchParams({ now }).toString()}` : "";
+  return requestJson<ApiGoalProgress>(`/api/goals/${encodeURIComponent(id)}/progress${query}`);
 }
 
 export function deleteGoal(id: string) {
