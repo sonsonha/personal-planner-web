@@ -32,6 +32,7 @@ describe("calendar integration copy", () => {
   it("maps backend codes to user-facing text", () => {
     assert.match(calendarErrorCopy("GOOGLE_RECONNECT_REQUIRED"), /reconnected/i);
     assert.match(calendarErrorCopy("account_mismatch"), /same Google account/i);
+    assert.match(calendarErrorCopy("identity_unavailable"), /Could not verify/i);
     assert.match(calendarErrorCopy("GOOGLE_FORBIDDEN"), /permission/i);
     assert.match(calendarErrorCopy("missing_refresh_token"), /offline/i);
     assert.match(calendarErrorCopy("GOOGLE_UPSTREAM_ERROR"), /unavailable/i);
