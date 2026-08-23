@@ -16,6 +16,10 @@ export function calendarErrorCopy(code: string | null | undefined): string {
     case "GOOGLE_ACCOUNT_MISMATCH":
     case "account_mismatch":
       return "Connect the same Google account you use to sign in to Personal OS.";
+    case "missing_refresh_token":
+    case "MISSING_REFRESH_TOKEN":
+      return "Google did not grant offline Calendar access. Reconnect and approve all permissions.";
+    case "insufficient_scopes":
     case "GOOGLE_FORBIDDEN":
       return "Personal OS does not have the required Calendar permission.";
     case "GOOGLE_UPSTREAM_ERROR":

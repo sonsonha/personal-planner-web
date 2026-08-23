@@ -901,11 +901,7 @@ export function PlannerApp({
         calendarSyncBackoffUntilRef.current = Date.now() + AUTO_SYNC_ERROR_BACKOFF_MS;
         const code = error instanceof PlannerApiError ? error.code : "";
         setGoogleErrorCode(code || null);
-        if (
-          code === "GOOGLE_RECONNECT_REQUIRED"
-          || code === "GOOGLE_FORBIDDEN"
-          || code === "GOOGLE_NOT_CONNECTED"
-        ) {
+        if (code === "GOOGLE_RECONNECT_REQUIRED" || code === "GOOGLE_NOT_CONNECTED") {
           setGoogleConnection("reconnect-required");
           setCalendarUiOverride("RECONNECT_REQUIRED");
           if (options.announce) {
@@ -913,10 +909,15 @@ export function PlannerApp({
           }
           return;
         }
-        setGoogleConnection("error");
+        // Permission/upstream failures: stay connected so Sync retries — never start OAuth.
+        setGoogleConnection("connected");
         setCalendarUiOverride("SYNC_FAILED");
         if (options.announce) {
-          setToast("Google Calendar connected. Sync needs attention.");
+          setToast(
+            code === "GOOGLE_FORBIDDEN"
+              ? calendarErrorCopy("GOOGLE_FORBIDDEN")
+              : "Google Calendar connected. Sync needs attention.",
+          );
         }
       })
       .finally(() => {
@@ -1020,6 +1021,16 @@ export function PlannerApp({
         setGoogleConnection("not-connected");
         setHasGoogleIntegration(false);
         setToast(calendarErrorCopy("account_mismatch"));
+      } else if (reason === "missing_refresh_token") {
+        setCalendarUiOverride("RECONNECT_REQUIRED");
+        setGoogleConnection("reconnect-required");
+        setHasGoogleIntegration(false);
+        setToast(calendarErrorCopy("missing_refresh_token"));
+      } else if (reason === "insufficient_scopes") {
+        setCalendarUiOverride("SYNC_FAILED");
+        setGoogleConnection("error");
+        setGoogleErrorCode("GOOGLE_FORBIDDEN");
+        setToast(calendarErrorCopy("GOOGLE_FORBIDDEN"));
       } else {
         setGoogleConnection("error");
         setCalendarUiOverride("SYNC_FAILED");
@@ -1029,15 +1040,39 @@ export function PlannerApp({
     }
     setPostConnectBanner("Google Calendar connected");
     setCalendarUiOverride("CONNECTING");
-    setHasGoogleIntegration(true);
-    setGoogleConnection("loading");
     void completeOnboarding().catch(() => {
       // Non-blocking — onboarding may already be complete.
     });
-    queueMicrotask(() => {
-      setPostConnectBanner("Syncing your calendar…");
-      void runCalendarSync({ announce: true, force: true });
-    });
+    void (async () => {
+      try {
+        const status = await fetchGoogleIntegration();
+        const connected = Boolean(status?.connected);
+        const reconnect = Boolean(status?.reconnectRequired);
+        setHasGoogleIntegration(connected);
+        setGoogleAccountEmail(status?.googleAccountEmail ?? null);
+        setGoogleLastSyncAt(status?.lastSyncAt ?? null);
+        setGoogleErrorCode(status?.lastErrorCode ?? status?.lastError?.code ?? null);
+        if (!connected || reconnect) {
+          setGoogleConnection(reconnect ? "reconnect-required" : "not-connected");
+          setCalendarUiOverride(reconnect ? "RECONNECT_REQUIRED" : "DISCONNECTED");
+          setPostConnectBanner(null);
+          setToast(
+            reconnect
+              ? calendarErrorCopy("GOOGLE_RECONNECT_REQUIRED")
+              : "Google Calendar did not finish connecting.",
+          );
+          return;
+        }
+        setGoogleConnection("connected");
+        setPostConnectBanner("Syncing your calendar…");
+        await runCalendarSync({ announce: true, force: true });
+      } catch {
+        setGoogleConnection("error");
+        setCalendarUiOverride("SYNC_FAILED");
+        setPostConnectBanner(null);
+        setToast("Google Calendar connected. Sync needs attention.");
+      }
+    })();
   }, [runCalendarSync]);
 
   useEffect(() => {
@@ -1693,27 +1728,22 @@ export function PlannerApp({
           ? { state: "syncing", label: googleConnection === "syncing" ? "Syncing…" : "Checking…" }
           : { state: "error", label: "Retry" };
 
-  const handleCalendarConnection = async () => {
+  const handleCalendarConnect = async () => {
     if (connection !== "live") {
       setReloadKey((value) => value + 1);
       return;
     }
-    if (googleConnection === "reconnect-required" || !hasGoogleIntegration) {
-      try {
-        setGoogleConnection("loading");
-        setCalendarUiOverride("CONNECTING");
-        const result = await getGoogleAuthUrl();
-        if (!result.url) throw new Error("OAuth is unavailable");
-        window.location.assign(result.url);
-      } catch {
-        setGoogleConnection("error");
-        setCalendarUiOverride("SYNC_FAILED");
-        setToast("Could not start Google Calendar connection");
-      }
-      return;
+    try {
+      setGoogleConnection("loading");
+      setCalendarUiOverride("CONNECTING");
+      const result = await getGoogleAuthUrl();
+      if (!result.url) throw new Error("OAuth is unavailable");
+      window.location.assign(result.url);
+    } catch {
+      setGoogleConnection("error");
+      setCalendarUiOverride("SYNC_FAILED");
+      setToast("Could not start Google Calendar connection");
     }
-    calendarSyncBackoffUntilRef.current = 0;
-    await runCalendarSync({ announce: true, force: true });
   };
 
   const handleCalendarReconnect = async () => {
@@ -1725,6 +1755,35 @@ export function PlannerApp({
     } catch {
       setToast("Could not start reconnect");
     }
+  };
+
+  /** Sync now — never starts OAuth. */
+  const handleSyncNow = async () => {
+    if (connection !== "live") {
+      setReloadKey((value) => value + 1);
+      return;
+    }
+    if (googleConnection === "reconnect-required" || !hasGoogleIntegration) {
+      return;
+    }
+    calendarSyncBackoffUntilRef.current = 0;
+    await runCalendarSync({ announce: true, force: true });
+  };
+
+  const handleSyncChipClick = () => {
+    if (connection !== "live") {
+      setReloadKey((value) => value + 1);
+      return;
+    }
+    if (googleConnection === "reconnect-required") {
+      void handleCalendarReconnect();
+      return;
+    }
+    if (!hasGoogleIntegration || googleConnection === "not-connected") {
+      void handleCalendarConnect();
+      return;
+    }
+    void handleSyncNow();
   };
 
   const handleCalendarDisconnect = async () => {
@@ -1822,7 +1881,7 @@ export function PlannerApp({
           goToday();
         }}
         onGoogleClick={() => {
-          void handleCalendarConnection();
+          void handleSyncChipClick();
         }}
       />
 
@@ -1866,7 +1925,7 @@ export function PlannerApp({
                     ? `Connected as ${googleAccountEmail} · click to sync now`
                     : "Google Calendar auto-syncs while this tab is active; click to sync now"
                 : "Connect Google Calendar"}
-              onClick={handleCalendarConnection}
+              onClick={handleSyncChipClick}
               aria-live="polite"
             >
               <span className="sync-dot" />
@@ -1919,12 +1978,11 @@ export function PlannerApp({
                     syncDisabled={Boolean(calendarSyncInFlightRef.current)}
                     onConnect={() => {
                       setAccountMenuOpen(false);
-                      void handleCalendarConnection();
+                      void handleCalendarConnect();
                     }}
                     onSync={() => {
                       setAccountMenuOpen(false);
-                      calendarSyncBackoffUntilRef.current = 0;
-                      void runCalendarSync({ announce: true, force: true });
+                      void handleSyncNow();
                     }}
                     onReconnect={() => {
                       setAccountMenuOpen(false);
@@ -2327,7 +2385,7 @@ export function PlannerApp({
             }}
             onRetrySync={
               popBlock.syncStatus === "FAILED"
-                ? () => { void handleCalendarConnection(); }
+                ? () => { void handleSyncNow(); }
                 : undefined
             }
           />

@@ -33,6 +33,7 @@ describe("calendar integration copy", () => {
     assert.match(calendarErrorCopy("GOOGLE_RECONNECT_REQUIRED"), /reconnected/i);
     assert.match(calendarErrorCopy("account_mismatch"), /same Google account/i);
     assert.match(calendarErrorCopy("GOOGLE_FORBIDDEN"), /permission/i);
+    assert.match(calendarErrorCopy("missing_refresh_token"), /offline/i);
     assert.match(calendarErrorCopy("GOOGLE_UPSTREAM_ERROR"), /unavailable/i);
   });
 
