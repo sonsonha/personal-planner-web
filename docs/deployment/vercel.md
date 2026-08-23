@@ -70,11 +70,25 @@ cd web
 npx vercel --prod
 ```
 
+## Client hydration (vinext)
+
+SSR can succeed while the UI looks “static” (sidebar clicks / Quick Add / Task Editor dead) if the vinext client bootstrap crashes.
+
+**Required versions (lockfile):**
+
+- `vinext` ≥ `1.0.0-beta.8` (fixes shim chunk grouping; see vinext #2794 / #2795)
+- `@vitejs/plugin-rsc` ≥ `0.5.34` (peer of that vinext)
+
+After a production build, `.vercel/output/static/_next/static/chunks/` must include a `vinext-*.js` chunk. If it is missing, client navigation will fail (e.g. `TypeError: e is not a function` inside `startTransition`, or RSC prefetch `m is not a function`).
+
+When redeploying after this fix, use a **clean Vercel rebuild** (no stale build cache) so old client chunks are not mixed with new HTML.
+
 ## Common failures
 
 | Symptom | Check |
 | --- | --- |
 | Platform 404 on all routes | Build must be Nitro Vercel (look for `.vercel/output/functions/__server.func` and `config.json` routes → `/__server`) |
+| UI loads but clicks/nav dead | Upgrade vinext ≥ beta.8; confirm `vinext-*.js` in client chunks; clean redeploy |
 | UI loads, data is demo/503 | `PLANNER_API_BASE_URL` / `PLANNER_WEB_TOKEN` missing or mismatched with Railway |
 | 401 Sign in | `PLANNER_REQUIRE_CHATGPT_USER=1` set on standalone Vercel — turn it off |
 | CSS / Tailwind build error | Keep `@import "tailwindcss/index.css"` (bare `tailwindcss` fails without CF plugin) |
