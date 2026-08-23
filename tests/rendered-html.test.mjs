@@ -131,7 +131,7 @@ test("ships the core planning interactions", async () => {
   ]);
 
   assert.match(plannerLayout, /getChatGPTUser/);
-  assert.match(plannerLayout, /<PlannerApp/);
+  assert.match(plannerLayout, /AuthGate/);
   assert.match(page, /redirect\(["']\/calendar["']\)/);
   assert.match(layout, /Personal OS — Calendar Planner/);
   assert.match(source, /onCalendarDrop/);
@@ -169,6 +169,8 @@ test("ships the core planning interactions", async () => {
   assert.match(source, /showExternalEvents/);
   assert.match(source, /projectFilterId/);
 
+  assert.match(source, /GoogleCalendarConnection/);
+  assert.match(source, /completeOnboarding/);
   assert.match(source, /Today's work/);
   assert.match(source, /Unscheduled work/);
 

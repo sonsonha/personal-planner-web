@@ -29,6 +29,12 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { usePathname, useRouter } from "next/navigation";
 import { PlannerSidebar, type SidebarGoogleState } from "@/components/planner/PlannerSidebar";
 import {
+  GoogleCalendarConnection,
+  calendarErrorCopy,
+  type CalendarUiState,
+} from "@/components/planner/GoogleCalendarConnection";
+import { completeOnboarding } from "@/lib/auth-api";
+import {
   QuickAddView,
   TaskEditorView,
   TasksWorkspaceView,
@@ -52,6 +58,7 @@ import {
   updateTask,
   updateTimeBlock,
   syncGoogleCalendar,
+  disconnectGoogleCalendar,
   type CalendarSyncSummary,
   type ApiExternalEvent,
   type ApiGoal,
@@ -774,8 +781,10 @@ function initials(displayName?: string) {
 
 export function PlannerApp({
   viewer,
+  onSignOut,
 }: {
-  viewer: { displayName: string; email: string } | null;
+  viewer: { displayName: string; email: string; avatarUrl?: string | null } | null;
+  onSignOut?: () => void | Promise<void>;
 }) {
   const pathname = usePathname() ?? "/";
   const router = useRouter();
@@ -800,7 +809,12 @@ export function PlannerApp({
   const [apiProjects, setApiProjects] = useState<ApiProject[]>([]);
   const [connection, setConnection] = useState<ConnectionState>("loading");
   const [googleConnection, setGoogleConnection] = useState<GoogleConnectionState>("loading");
+  const [googleAccountEmail, setGoogleAccountEmail] = useState<string | null>(null);
+  const [googleLastSyncAt, setGoogleLastSyncAt] = useState<string | null>(null);
+  const [googleErrorCode, setGoogleErrorCode] = useState<string | null>(null);
+  const [calendarUiOverride, setCalendarUiOverride] = useState<CalendarUiState | null>(null);
   const [hasGoogleIntegration, setHasGoogleIntegration] = useState(false);
+  const [postConnectBanner, setPostConnectBanner] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [evidenceEpoch, setEvidenceEpoch] = useState(0);
   const [taskFilter, setTaskFilter] = useState<"inbox" | "today">("today");
@@ -815,7 +829,9 @@ export function PlannerApp({
     blockId: string;
     rect: DOMRect;
   } | null>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
   const [toastKind, setToastKind] = useState<ToastKind>("info");
   const [search, setSearch] = useState("");
   const [showPlannerBlocks, setShowPlannerBlocks] = useState(true);
@@ -859,39 +875,48 @@ export function PlannerApp({
 
     lastCalendarSyncAttemptRef.current = nowMs;
     if (options.announce) setGoogleConnection("syncing");
+    setCalendarUiOverride("SYNCING");
 
     const operation = syncGoogleCalendar()
       .then(({ summary }) => {
         calendarSyncBackoffUntilRef.current = 0;
         setHasGoogleIntegration(true);
+        setGoogleLastSyncAt(new Date().toISOString());
+        setGoogleErrorCode(summary.errorCode ?? null);
         if (summary.reconnectRequired) {
           setGoogleConnection("reconnect-required");
+          setCalendarUiOverride("RECONNECT_REQUIRED");
           if (options.announce) {
-            setToast("Google Calendar needs reconnect · tap Connect");
+            setToast("Google Calendar needs to be reconnected.");
           }
           return;
         }
         setGoogleConnection("connected");
+        setCalendarUiOverride("SYNCED");
+        setPostConnectBanner(null);
         setReloadKey((value) => value + 1);
         if (options.announce) setToast(calendarSyncMessage(summary));
       })
       .catch((error: unknown) => {
         calendarSyncBackoffUntilRef.current = Date.now() + AUTO_SYNC_ERROR_BACKOFF_MS;
         const code = error instanceof PlannerApiError ? error.code : "";
+        setGoogleErrorCode(code || null);
         if (
           code === "GOOGLE_RECONNECT_REQUIRED"
           || code === "GOOGLE_FORBIDDEN"
           || code === "GOOGLE_NOT_CONNECTED"
         ) {
           setGoogleConnection("reconnect-required");
+          setCalendarUiOverride("RECONNECT_REQUIRED");
           if (options.announce) {
-            setToast("Google Calendar needs reconnect · tap Connect");
+            setToast(calendarErrorCopy(code));
           }
           return;
         }
         setGoogleConnection("error");
+        setCalendarUiOverride("SYNC_FAILED");
         if (options.announce) {
-          setToast("Google Calendar sync failed · tap Retry");
+          setToast("Google Calendar connected. Sync needs attention.");
         }
       })
       .finally(() => {
@@ -963,12 +988,17 @@ export function PlannerApp({
       .then((status) => {
         const connected = Boolean(status?.connected);
         setHasGoogleIntegration(connected);
+        setGoogleAccountEmail(status?.googleAccountEmail ?? null);
+        setGoogleLastSyncAt(status?.lastSyncAt ?? null);
+        setGoogleErrorCode(status?.lastErrorCode ?? status?.lastError?.code ?? null);
         if (status?.reconnectRequired) {
           setGoogleConnection("reconnect-required");
+          setCalendarUiOverride(null);
           calendarSyncBackoffUntilRef.current = Date.now() + AUTO_SYNC_ERROR_BACKOFF_MS;
           return;
         }
         setGoogleConnection(connected ? "connected" : "not-connected");
+        if (!connected) setCalendarUiOverride(null);
       })
       .catch(() => {
         if (!controller.signal.aborted) setGoogleConnection("error");
@@ -979,16 +1009,35 @@ export function PlannerApp({
   useEffect(() => {
     const url = new URL(window.location.href);
     const google = url.searchParams.get("google");
+    const reason = url.searchParams.get("reason");
     if (google !== "connected" && google !== "error") return;
     url.searchParams.delete("google");
     url.searchParams.delete("reason");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     if (google === "error") {
-      setGoogleConnection("error");
-      setToast("Google Calendar connect failed · tap Reconnect");
+      if (reason === "account_mismatch") {
+        setCalendarUiOverride("ACCOUNT_MISMATCH");
+        setGoogleConnection("not-connected");
+        setHasGoogleIntegration(false);
+        setToast(calendarErrorCopy("account_mismatch"));
+      } else {
+        setGoogleConnection("error");
+        setCalendarUiOverride("SYNC_FAILED");
+        setToast("Google Calendar connect failed.");
+      }
       return;
     }
-    queueMicrotask(() => void runCalendarSync({ announce: true, force: true }));
+    setPostConnectBanner("Google Calendar connected");
+    setCalendarUiOverride("CONNECTING");
+    setHasGoogleIntegration(true);
+    setGoogleConnection("loading");
+    void completeOnboarding().catch(() => {
+      // Non-blocking — onboarding may already be complete.
+    });
+    queueMicrotask(() => {
+      setPostConnectBanner("Syncing your calendar…");
+      void runCalendarSync({ announce: true, force: true });
+    });
   }, [runCalendarSync]);
 
   useEffect(() => {
@@ -1652,11 +1701,13 @@ export function PlannerApp({
     if (googleConnection === "reconnect-required" || !hasGoogleIntegration) {
       try {
         setGoogleConnection("loading");
+        setCalendarUiOverride("CONNECTING");
         const result = await getGoogleAuthUrl();
         if (!result.url) throw new Error("OAuth is unavailable");
         window.location.assign(result.url);
       } catch {
         setGoogleConnection("error");
+        setCalendarUiOverride("SYNC_FAILED");
         setToast("Could not start Google Calendar connection");
       }
       return;
@@ -1664,6 +1715,49 @@ export function PlannerApp({
     calendarSyncBackoffUntilRef.current = 0;
     await runCalendarSync({ announce: true, force: true });
   };
+
+  const handleCalendarReconnect = async () => {
+    try {
+      setCalendarUiOverride("CONNECTING");
+      const result = await getGoogleAuthUrl();
+      if (!result.url) throw new Error("OAuth unavailable");
+      window.location.assign(result.url);
+    } catch {
+      setToast("Could not start reconnect");
+    }
+  };
+
+  const handleCalendarDisconnect = async () => {
+    try {
+      await disconnectGoogleCalendar();
+      setHasGoogleIntegration(false);
+      setGoogleAccountEmail(null);
+      setGoogleLastSyncAt(null);
+      setGoogleErrorCode(null);
+      setCalendarUiOverride(null);
+      setGoogleConnection("not-connected");
+      setPostConnectBanner(null);
+      setToast("Google Calendar disconnected");
+      setReloadKey((value) => value + 1);
+    } catch {
+      setToast("Could not disconnect Google Calendar");
+    }
+  };
+
+  const calendarUiState: CalendarUiState = calendarUiOverride
+    ?? (googleConnection === "reconnect-required"
+      ? "RECONNECT_REQUIRED"
+      : googleConnection === "syncing"
+        ? "SYNCING"
+        : googleConnection === "loading"
+          ? "CONNECTING"
+          : googleConnection === "error"
+            ? "SYNC_FAILED"
+            : googleConnection === "not-connected"
+              ? "DISCONNECTED"
+              : googleConnection === "connected"
+                ? (googleLastSyncAt ? "SYNCED" : "CONNECTED")
+                : "DISCONNECTED");
 
   const taskCountByProject = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1758,27 +1852,104 @@ export function PlannerApp({
           </div>
 
           <div className="topbar-actions">
+            {postConnectBanner ? (
+              <p className="pos-gcal-banner" role="status" aria-live="polite">
+                {postConnectBanner}
+              </p>
+            ) : null}
             <button
               className={`sync-status ${syncDisplay.state}`}
               title={hasGoogleIntegration
                 ? failedSyncCount > 0
                   ? `${failedSyncCount} Personal OS block${failedSyncCount === 1 ? "" : "s"} failed to sync; click to retry`
-                  : "Google Calendar auto-syncs while this tab is active; click to sync now"
+                  : googleAccountEmail
+                    ? `Connected as ${googleAccountEmail} · click to sync now`
+                    : "Google Calendar auto-syncs while this tab is active; click to sync now"
                 : "Connect Google Calendar"}
               onClick={handleCalendarConnection}
               aria-live="polite"
             >
               <span className="sync-dot" />
               Google Calendar
-              <span>{syncDisplay.label}</span>
+              <span>
+                {hasGoogleIntegration && googleAccountEmail
+                  ? `${syncDisplay.label} · ${googleAccountEmail}`
+                  : syncDisplay.label}
+              </span>
             </button>
             <button className="icon-button" aria-label="Notifications">
               <Bell size={18} />
               <span className="notification-dot" />
             </button>
-            <button className="avatar" aria-label="Open profile menu" title={viewer?.email}>
-              {initials(viewer?.displayName)}
-            </button>
+            <div className="pos-account">
+              <button
+                type="button"
+                className="avatar"
+                aria-label="Open account menu"
+                aria-expanded={accountMenuOpen}
+                title={viewer?.email}
+                onClick={() => {
+                  setAccountMenuOpen((value) => !value);
+                }}
+              >
+                {viewer?.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={viewer.avatarUrl}
+                    alt={viewer.displayName ? `${viewer.displayName} avatar` : "Account avatar"}
+                    className="pos-account-avatar-img"
+                  />
+                ) : (
+                  initials(viewer?.displayName)
+                )}
+              </button>
+              {accountMenuOpen ? (
+                <div className="pos-account-menu pos-account-menu-wide" role="menu">
+                  <div className="pos-account-meta">
+                    <strong>{viewer?.displayName ?? "Signed in"}</strong>
+                    <span>{viewer?.email}</span>
+                  </div>
+                  <div className="pos-account-divider" role="separator" />
+                  <GoogleCalendarConnection
+                    compact
+                    state={calendarUiState}
+                    email={googleAccountEmail}
+                    lastSyncAt={googleLastSyncAt}
+                    errorCode={googleErrorCode}
+                    syncDisabled={Boolean(calendarSyncInFlightRef.current)}
+                    onConnect={() => {
+                      setAccountMenuOpen(false);
+                      void handleCalendarConnection();
+                    }}
+                    onSync={() => {
+                      setAccountMenuOpen(false);
+                      calendarSyncBackoffUntilRef.current = 0;
+                      void runCalendarSync({ announce: true, force: true });
+                    }}
+                    onReconnect={() => {
+                      setAccountMenuOpen(false);
+                      void handleCalendarReconnect();
+                    }}
+                    onDisconnect={() => {
+                      setAccountMenuOpen(false);
+                      void handleCalendarDisconnect();
+                    }}
+                  />
+                  <div className="pos-account-divider" role="separator" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="pos-account-signout"
+                    onClick={() => {
+                      setAccountMenuOpen(false);
+                      void onSignOut?.();
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </header>
         )}

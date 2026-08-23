@@ -3241,3 +3241,371 @@ button {
   border-radius: var(--pos-radius-md, 12px);
   background: #f9f7f2;
 }
+
+/* Batch A — Google identity login */
+.pos-login-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(112, 92, 246, 0.18), transparent 40%),
+    linear-gradient(160deg, #0f172a 0%, #1e293b 55%, #111827 100%);
+  color: #f8fafc;
+}
+
+.pos-login-panel {
+  width: min(100%, 420px);
+  padding: 32px 28px;
+  border: 1px solid rgba(248, 250, 252, 0.12);
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.72);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.pos-login-brand {
+  margin: 0 0 12px;
+  color: #c7d2fe;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pos-login-title {
+  margin: 0 0 12px;
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 650;
+  color: #f8fafc;
+}
+
+.pos-login-copy {
+  margin: 0 0 24px;
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.pos-login-actions {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.pos-login-status {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.pos-login-error {
+  margin: 0;
+  color: #fda4af;
+  font-size: 13px;
+}
+
+.pos-login-hint {
+  margin: -12px 0 20px;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.pos-onboarding-panel .pos-login-title {
+  font-family: var(--pos-font-display, "Fraunces", Georgia, serif);
+  font-weight: 560;
+}
+
+.pos-onboarding-actions {
+  width: 100%;
+}
+
+.pos-onboarding-signed-in {
+  margin-top: 18px;
+}
+
+.pos-btn-primary,
+.pos-btn-secondary,
+.pos-btn-danger {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pos-btn-primary {
+  background: #6366f1;
+  color: #f8fafc;
+}
+
+.pos-btn-primary:hover:not(:disabled) {
+  background: #4f46e5;
+}
+
+.pos-btn-primary:disabled,
+.pos-btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pos-btn-secondary {
+  background: rgba(248, 250, 252, 0.08);
+  color: #e2e8f0;
+  border: 1px solid rgba(248, 250, 252, 0.16);
+}
+
+.pos-btn-secondary:hover:not(:disabled) {
+  background: rgba(248, 250, 252, 0.14);
+}
+
+.pos-btn-danger {
+  background: #be123c;
+  color: #fff;
+}
+
+.pos-btn-sm {
+  padding: 7px 11px;
+  font-size: 12px;
+}
+
+.pos-account {
+  position: relative;
+}
+
+.pos-account-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.pos-account-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  min-width: 220px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+  color: #0f172a;
+}
+
+.pos-account-menu-wide {
+  min-width: 280px;
+}
+
+.pos-account-menu button[role="menuitem"] {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.pos-account-menu button[role="menuitem"]:hover {
+  background: #f1f5f9;
+}
+
+.pos-account-meta {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px 10px;
+}
+
+.pos-account-meta strong {
+  font-size: 13px;
+}
+
+.pos-account-meta span {
+  color: #64748b;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pos-account-divider {
+  height: 1px;
+  margin: 8px 0;
+  background: #e2e8f0;
+}
+
+.pos-account-signout {
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f1f5f9;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pos-account-signout:hover {
+  background: #e2e8f0;
+}
+
+.pos-gcal-banner {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pos-gcal-conn {
+  display: grid;
+  gap: 6px;
+  padding: 4px 2px 8px;
+}
+
+.pos-gcal-conn-compact {
+  padding: 2px 4px 6px;
+}
+
+.pos-gcal-conn-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pos-gcal-conn-title {
+  font-size: 12px;
+  font-weight: 650;
+  color: #334155;
+}
+
+.pos-gcal-conn-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.pos-gcal-conn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.pos-gcal-conn-synced .pos-gcal-conn-dot,
+.pos-gcal-conn-connected .pos-gcal-conn-dot {
+  background: #16a34a;
+}
+
+.pos-gcal-conn-syncing .pos-gcal-conn-dot,
+.pos-gcal-conn-connecting .pos-gcal-conn-dot {
+  background: #6366f1;
+}
+
+.pos-gcal-conn-sync_failed .pos-gcal-conn-dot,
+.pos-gcal-conn-reconnect_required .pos-gcal-conn-dot,
+.pos-gcal-conn-account_mismatch .pos-gcal-conn-dot {
+  background: #e11d48;
+}
+
+.pos-gcal-conn-email,
+.pos-gcal-conn-meta,
+.pos-gcal-conn-detail,
+.pos-gcal-conn-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.pos-gcal-conn-detail {
+  color: #be123c;
+}
+
+.pos-gcal-conn-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.pos-gcal-conn-actions .pos-btn-secondary {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #e2e8f0;
+}
+
+.pos-gcal-conn-more {
+  position: relative;
+  margin-left: auto;
+}
+
+.pos-confirm-dialog {
+  border: 0;
+  border-radius: 16px;
+  padding: 0;
+  max-width: min(420px, calc(100vw - 32px));
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.pos-confirm-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.pos-confirm-dialog-body {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  color: #0f172a;
+}
+
+.pos-confirm-dialog-body h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.pos-confirm-dialog-body p {
+  margin: 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.pos-confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pos-confirm-dialog-actions .pos-btn-secondary {
+  background: #f1f5f9;
+  color: #0f172a;
+  border: 0;
+}
+
+.pos-sidebar-layer-connect {
+  align-items: flex-start;
+}
+
+.pos-sidebar-layer-sub {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 500;
+  color: #94a3b8;
+}

@@ -186,17 +186,31 @@ export function PlannerSidebar({
             <i className="dot personal" />
             <span>Personal OS</span>
           </button>
-          <button
-            type="button"
-            className={cn("pos-sidebar-layer", showExternalEvents && "on")}
-            onClick={onToggleExternalEvents}
-            aria-pressed={showExternalEvents}
-            disabled={!hasGoogleIntegration}
-            title={hasGoogleIntegration ? "Toggle Google Calendar events" : "Connect Google Calendar first"}
-          >
-            <i className="dot google" />
-            <span>Google Calendar</span>
-          </button>
+          {hasGoogleIntegration ? (
+            <button
+              type="button"
+              className={cn("pos-sidebar-layer", showExternalEvents && "on")}
+              onClick={onToggleExternalEvents}
+              aria-pressed={showExternalEvents}
+              title="Toggle Google Calendar events"
+            >
+              <i className="dot google" />
+              <span>Google Calendar</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="pos-sidebar-layer pos-sidebar-layer-connect"
+              onClick={onGoogleClick}
+              title="Connect Google Calendar"
+            >
+              <i className="dot google" />
+              <span>
+                Google Calendar
+                <em className="pos-sidebar-layer-sub">Not connected</em>
+              </span>
+            </button>
+          )}
         </div>
       )}
 

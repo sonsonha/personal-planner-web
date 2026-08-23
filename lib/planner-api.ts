@@ -212,15 +212,18 @@ export type GoogleIntegrationStatus = {
   healthy?: boolean;
   reconnectRequired?: boolean;
   mode: "fake" | "live" | "none";
+  googleAccountEmail?: string | null;
+  writeCalendarId?: string | null;
   lastSyncAt: string | null;
-  lastReplanAt: string | null;
-  calendarChanged: boolean;
+  lastReplanAt?: string | null;
+  calendarChanged?: boolean;
   lastError?: {
     code: string;
     message: string;
     googleStatus: number | null;
     at: string;
   } | null;
+  lastErrorCode?: string | null;
 };
 
 export type CalendarSyncSummary = {
@@ -250,6 +253,7 @@ export class PlannerApiError extends Error {
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
+    credentials: "same-origin",
     headers: {
       ...(init?.body ? { "content-type": "application/json" } : {}),
       ...init?.headers,
@@ -497,5 +501,12 @@ export function syncGoogleCalendar() {
   return requestJson<{ ok: boolean; summary: CalendarSyncSummary }>(
     "/api/calendar/sync",
     { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
+export function disconnectGoogleCalendar() {
+  return requestJson<{ connected: false }>(
+    "/api/integrations/google",
+    { method: "DELETE" },
   );
 }

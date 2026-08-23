@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { getChatGPTUser } from "../chatgpt-auth";
-import { PlannerApp } from "../planner-app";
+import { AuthGate } from "@/components/auth/AuthGate";
 
 export default async function PlannerLayout({
   children,
@@ -9,11 +9,10 @@ export default async function PlannerLayout({
 }) {
   const viewer = await getChatGPTUser();
   return (
-    <>
-      <PlannerApp
-        viewer={viewer ? { displayName: viewer.displayName, email: viewer.email } : null}
-      />
+    <AuthGate
+      chatgptViewer={viewer ? { displayName: viewer.displayName, email: viewer.email } : null}
+    >
       {children}
-    </>
+    </AuthGate>
   );
 }

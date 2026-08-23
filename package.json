@@ -11,7 +11,7 @@
     "build:node": "NITRO_PRESET=node vite build",
     "start": "node .output/server/index.mjs",
     "test": "npm run test:unit && npm run build:node && node --test tests/rendered-html.test.mjs && npm run build",
-    "test:unit": "node --experimental-strip-types --test tests/product-week.test.ts tests/goal-progress-display.test.ts tests/calendar-overlap.test.ts",
+    "test:unit": "node --experimental-strip-types --test tests/product-week.test.ts tests/goal-progress-display.test.ts tests/calendar-overlap.test.ts tests/onboarding-account-ux.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output",
     "db:generate": "drizzle-kit generate"
   },

@@ -31,6 +31,18 @@ function plannerConfig() {
   return { baseUrl, token, privateKey };
 }
 
+function appendSetCookie(target: Headers, upstream: Headers) {
+  const getSetCookie = (upstream as Headers & { getSetCookie?: () => string[] }).getSetCookie;
+  if (typeof getSetCookie === "function") {
+    for (const value of getSetCookie.call(upstream)) {
+      target.append("set-cookie", value);
+    }
+    return;
+  }
+  const single = upstream.get("set-cookie");
+  if (single) target.append("set-cookie", single);
+}
+
 export async function proxyPlannerRequest({ method, path, request }: ProxyOptions) {
   const viewer = await getChatGPTUser();
   // ChatGPT Sites set PLANNER_REQUIRE_CHATGPT_USER=1. Standalone Vercel
@@ -52,6 +64,10 @@ export async function proxyPlannerRequest({ method, path, request }: ProxyOption
   }
 
   const headers = new Headers({ accept: "application/json" });
+  const browserCookie = request.headers.get("cookie");
+  if (browserCookie) {
+    headers.set("cookie", browserCookie);
+  }
   if (config.privateKey) {
     try {
       const timestamp = String(Date.now());
@@ -84,6 +100,7 @@ export async function proxyPlannerRequest({ method, path, request }: ProxyOption
       "content-type": upstream.headers.get("content-type") ?? "application/json",
       "cache-control": "no-store",
     });
+    appendSetCookie(responseHeaders, upstream.headers);
     return new Response(await upstream.arrayBuffer(), {
       status: upstream.status,
       headers: responseHeaders,
