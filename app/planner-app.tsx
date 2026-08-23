@@ -1021,6 +1021,10 @@ export function PlannerApp({
         setGoogleConnection("not-connected");
         setHasGoogleIntegration(false);
         setToast(calendarErrorCopy("account_mismatch"));
+      } else if (reason === "identity_unavailable") {
+        setCalendarUiOverride("SYNC_FAILED");
+        setGoogleConnection("error");
+        setToast(calendarErrorCopy("identity_unavailable"));
       } else if (reason === "missing_refresh_token") {
         setCalendarUiOverride("RECONNECT_REQUIRED");
         setGoogleConnection("reconnect-required");
