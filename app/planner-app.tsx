@@ -107,7 +107,13 @@ type ProjectOption = {
   defaultGoalProcessId?: string | null;
 };
 type ConnectionState = "loading" | "syncing" | "live" | "demo" | "error";
-type GoogleConnectionState = "loading" | "connected" | "not-connected" | "syncing" | "error";
+type GoogleConnectionState =
+  | "loading"
+  | "connected"
+  | "not-connected"
+  | "syncing"
+  | "error"
+  | "reconnect-required";
 type ActiveSection = PlannerSection;
 type CalendarView = "week" | "day" | "month";
 type ToastKind = "info" | "warning";
@@ -139,6 +145,7 @@ const MINUTES_VISIBLE = (END_HOUR - START_HOUR) * 60;
 const SNAP_MINUTES = 15;
 const AUTO_SYNC_INTERVAL_MS = 5 * 60_000;
 const AUTO_SYNC_MIN_GAP_MS = 30_000;
+const AUTO_SYNC_ERROR_BACKOFF_MS = 5 * 60_000;
 const COLORS = {
   violet: "#705CF6",
   blue: "#3478F6",
@@ -813,6 +820,7 @@ export function PlannerApp({
   const liveDataRef = useRef(false);
   const calendarSyncInFlightRef = useRef<Promise<void> | null>(null);
   const lastCalendarSyncAttemptRef = useRef(0);
+  const calendarSyncBackoffUntilRef = useRef(0);
 
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
@@ -833,22 +841,47 @@ export function PlannerApp({
     force?: boolean;
   } = {}) => {
     if (calendarSyncInFlightRef.current) return calendarSyncInFlightRef.current;
+    const nowMs = Date.now();
+    if (!options.force && nowMs < calendarSyncBackoffUntilRef.current) {
+      return Promise.resolve();
+    }
     if (!options.force
-      && Date.now() - lastCalendarSyncAttemptRef.current < AUTO_SYNC_MIN_GAP_MS) {
+      && nowMs - lastCalendarSyncAttemptRef.current < AUTO_SYNC_MIN_GAP_MS) {
       return Promise.resolve();
     }
 
-    lastCalendarSyncAttemptRef.current = Date.now();
+    lastCalendarSyncAttemptRef.current = nowMs;
     if (options.announce) setGoogleConnection("syncing");
 
     const operation = syncGoogleCalendar()
       .then(({ summary }) => {
+        calendarSyncBackoffUntilRef.current = 0;
         setHasGoogleIntegration(true);
+        if (summary.reconnectRequired) {
+          setGoogleConnection("reconnect-required");
+          if (options.announce) {
+            setToast("Google Calendar needs reconnect · tap Connect");
+          }
+          return;
+        }
         setGoogleConnection("connected");
         setReloadKey((value) => value + 1);
         if (options.announce) setToast(calendarSyncMessage(summary));
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        calendarSyncBackoffUntilRef.current = Date.now() + AUTO_SYNC_ERROR_BACKOFF_MS;
+        const code = error instanceof PlannerApiError ? error.code : "";
+        if (
+          code === "GOOGLE_RECONNECT_REQUIRED"
+          || code === "GOOGLE_FORBIDDEN"
+          || code === "GOOGLE_NOT_CONNECTED"
+        ) {
+          setGoogleConnection("reconnect-required");
+          if (options.announce) {
+            setToast("Google Calendar needs reconnect · tap Connect");
+          }
+          return;
+        }
         setGoogleConnection("error");
         if (options.announce) {
           setToast("Google Calendar sync failed · tap Retry");
@@ -923,6 +956,11 @@ export function PlannerApp({
       .then((status) => {
         const connected = Boolean(status?.connected);
         setHasGoogleIntegration(connected);
+        if (status?.reconnectRequired) {
+          setGoogleConnection("reconnect-required");
+          calendarSyncBackoffUntilRef.current = Date.now() + AUTO_SYNC_ERROR_BACKOFF_MS;
+          return;
+        }
         setGoogleConnection(connected ? "connected" : "not-connected");
       })
       .catch(() => {
@@ -941,14 +979,16 @@ export function PlannerApp({
 
   useEffect(() => {
     if (connection !== "live" || !hasGoogleIntegration) return;
+    if (googleConnection === "reconnect-required") return;
 
-    const syncWhenActive = (force = false) => {
+    const syncWhenActive = () => {
       if (document.visibilityState !== "visible") return;
-      void runCalendarSync({ force });
+      // Never bypass the min-gap / error backoff on focus — that caused sync spam.
+      void runCalendarSync({ force: false });
     };
-    const onWindowFocus = () => syncWhenActive(true);
+    const onWindowFocus = () => syncWhenActive();
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") syncWhenActive(true);
+      if (document.visibilityState === "visible") syncWhenActive();
     };
 
     const initialSync = window.setTimeout(() => syncWhenActive(), 0);
@@ -962,7 +1002,7 @@ export function PlannerApp({
       window.removeEventListener("focus", onWindowFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [connection, hasGoogleIntegration, runCalendarSync]);
+  }, [connection, hasGoogleIntegration, googleConnection, runCalendarSync]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -1581,8 +1621,11 @@ export function PlannerApp({
       ? { state: "error", label: `${failedSyncCount} failed` }
     : googleConnection === "connected"
       ? { state: "live", label: "Synced" }
-      : googleConnection === "not-connected"
-        ? { state: "demo", label: "Connect" }
+      : googleConnection === "not-connected" || googleConnection === "reconnect-required"
+        ? {
+          state: "demo",
+          label: googleConnection === "reconnect-required" ? "Reconnect" : "Connect",
+        }
         : googleConnection === "syncing" || googleConnection === "loading"
           ? { state: "syncing", label: googleConnection === "syncing" ? "Syncing…" : "Checking…" }
           : { state: "error", label: "Retry" };
@@ -1592,19 +1635,20 @@ export function PlannerApp({
       setReloadKey((value) => value + 1);
       return;
     }
-    if (hasGoogleIntegration) {
-      await runCalendarSync({ announce: true, force: true });
+    if (googleConnection === "reconnect-required" || !hasGoogleIntegration) {
+      try {
+        setGoogleConnection("loading");
+        const result = await getGoogleAuthUrl();
+        if (!result.url) throw new Error("OAuth is unavailable");
+        window.location.assign(result.url);
+      } catch {
+        setGoogleConnection("error");
+        setToast("Could not start Google Calendar connection");
+      }
       return;
     }
-    try {
-      setGoogleConnection("loading");
-      const result = await getGoogleAuthUrl();
-      if (!result.url) throw new Error("OAuth is unavailable");
-      window.location.assign(result.url);
-    } catch {
-      setGoogleConnection("error");
-      setToast("Could not start Google Calendar connection");
-    }
+    calendarSyncBackoffUntilRef.current = 0;
+    await runCalendarSync({ announce: true, force: true });
   };
 
   const taskCountByProject = useMemo(() => {
@@ -1649,7 +1693,7 @@ export function PlannerApp({
             ? connection === "error" ? "error" : connection === "loading" || connection === "syncing" ? "loading" : "demo"
             : googleConnection === "connected" && failedSyncCount > 0 ? "error"
               : googleConnection === "connected" ? "live"
-                : googleConnection === "not-connected" ? "demo"
+                : googleConnection === "not-connected" || googleConnection === "reconnect-required" ? "demo"
                   : googleConnection === "syncing" || googleConnection === "loading" ? "syncing"
                     : "error") as SidebarGoogleState
         }
@@ -1657,6 +1701,7 @@ export function PlannerApp({
           connection !== "live" ? (connection === "demo" ? "Demo mode" : connection === "error" ? "Retry connection" : "Checking…")
             : googleConnection === "connected" && failedSyncCount > 0 ? `${failedSyncCount} failed · tap to retry`
               : googleConnection === "connected" ? "Synced"
+                : googleConnection === "reconnect-required" ? "Reconnect"
                 : googleConnection === "not-connected" ? "Connect"
                   : googleConnection === "syncing" ? "Syncing…"
                     : googleConnection === "loading" ? "Checking…"

@@ -209,10 +209,18 @@ export type PlannerAggregate = {
 export type GoogleIntegrationStatus = {
   provider: "google_calendar";
   connected: boolean;
+  healthy?: boolean;
+  reconnectRequired?: boolean;
   mode: "fake" | "live" | "none";
   lastSyncAt: string | null;
   lastReplanAt: string | null;
   calendarChanged: boolean;
+  lastError?: {
+    code: string;
+    message: string;
+    googleStatus: number | null;
+    at: string;
+  } | null;
 };
 
 export type CalendarSyncSummary = {
@@ -223,6 +231,10 @@ export type CalendarSyncSummary = {
   ownedRemoved: number;
   connected: boolean;
   retry: { attempted: number; synced: number; failed: number };
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  googleStatus?: number | null;
+  reconnectRequired?: boolean;
 };
 
 export class PlannerApiError extends Error {
@@ -482,7 +494,7 @@ export function getGoogleAuthUrl() {
 }
 
 export function syncGoogleCalendar() {
-  return requestJson<{ ok: true; summary: CalendarSyncSummary }>(
+  return requestJson<{ ok: boolean; summary: CalendarSyncSummary }>(
     "/api/calendar/sync",
     { method: "POST", body: JSON.stringify({}) },
   );
