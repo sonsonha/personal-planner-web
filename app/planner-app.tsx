@@ -97,6 +97,7 @@ type CalendarBlock = {
   meta?: string;
   syncStatus?: "PENDING" | "SYNCED" | "FAILED";
   startAt?: string;
+  allDay?: boolean;
 };
 
 type ProjectOption = {
@@ -741,16 +742,22 @@ function slotMinutesFromClick(clientY: number, rect: DOMRect) {
 function externalBlockFromApi(event: ApiExternalEvent, weekStart: Date): CalendarBlock {
   const start = new Date(event.startAt);
   const end = new Date(event.endAt);
+  const durationMinutes = Math.max(15, Math.round((end.getTime() - start.getTime()) / 60_000));
+  // All-day Google events are stored as local-midnight → next midnight (+07).
+  const allDay = durationMinutes >= 20 * 60
+    && start.getHours() === 0
+    && start.getMinutes() === 0;
   return {
     id: `external-${event.id}`,
     title: event.title,
     day: dayIndexFor(event.startAt, weekStart),
-    start: start.getHours() * 60 + start.getMinutes(),
-    duration: Math.max(15, Math.round((end.getTime() - start.getTime()) / 60_000)),
+    start: allDay ? 0 : start.getHours() * 60 + start.getMinutes(),
+    duration: durationMinutes,
     color: "#94A3B8",
     type: "external",
     meta: event.location || "Google Calendar",
     startAt: event.startAt,
+    allDay,
   };
 }
 
@@ -971,9 +978,16 @@ export function PlannerApp({
 
   useEffect(() => {
     const url = new URL(window.location.href);
-    if (url.searchParams.get("google") !== "connected") return;
+    const google = url.searchParams.get("google");
+    if (google !== "connected" && google !== "error") return;
     url.searchParams.delete("google");
+    url.searchParams.delete("reason");
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    if (google === "error") {
+      setGoogleConnection("error");
+      setToast("Google Calendar connect failed · tap Reconnect");
+      return;
+    }
     queueMicrotask(() => void runCalendarSync({ announce: true, force: true }));
   }, [runCalendarSync]);
 
@@ -1860,11 +1874,27 @@ export function PlannerApp({
 
             <div className="all-day-row" style={{ "--day-count": visibleDays.length } as React.CSSProperties}>
               <div className="all-day-label">All day</div>
-              {visibleDays.map((date) => (
-                <div className="all-day-cell" key={date.toISOString()} />
-              ))}
+              {visibleIndexes.map((dayIndex) => {
+                const dayAllDay = calendarBlocks.filter(
+                  (block) => block.day === dayIndex && block.allDay && (block.type !== "external" || showExternalEvents),
+                );
+                return (
+                  <div className="all-day-cell" key={`allday-${dayIndex}`}>
+                    {dayAllDay.map((block) => (
+                      <button
+                        type="button"
+                        key={block.id}
+                        className="all-day-chip"
+                        title={block.title}
+                        disabled={block.type === "external"}
+                      >
+                        {block.title}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
-
             <div className="calendar-scroll" ref={scrollRef}>
               <div className="calendar-grid" style={{ "--day-count": visibleDays.length } as React.CSSProperties}>
                 <div className="time-rail">
@@ -1876,7 +1906,9 @@ export function PlannerApp({
                 </div>
 
                 {visibleIndexes.map((dayIndex) => {
-                  const dayBlocks = calendarBlocks.filter((block) => block.day === dayIndex);
+                  const dayBlocks = calendarBlocks.filter(
+                    (block) => block.day === dayIndex && !block.allDay,
+                  );
                   const laidOut = resolveOverlapLayout(dayBlocks);
                   return (
                   <div
