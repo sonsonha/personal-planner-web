@@ -2,7 +2,7 @@ import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { createPrivateKey, sign } from "node:crypto";
 
 type ProxyOptions = {
-  method: "GET" | "POST" | "PATCH" | "DELETE";
+  method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   path: string;
   request: Request;
 };

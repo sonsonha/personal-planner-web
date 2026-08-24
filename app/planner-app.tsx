@@ -33,6 +33,7 @@ import {
   calendarErrorCopy,
   type CalendarUiState,
 } from "@/components/planner/GoogleCalendarConnection";
+import { AiContextEditor } from "@/components/planner/AiContextEditor";
 import { completeOnboarding } from "@/lib/auth-api";
 import {
   QuickAddView,
@@ -830,6 +831,7 @@ export function PlannerApp({
     rect: DOMRect;
   } | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [aiContextOpen, setAiContextOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const [toastKind, setToastKind] = useState<ToastKind>("info");
@@ -2004,6 +2006,18 @@ export function PlannerApp({
                     className="pos-account-signout"
                     onClick={() => {
                       setAccountMenuOpen(false);
+                      setAiContextOpen(true);
+                    }}
+                  >
+                    AI Context
+                  </button>
+                  <div className="pos-account-divider" role="separator" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="pos-account-signout"
+                    onClick={() => {
+                      setAccountMenuOpen(false);
                       void onSignOut?.();
                     }}
                   >
@@ -2401,6 +2415,11 @@ export function PlannerApp({
           <CheckCircle2 size={18} /> {toast}
         </div>
       )}
+      <AiContextEditor
+        open={aiContextOpen}
+        onClose={() => setAiContextOpen(false)}
+        onSaved={(message) => setToast(message)}
+      />
     </div>
   );
 }

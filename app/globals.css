@@ -3609,3 +3609,16 @@ button {
   font-weight: 500;
   color: #94a3b8;
 }
+
+/* AI Goal Structuring */
+.gp-ai-review-panel{max-width:min(720px,96vw);max-height:90vh;display:flex;flex-direction:column}
+.gp-ai-review-body{overflow:auto}
+.gp-ai-section{margin:1rem 0}
+.gp-ai-section-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem}
+.gp-ai-card{border:1px solid var(--pos-border,rgba(0,0,0,.08));border-radius:10px;padding:.75rem;margin:.5rem 0;display:grid;gap:.5rem}
+.gp-ai-card-row{grid-template-columns:1fr auto;align-items:center}
+.gp-ai-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+.gp-ai-why,.gp-ai-meta{font-size:.85rem;opacity:.72;margin:0}
+.gp-ai-check-row{display:flex;gap:.5rem;align-items:flex-start;margin:.35rem 0}
+.gp-ai-list{margin:.25rem 0 0;padding-left:1.1rem}
+.gp-ai-footer{flex-wrap:wrap;gap:.5rem}

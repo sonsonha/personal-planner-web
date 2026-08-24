@@ -148,6 +148,7 @@ export type GoalDetailViewProps = {
   onGoCalendar: () => void;
   onViewProgress: () => void;
   onReview: () => void;
+  onCopyContext?: () => void;
   onOpenTask: (taskId: string) => void;
   onOpenProject?: (projectId: string) => void;
   onSetMilestone: (id: string) => void;
@@ -173,6 +174,7 @@ export function GoalDetailView({
   onGoCalendar,
   onViewProgress,
   onReview,
+  onCopyContext,
   onOpenTask,
   onOpenProject,
   onSetMilestone,
@@ -240,6 +242,11 @@ export function GoalDetailView({
         <button type="button" className="pos-btn-secondary" onClick={onViewProgress} disabled={!progress && !loadingProgress}>
           View Progress
         </button>
+        {onCopyContext ? (
+          <button type="button" className="pos-btn-secondary" onClick={onCopyContext}>
+            Copy context
+          </button>
+        ) : null}
         <button type="button" className="pos-btn-secondary" onClick={onReview}>
           Review
         </button>

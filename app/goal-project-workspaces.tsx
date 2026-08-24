@@ -12,6 +12,7 @@ import {
   fetchGoalProgress,
   updateGoal,
   updateProject,
+  PlannerApiError,
   type ApiGoal,
   type ApiGoalProgress,
   type ApiProject,
@@ -22,6 +23,13 @@ import {
   type GoalReflection,
   type GoalSystem,
 } from "@/lib/planner-api";
+import {
+  type GoalStructureSuggestion,
+} from "@/lib/ai-api";
+import {
+  generateGoalSuggestion,
+  GoalStructureReview,
+} from "@/components/planner/GoalStructureReview";
 import {
   inProductWeek,
   weekCompletedForProject,
@@ -421,6 +429,8 @@ function GoalCreateFlow({
   const [systemDraft, setSystemDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState<GoalStructureSuggestion | null>(null);
 
   const addMilestone = () => {
     if (!milestoneDraft.trim()) return;
@@ -435,6 +445,35 @@ function GoalCreateFlow({
     if (!systemDraft.trim()) return;
     setSystems((current) => [...current, { id: uid(), title: systemDraft.trim() }]);
     setSystemDraft("");
+  };
+
+  const requestAiStructure = async () => {
+    if (!outcome.trim()) {
+      setError("Describe the outcome you want to make true.");
+      return;
+    }
+    if (!live) {
+      setError("AI structuring needs a live backend connection.");
+      return;
+    }
+    setAiBusy(true);
+    setError(null);
+    try {
+      const suggestion = await generateGoalSuggestion({
+        title: outcome.trim(),
+        why: why.trim() || undefined,
+        targetDate: targetDate || null,
+      });
+      setAiSuggestion(suggestion);
+    } catch (err) {
+      setError(
+        err instanceof PlannerApiError
+          ? err.message
+          : "AI suggestions are unavailable right now. You can continue manually.",
+      );
+    } finally {
+      setAiBusy(false);
+    }
   };
 
   const save = async () => {
@@ -468,6 +507,42 @@ function GoalCreateFlow({
       setError("Could not save this goal.");
     }
   };
+
+  if (aiSuggestion) {
+    return (
+      <GoalStructureReview
+        title={outcome.trim()}
+        why={why.trim()}
+        targetDate={targetDate}
+        focusType={focusType}
+        suggestion={aiSuggestion}
+        onSuggestionChange={setAiSuggestion}
+        onClose={onClose}
+        onSaved={onSaved}
+        regenerating={aiBusy}
+        onRegenerate={async () => {
+          setAiBusy(true);
+          setError(null);
+          try {
+            const suggestion = await generateGoalSuggestion({
+              title: outcome.trim(),
+              why: why.trim() || undefined,
+              targetDate: targetDate || null,
+            });
+            setAiSuggestion(suggestion);
+          } catch (err) {
+            setError(
+              err instanceof PlannerApiError
+                ? err.message
+                : "AI suggestions are unavailable right now. You can continue manually.",
+            );
+          } finally {
+            setAiBusy(false);
+          }
+        }}
+      />
+    );
+  }
 
   return (
     <div className="gp-panel-backdrop">
@@ -566,8 +641,22 @@ function GoalCreateFlow({
         <div className="gp-panel-footer">
           {step > 1 && <button type="button" className="ghost-button" onClick={() => setStep((s) => (s - 1) as 1 | 2 | 3)}>Back</button>}
           <div className="gp-panel-footer-right">
-            {step < 3 ? (
-              <button type="button" className="primary-button" onClick={() => setStep((s) => (s + 1) as 1 | 2 | 3)} disabled={step === 1 && !outcome.trim()}>
+            {step === 1 ? (
+              <>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => void requestAiStructure()}
+                  disabled={!outcome.trim() || aiBusy}
+                >
+                  {aiBusy ? "Structuring…" : "Help me structure this goal"}
+                </button>
+                <button type="button" className="primary-button" onClick={() => setStep(2)} disabled={!outcome.trim()}>
+                  Create manually
+                </button>
+              </>
+            ) : step < 3 ? (
+              <button type="button" className="primary-button" onClick={() => setStep((s) => (s + 1) as 1 | 2 | 3)}>
                 Continue
               </button>
             ) : (
@@ -629,6 +718,21 @@ function GoalDetailPage({
   const linked = projects.filter((p) => p.goalId === goal.id && p.active);
   const current = currentMilestone(goal);
   const health = healthLabel(goal, now);
+
+  const copyFullContext = async () => {
+    if (!live) {
+      onChanged("Copy context needs a live backend connection");
+      return;
+    }
+    try {
+      const { exportGoalFullContext, copyTextToClipboard } = await import("@/lib/ai-api");
+      const { markdown } = await exportGoalFullContext(goal.id);
+      const ok = await copyTextToClipboard(markdown);
+      onChanged(ok ? "Context copied" : "Could not copy context");
+    } catch {
+      onChanged("Could not export Goal context");
+    }
+  };
 
   useEffect(() => {
     if (openReview) setShowReview(true);
@@ -711,6 +815,7 @@ function GoalDetailPage({
           else if (progress) setShowProgress(true);
         }}
         onReview={() => setShowReview(true)}
+        onCopyContext={() => { void copyFullContext(); }}
         onOpenTask={onOpenTask}
         onOpenProject={onOpenProject}
         onSetMilestone={setMilestoneCurrent}
