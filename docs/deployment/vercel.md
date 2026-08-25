@@ -37,6 +37,12 @@ Optional:
 
 Never use a `NEXT_PUBLIC_` prefix for tokens/keys.
 
+## AI Goal Structuring proxy timeout
+
+`POST /api/ai/goal-structure` waits up to **100s** for Railway (DeepSeek thinking).
+The route sets `maxDuration = 120` for Vercel. Hobby plans cap functions at ~10s —
+use **Pro** (or higher) so Goal Structuring can finish. Other `/api/*` proxies stay at 12s.
+
 ## Vercel dashboard settings
 
 | Setting | Value |

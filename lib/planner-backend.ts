@@ -5,6 +5,8 @@ type ProxyOptions = {
   method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   path: string;
   request: Request;
+  /** Upstream fetch timeout (ms). Default 12s; AI Goal Structuring needs longer. */
+  timeoutMs?: number;
 };
 
 function jsonError(status: number, code: string, message: string) {
@@ -43,7 +45,12 @@ function appendSetCookie(target: Headers, upstream: Headers) {
   if (single) target.append("set-cookie", single);
 }
 
-export async function proxyPlannerRequest({ method, path, request }: ProxyOptions) {
+export async function proxyPlannerRequest({
+  method,
+  path,
+  request,
+  timeoutMs = 12_000,
+}: ProxyOptions) {
   const viewer = await getChatGPTUser();
   // ChatGPT Sites set PLANNER_REQUIRE_CHATGPT_USER=1. Standalone Vercel
   // dogfood authenticates web→Railway via PLANNER_WEB_TOKEN only.
@@ -94,7 +101,7 @@ export async function proxyPlannerRequest({ method, path, request }: ProxyOption
       headers,
       body,
       cache: "no-store",
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const responseHeaders = new Headers({
       "content-type": upstream.headers.get("content-type") ?? "application/json",
