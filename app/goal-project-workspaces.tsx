@@ -16,12 +16,12 @@ import {
   type ApiGoal,
   type ApiGoalProgress,
   type ApiProject,
+  type ApiProjectType,
   type GoalFocusType,
   type GoalMilestone,
   type GoalOutcomeStatus,
   type GoalProcess,
   type GoalReflection,
-  type GoalSystem,
 } from "@/lib/planner-api";
 import {
   type GoalStructureSuggestion,
@@ -54,7 +54,6 @@ import { GoalsOverviewView } from "@/components/planner/GoalsOverviewView";
 import { ProcessEditorModal } from "@/components/planner/ProcessEditorModal";
 import { ProjectDetailView } from "@/components/planner/ProjectDetailView";
 import { ProjectsOverviewView } from "@/components/planner/ProjectsOverviewView";
-import { SystemEditorModal } from "@/components/planner/SystemEditorModal";
 import { weekRangeLabel } from "@/components/planner/utils";
 type HorizonScope = "day" | "week" | "month" | "all";
 
@@ -65,24 +64,6 @@ const HORIZON_TABS: { id: HorizonScope; label: string }[] = [
   { id: "all", label: "All" },
 ];
 
-/** 0 = Sunday … 6 = Saturday (matches GoalSystem.preferredDays). */
-const SYSTEM_DAY_OPTIONS: Array<{ value: number; label: string }> = [
-  { value: 1, label: "Mon" },
-  { value: 2, label: "Tue" },
-  { value: 3, label: "Wed" },
-  { value: 4, label: "Thu" },
-  { value: 5, label: "Fri" },
-  { value: 6, label: "Sat" },
-  { value: 0, label: "Sun" },
-];
-
-function formatPreferredDays(days: number[]) {
-  const labels = new Map(SYSTEM_DAY_OPTIONS.map((d) => [d.value, d.label]));
-  return [...days]
-    .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
-    .map((d) => labels.get(d) ?? String(d))
-    .join(" · ");
-}
 
 function HorizonTabs({
   value,
@@ -446,15 +427,7 @@ function GoalCreateFlow({
   const [why, setWhy] = useState("");
   const [focusType, setFocusType] = useState<GoalFocusType>(focusCount >= 3 ? "MAINTAIN" : "FOCUS");
   const [milestones, setMilestones] = useState<GoalMilestone[]>([]);
-  const [systems, setSystems] = useState<GoalSystem[]>([]);
   const [milestoneDraft, setMilestoneDraft] = useState("");
-  const [systemDraftTitle, setSystemDraftTitle] = useState("");
-  const [systemDraftTarget, setSystemDraftTarget] = useState("4");
-  const [systemDraftType, setSystemDraftType] = useState<"COUNT" | "DURATION">("COUNT");
-  const [systemDraftUnit, setSystemDraftUnit] = useState("sessions");
-  const [systemDraftWeeks, setSystemDraftWeeks] = useState("8");
-  const [systemDraftPreferredDays, setSystemDraftPreferredDays] = useState<number[]>([]);
-  const [systemDraftPreferredTime, setSystemDraftPreferredTime] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
@@ -467,30 +440,6 @@ function GoalCreateFlow({
       { id: uid(), title: milestoneDraft.trim(), status: current.length === 0 ? "current" : "pending" },
     ]);
     setMilestoneDraft("");
-  };
-
-  const addSystem = () => {
-    const targetValue = Number(systemDraftTarget);
-    const durationWeeks = Number(systemDraftWeeks);
-    if (!systemDraftTitle.trim() || !Number.isFinite(targetValue) || !Number.isFinite(durationWeeks) || durationWeeks < 1) return;
-    setSystems((current) => [...current, {
-      id: uid(),
-      title: systemDraftTitle.trim(),
-      targetType: systemDraftType,
-      targetValue,
-      unit: systemDraftUnit.trim() || (systemDraftType === "DURATION" ? "min" : "sessions"),
-      period: "WEEK",
-      durationWeeks,
-      status: "ACTIVE",
-      startDate: null,
-      preferredDays: systemDraftPreferredDays.length ? [...systemDraftPreferredDays].sort((a, b) => a - b) : null,
-      preferredTime: systemDraftPreferredTime.trim() || null,
-    }]);
-    setSystemDraftTitle("");
-    setSystemDraftTarget("4");
-    setSystemDraftWeeks("8");
-    setSystemDraftPreferredDays([]);
-    setSystemDraftPreferredTime("");
   };
 
   const requestAiStructure = async () => {
@@ -538,7 +487,6 @@ function GoalCreateFlow({
       why: why.trim(),
       focusType,
       milestones,
-      systems,
       currentMilestoneId: currentId,
     };
     if (!live) {
@@ -668,91 +616,6 @@ function GoalCreateFlow({
                 </ul>
               )}
             </label>
-            <label><span>Systems / repeated behavior (optional)</span>
-              <p className="gp-muted" style={{ marginTop: 4 }}>
-                Rhythm for N weeks — never auto-creates Tasks or Calendar blocks.
-              </p>
-              <div className="gp-process-form" style={{ marginTop: 8 }}>
-                <input
-                  value={systemDraftTitle}
-                  onChange={(e) => setSystemDraftTitle(e.target.value)}
-                  placeholder="Morning running"
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSystem())}
-                />
-                <select
-                  value={systemDraftType}
-                  onChange={(e) => {
-                    const type = e.target.value as "COUNT" | "DURATION";
-                    setSystemDraftType(type);
-                    setSystemDraftUnit(type === "DURATION" ? "min" : "sessions");
-                  }}
-                  aria-label="System target type"
-                >
-                  <option value="COUNT">Sessions</option>
-                  <option value="DURATION">Duration</option>
-                </select>
-                <input
-                  type="number"
-                  min="0"
-                  value={systemDraftTarget}
-                  onChange={(e) => setSystemDraftTarget(e.target.value)}
-                  placeholder="4"
-                  aria-label="Weekly target"
-                />
-                <input
-                  value={systemDraftUnit}
-                  onChange={(e) => setSystemDraftUnit(e.target.value)}
-                  placeholder="sessions"
-                  aria-label="Unit"
-                />
-                <input
-                  type="number"
-                  min="1"
-                  value={systemDraftWeeks}
-                  onChange={(e) => setSystemDraftWeeks(e.target.value)}
-                  placeholder="8"
-                  aria-label="Duration weeks"
-                />
-                <button type="button" className="ghost-button" onClick={addSystem}>Add</button>
-              </div>
-              <div className="gp-inline-add" style={{ marginTop: 8, flexWrap: "wrap", gap: 6 }}>
-                {SYSTEM_DAY_OPTIONS.map((day) => {
-                  const selected = systemDraftPreferredDays.includes(day.value);
-                  return (
-                    <button
-                      key={day.value}
-                      type="button"
-                      className={selected ? "primary-button" : "ghost-button"}
-                      aria-pressed={selected}
-                      onClick={() => setSystemDraftPreferredDays((current) =>
-                        selected ? current.filter((d) => d !== day.value) : [...current, day.value],
-                      )}
-                    >
-                      {day.label}
-                    </button>
-                  );
-                })}
-                <input
-                  type="time"
-                  value={systemDraftPreferredTime}
-                  onChange={(e) => setSystemDraftPreferredTime(e.target.value)}
-                  aria-label="Preferred time (optional)"
-                />
-              </div>
-              {systems.length > 0 && (
-                <ul className="gp-chip-list">
-                  {systems.map((s) => (
-                    <li key={s.id}>
-                      {s.title}
-                      {s.targetValue != null ? ` · ${s.targetValue}${s.unit ? ` ${s.unit}` : ""}/week` : ""}
-                      {s.durationWeeks ? ` · ${s.durationWeeks} weeks` : ""}
-                      {s.preferredDays?.length ? ` · ${formatPreferredDays(s.preferredDays)}` : ""}
-                      {s.preferredTime ? ` · ${s.preferredTime}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </label>
           </div>
         )}
 
@@ -831,7 +694,6 @@ function GoalDetailPage({
   const [showReview, setShowReview] = useState(openReview);
   const [progress, setProgress] = useState<ApiGoalProgress | null>(null);
   const [loadingProgress, setLoadingProgress] = useState(live);
-  const [systemModal, setSystemModal] = useState<"create" | GoalSystem | null>(null);
   const [processModal, setProcessModal] = useState<"create" | GoalProcess | null>(null);
   const [entitySaving, setEntitySaving] = useState(false);
   const [entityError, setEntityError] = useState<string | null>(null);
@@ -888,25 +750,6 @@ function GoalDetailPage({
     onChanged("Current milestone updated");
   };
 
-  const saveSystems = async (systems: GoalSystem[], message: string) => {
-    setEntitySaving(true);
-    setEntityError(null);
-    try {
-      if (!live) {
-        onChanged(`${message} · demo mode`);
-        setSystemModal(null);
-        return;
-      }
-      await updateGoal(goal.id, { systems });
-      onChanged(message);
-      setSystemModal(null);
-    } catch {
-      setEntityError("Could not save this system.");
-    } finally {
-      setEntitySaving(false);
-    }
-  };
-
   const saveProcesses = async (processes: GoalProcess[], message: string) => {
     setEntitySaving(true);
     setEntityError(null);
@@ -958,14 +801,6 @@ function GoalDetailPage({
           onAddWeekTask(linked[0]!.id, title);
         }}
         onCreateProject={() => setCreatingProject(true)}
-        onAddSystem={() => { setEntityError(null); setSystemModal("create"); }}
-        onEditSystem={(systemId) => {
-          const system = (goal.systems ?? []).find((item) => item.id === systemId);
-          if (system) {
-            setEntityError(null);
-            setSystemModal(system);
-          }
-        }}
         onAddProcess={() => { setEntityError(null); setProcessModal("create"); }}
         onEditProcess={(processId) => {
           const process = (goal.processes ?? []).find((item) => item.id === processId);
@@ -975,38 +810,6 @@ function GoalDetailPage({
           }
         }}
       />
-
-      {systemModal && (
-        <SystemEditorModal
-          system={systemModal === "create" ? null : systemModal}
-          saving={entitySaving}
-          error={entityError}
-          onClose={() => { if (!entitySaving) setSystemModal(null); }}
-          onSave={async (next) => {
-            const existing = goal.systems ?? [];
-            const systems = systemModal === "create"
-              ? [...existing, next]
-              : existing.map((item) => (item.id === next.id ? next : item));
-            await saveSystems(systems, systemModal === "create" ? "System added" : "System updated");
-          }}
-          onPauseResume={systemModal === "create" ? undefined : async (system) => {
-            const systems = (goal.systems ?? []).map((item) => item.id === system.id
-              ? { ...item, status: item.status === "PAUSED" ? "ACTIVE" as const : "PAUSED" as const }
-              : item);
-            await saveSystems(systems, "System status updated");
-          }}
-          onComplete={systemModal === "create" ? undefined : async (system) => {
-            const systems = (goal.systems ?? []).map((item) => item.id === system.id
-              ? { ...item, status: "COMPLETED" as const }
-              : item);
-            await saveSystems(systems, "System completed");
-          }}
-          onDelete={systemModal === "create" ? undefined : async (system) => {
-            const systems = (goal.systems ?? []).filter((item) => item.id !== system.id);
-            await saveSystems(systems, "System removed");
-          }}
-        />
-      )}
 
       {processModal && (
         <ProcessEditorModal
@@ -1357,6 +1160,7 @@ function ProjectEditorModal({
 }) {
   const [title, setTitle] = useState(project?.title ?? "");
   const [goalId, setGoalId] = useState<string | "">(project?.goalId ?? prefillGoalId ?? "");
+  const [projectType, setProjectType] = useState<ApiProjectType>(project?.projectType === "HABIT" ? "HABIT" : "STANDARD");
   const [color, setColor] = useState(project?.color ?? "#705CF6");
   const [description, setDescription] = useState(project?.description ?? "");
   const [targetDate, setTargetDate] = useState(project?.targetDate ?? "");
@@ -1380,6 +1184,7 @@ function ProjectEditorModal({
     const payload = {
       title: title.trim(),
       goalId: goalId || null,
+      projectType,
       color,
       description: description.trim(),
       targetDate: targetDate || null,
@@ -1424,7 +1229,7 @@ function ProjectEditorModal({
         onSubmit={submit}
       >
         <div className="pos-qa-header">
-          <span className="pos-qa-eyebrow">{project ? "Edit project" : "New project"}</span>
+          <span className="pos-qa-eyebrow">{project ? (projectType === "HABIT" ? "Edit habit" : "Edit project") : (projectType === "HABIT" ? "New habit" : "New project")}</span>
           <button type="button" className="pos-qa-close" onClick={onClose} aria-label="Close" disabled={saving}>
             <X size={16} />
           </button>
@@ -1434,6 +1239,16 @@ function ProjectEditorModal({
             <span className="pos-qa-field-label">Project name</span>
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="IELTS Writing Improvement" autoFocus disabled={saving} />
           </label>
+          <div className="pos-qa-field">
+            <span className="pos-qa-field-label">Type</span>
+            <div className="pos-qa-for-tabs" role="group" aria-label="Project type">
+              <button type="button" className={projectType === "STANDARD" ? "active" : undefined} onClick={() => setProjectType("STANDARD")} disabled={saving}>Project</button>
+              <button type="button" className={projectType === "HABIT" ? "active" : undefined} onClick={() => setProjectType("HABIT")} disabled={saving}>Habit</button>
+            </div>
+            {projectType === "HABIT" ? (
+              <p className="pos-qa-for-hint">Habit projects hold repeated behavior — creating one does not spawn tasks.</p>
+            ) : null}
+          </div>
           <label className="pos-qa-field">
             <span className="pos-qa-field-label">Goal</span>
             <select value={goalId} onChange={(e) => setGoalId(e.target.value)} disabled={saving}>
@@ -1468,7 +1283,7 @@ function ProjectEditorModal({
           <div className="pos-entity-form-primary">
             <button type="button" className="pos-btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
             <button type="submit" className="pos-btn-primary" disabled={saving}>
-              {saving ? "Saving…" : project ? "Save changes" : "Add Project"}
+              {saving ? "Saving…" : project ? "Save changes" : projectType === "HABIT" ? "Add Habit" : "Add Project"}
             </button>
           </div>
         </div>

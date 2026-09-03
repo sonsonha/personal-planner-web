@@ -185,17 +185,6 @@ export function GoalStructureReview({
           </section>
 
           <section className="gp-ai-section">
-            <div className="gp-ai-section-head"><h4>Systems</h4><button type="button" className="pos-btn-ghost" onClick={() => update({ systems: [...(suggestion.systems ?? []), { title: "New system", targetType: "COUNT", targetValue: 1, unit: "sessions", period: "WEEK", durationWeeks: 4 }] })}>+ Add</button></div>
-            {(suggestion.systems ?? []).map((system, index) => (
-              <div key={`s-${index}`} className="gp-ai-card">
-                <input value={system.title} onChange={(e) => { const systems = [...(suggestion.systems ?? [])]; systems[index] = { ...system, title: e.target.value }; update({ systems }); }} />
-                <div className="gp-ai-row"><label>Target / week<input type="number" value={system.targetValue} onChange={(e) => { const systems = [...(suggestion.systems ?? [])]; systems[index] = { ...system, targetValue: Number(e.target.value) || 0 }; update({ systems }); }} /></label><label>Duration (weeks)<input type="number" value={system.durationWeeks} onChange={(e) => { const systems = [...(suggestion.systems ?? [])]; systems[index] = { ...system, durationWeeks: Number(e.target.value) || 1 }; update({ systems }); }} /></label></div>
-                <button type="button" className="pos-btn-ghost" onClick={() => update({ systems: (suggestion.systems ?? []).filter((_, i) => i !== index) })}>Remove</button>
-              </div>
-            ))}
-          </section>
-
-          <section className="gp-ai-section">
             <div className="gp-ai-section-head">
               <h4>Milestones</h4>
               <button
@@ -235,7 +224,7 @@ export function GoalStructureReview({
 
           <section className="gp-ai-section">
             <div className="gp-ai-section-head">
-              <h4>Systems / Processes</h4>
+              <h4>Processes</h4>
               <button
                 type="button"
                 className="pos-btn-ghost"
@@ -322,7 +311,12 @@ export function GoalStructureReview({
                   update({
                     projects: [
                       ...suggestion.projects,
-                      { title: "New project", purpose: "", suggestedDefaultProcessName: null },
+                      {
+                        title: "New project",
+                        purpose: "",
+                        projectType: "STANDARD",
+                        suggestedDefaultProcessName: null,
+                      },
                     ],
                   })
                 }
@@ -340,6 +334,28 @@ export function GoalStructureReview({
                     update({ projects });
                   }}
                 />
+                <div className="gp-ai-row">
+                  <label>
+                    Type
+                    <select
+                      value={project.projectType === "HABIT" ? "HABIT" : "STANDARD"}
+                      onChange={(e) => {
+                        const projects = [...suggestion.projects];
+                        projects[index] = {
+                          ...project,
+                          projectType: e.target.value === "HABIT" ? "HABIT" : "STANDARD",
+                        };
+                        update({ projects });
+                      }}
+                    >
+                      <option value="STANDARD">Project</option>
+                      <option value="HABIT">Habit</option>
+                    </select>
+                  </label>
+                </div>
+                {project.projectType === "HABIT" ? (
+                  <p className="gp-ai-meta">Habit — creates the project only (0 tasks).</p>
+                ) : null}
                 <textarea
                   value={project.purpose ?? ""}
                   placeholder="Purpose"

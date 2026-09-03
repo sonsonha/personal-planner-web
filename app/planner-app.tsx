@@ -46,6 +46,8 @@ import {
   resolveOverlapLayout,
 } from "@/components/planner/calendar";
 import {
+  carryOverSession,
+  completeSession,
   createTask as createPlannerTask,
   createTimeBlock as createPlannerTimeBlock,
   deleteTask as deletePlannerTask,
@@ -55,10 +57,13 @@ import {
   fetchTaskTimeBlocks,
   getGoogleAuthUrl,
   PlannerApiError,
+  repeatSession,
+  repeatTask,
   updateTask,
   updateTimeBlock,
   syncGoogleCalendar,
   disconnectGoogleCalendar,
+  type ApiSeriesScope,
   type CalendarSyncSummary,
   type ApiExternalEvent,
   type ApiGoal,
@@ -66,6 +71,14 @@ import {
   type ApiTask,
   type ApiTimeBlock,
 } from "@/lib/planner-api";
+import { SeriesScopeModal } from "@/components/planner/SeriesScopeModal";
+import {
+  deriveTaskProgressFromSessions,
+  directTaskCompletePolicy,
+  formatSessionProgressLabel,
+  isSessionDone,
+} from "@/lib/session-evidence";
+import { startOfProductWeek } from "@/lib/product-week";
 import { GoalsWorkspace, ProgressWorkspace, ProjectsWorkspace, type HorizonScope } from "./planner-workspaces";
 import { parsePlannerPath, plannerPath, type PlannerSection } from "./planner-routes";
 import { aggregateTaskSchedule, formatScheduledMinutes, remainingSessionsAfterRemove } from "@/lib/task-schedule";
@@ -90,6 +103,9 @@ type PlannerTask = {
   dueHorizon?: "day" | "week" | "month" | null;
   completedAt?: string | null;
   updatedAt?: string | null;
+  repeatSeriesId?: string | null;
+  carryOverFromTaskId?: string | null;
+  carryOverNote?: string | null;
 };
 
 type CalendarBlock = {
@@ -106,6 +122,17 @@ type CalendarBlock = {
   syncStatus?: "PENDING" | "SYNCED" | "FAILED";
   startAt?: string;
   allDay?: boolean;
+  notes?: string | null;
+  status?: "PLANNED" | "DONE" | string | null;
+  completedAt?: string | null;
+  repeatSeriesId?: string | null;
+};
+
+type BlockClipboard = {
+  taskId: string;
+  title: string;
+  duration: number;
+  notes: string;
 };
 
 type ProjectOption = {
@@ -578,6 +605,9 @@ function taskFromApi(task: ApiTask, projects: ProjectOption[]): PlannerTask {
     due: dueLabel(task.dueAt, dueHorizonFromApi(task.dueHorizon, task.dueAt)),
     completedAt: task.completedAt ?? null,
     updatedAt: task.updatedAt ?? null,
+    repeatSeriesId: task.repeatSeriesId ?? null,
+    carryOverFromTaskId: task.carryOverFromTaskId ?? null,
+    carryOverNote: task.carryOverNote ?? null,
   };
 }
 
@@ -602,6 +632,10 @@ function timeBlockFromApi(
     meta: project?.title ?? "Personal Planner",
     syncStatus: block.syncStatus,
     startAt: block.startAt,
+    notes: block.notes ?? "",
+    status: block.status ?? "PLANNED",
+    completedAt: block.completedAt ?? null,
+    repeatSeriesId: block.repeatSeriesId ?? null,
   };
 }
 
@@ -831,6 +865,13 @@ export function PlannerApp({
   const [blockPopover, setBlockPopover] = useState<{
     blockId: string;
     rect: DOMRect;
+  } | null>(null);
+  const [blockClipboard, setBlockClipboard] = useState<BlockClipboard | null>(null);
+  const [pasteFocus, setPasteFocus] = useState<{ day: number; start: number } | null>(null);
+  const [seriesScopePrompt, setSeriesScopePrompt] = useState<{
+    kind: "task" | "session";
+    id: string;
+    payload: Record<string, unknown>;
   } | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [aiContextOpen, setAiContextOpen] = useState(false);
@@ -1140,6 +1181,108 @@ export function PlannerApp({
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  useEffect(() => {
+    if (activeSection !== "calendar") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || target?.isContentEditable) return;
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod) return;
+
+      if (event.key.toLowerCase() === "c") {
+        const selected = blockPopover
+          ? blocks.find((block) => block.id === blockPopover.blockId)
+          : null;
+        if (!selected || selected.type !== "task" || !selected.taskId) return;
+        event.preventDefault();
+        setBlockClipboard({
+          taskId: selected.taskId,
+          title: selected.title,
+          duration: selected.duration,
+          notes: selected.notes ?? "",
+        });
+        showToast("Session template copied");
+        return;
+      }
+
+      if (event.key.toLowerCase() === "v") {
+        if (!blockClipboard) return;
+        event.preventDefault();
+        const task = tasks.find((item) => item.id === blockClipboard.taskId);
+        if (!task || task.status === "done") {
+          showToast("Copied task is missing or already done", "warning");
+          return;
+        }
+        const day = pasteFocus?.day
+          ?? (view === "day" ? activeDay : (isCurrentWeek ? nowDay : 0));
+        const start = pasteFocus?.start
+          ?? Math.max(START_HOUR * 60, Math.min(END_HOUR * 60 - blockClipboard.duration, nowMinute));
+        const pendingId = `pending-${crypto.randomUUID()}`;
+        const block: CalendarBlock = {
+          id: pendingId,
+          title: blockClipboard.title || task.title,
+          day,
+          start,
+          duration: blockClipboard.duration,
+          color: priorityColor(task.priority),
+          type: "task",
+          taskId: task.id,
+          projectId: task.projectId,
+          meta: task.project,
+          syncStatus: "PENDING",
+          notes: blockClipboard.notes,
+          status: "PLANNED",
+        };
+        setBlocks((current) => [...current, block]);
+        setTasks((current) => current.map((item) =>
+          item.id === task.id && item.status === "inbox"
+            ? { ...item, status: "scheduled" }
+            : item,
+        ));
+        showToast(liveDataRef.current ? "Pasting session…" : "Session pasted · demo mode");
+        if (!liveDataRef.current) return;
+        const startAt = slotDate(weekStart, day, start);
+        const endAt = new Date(startAt.getTime() + blockClipboard.duration * 60_000);
+        void (async () => {
+          try {
+            const saved = await createPlannerTimeBlock({
+              taskId: task.id,
+              projectId: task.projectId,
+              title: blockClipboard.title || task.title,
+              startAt: startAt.toISOString(),
+              endAt: endAt.toISOString(),
+              color: priorityColor(task.priority),
+              notes: blockClipboard.notes || undefined,
+            });
+            const mapped = timeBlockFromApi(saved, weekStart, projects);
+            setBlocks((current) => current.map((item) => item.id === pendingId ? mapped : item));
+            showToast("Session pasted for the same task");
+          } catch {
+            setBlocks((current) => current.filter((item) => item.id !== pendingId));
+            showToast("Could not paste session", "warning");
+          }
+        })();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    activeSection,
+    blockPopover,
+    blocks,
+    blockClipboard,
+    pasteFocus,
+    tasks,
+    view,
+    activeDay,
+    isCurrentWeek,
+    nowDay,
+    nowMinute,
+    weekStart,
+    projects,
+  ]);
+
   const rangeReferenceStart = view === "month" ? monthGridDays(monthAnchor)[0]! : weekStart;
   const isTaskBlockOnDate = (taskId: string, date: Date) =>
     blocks.some((block) =>
@@ -1370,6 +1513,19 @@ export function PlannerApp({
 
   const completeTask = async (taskId: string) => {
     const previousTasks = tasks;
+    const taskBlocks = blocks.filter((block) => block.type === "task" && block.taskId === taskId);
+    const policy = directTaskCompletePolicy(
+      taskBlocks.map((block) => ({ id: block.id, status: block.status ?? "PLANNED" })),
+    );
+    if (!policy.allow) {
+      showToast(
+        policy.reason === "ZERO_SESSIONS"
+          ? "Schedule a session before marking this task done"
+          : "Mark each session done on the Calendar",
+        "warning",
+      );
+      return;
+    }
     setTasks((current) =>
       current.map((task) => (task.id === taskId ? {
         ...task,
@@ -1377,6 +1533,13 @@ export function PlannerApp({
         completedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       } : task)),
+    );
+    setBlocks((current) =>
+      current.map((block) =>
+        block.type === "task" && block.taskId === taskId
+          ? { ...block, status: "DONE", completedAt: new Date().toISOString() }
+          : block,
+      ),
     );
     setTaskFilter("today");
     setToast(liveDataRef.current ? "Marking task done…" : "Task done · demo mode");
@@ -1512,7 +1675,23 @@ export function PlannerApp({
       if (!liveDataRef.current) return;
       const startAt = slotDate(weekStart, day, start);
       const endAt = new Date(startAt.getTime() + previous.duration * 60_000);
+      const sourceWeek = previous.startAt
+        ? startOfProductWeek(new Date(previous.startAt)).getTime()
+        : startOfProductWeek(slotDate(weekStart, previous.day, previous.start)).getTime();
+      const targetWeek = startOfProductWeek(startAt).getTime();
+      const crossWeek = sourceWeek !== targetWeek;
+      const shouldCarryOver = crossWeek
+        && !previous.repeatSeriesId
+        && !isSessionDone(previous.status)
+        && Boolean(previous.taskId);
       try {
+        if (shouldCarryOver) {
+          const result = await carryOverSession(previous.id, startAt.toISOString());
+          setReloadKey((value) => value + 1);
+          setToast("Session carried over to a new task for that week");
+          void result;
+          return;
+        }
         const saved = await updateTimeBlock(previous.id, {
           startAt: startAt.toISOString(),
           endAt: endAt.toISOString(),
@@ -1640,6 +1819,7 @@ export function PlannerApp({
     priority: TaskPriority = "p2",
     scope: HorizonScope | null = captureScope,
     when: Date = taskAnchor,
+    repeatWeeks: number | null = null,
   ): Promise<PlannerTask | null> => {
     const project = projects.find((item) => item.id === projectId) ?? projects.at(-1)!;
     const inheritedGoalId = project.goalId ?? null;
@@ -1699,7 +1879,17 @@ export function PlannerApp({
         dueHorizon,
         due: dueLabel(mapped.dueAt, dueHorizon),
       } : item));
-      setToast(`Task saved to ${savedWhere}`);
+      if (repeatWeeks && period.dueHorizon === "week") {
+        try {
+          await repeatTask(saved.id, { weeks: repeatWeeks });
+          setReloadKey((value) => value + 1);
+          setToast(`Task saved to ${savedWhere} · repeated ${repeatWeeks} weeks`);
+        } catch {
+          setToast(`Task saved to ${savedWhere} · repeat failed`);
+        }
+      } else {
+        setToast(`Task saved to ${savedWhere}`);
+      }
       return mapped;
     } catch {
       setTasks((current) => current.filter((item) => item.id !== task.id));
@@ -2197,6 +2387,7 @@ export function PlannerApp({
                       if (event.button !== 0) return;
                       const rect = event.currentTarget.getBoundingClientRect();
                       const start = slotMinutesFromClick(event.clientY, rect);
+                      setPasteFocus({ day: dayIndex, start });
                       setSlotPicker({ day: dayIndex, start });
                     }}
                     onDragOver={(event) => {
@@ -2212,17 +2403,22 @@ export function PlannerApp({
                     )}
                     {laidOut.map((block) => {
                       const geometry = overlapGeometry(block.col, block.numCols);
+                      const sessionDone = isSessionDone(block.status);
+                      const taskDone = Boolean(block.taskId && doneTaskIds.has(block.taskId));
                       return (
                         <CalendarEvent
                           key={block.id}
                           block={block}
-                          done={Boolean(block.taskId && doneTaskIds.has(block.taskId))}
+                          done={sessionDone || taskDone}
                           layout={geometry}
                           selected={blockPopover?.blockId === block.id}
                           onDragStart={onDragStart}
                           onOpenTask={setEditingTaskId}
                           onResize={onResizeBlock}
-                          onSelect={(rect) => setBlockPopover({ blockId: block.id, rect })}
+                          onSelect={(rect) => {
+                            setPasteFocus({ day: block.day, start: block.start });
+                            setBlockPopover({ blockId: block.id, rect });
+                          }}
                         />
                       );
                     })}
@@ -2401,7 +2597,8 @@ export function PlannerApp({
       {blockPopover && (() => {
         const popBlock = blocks.find((block) => block.id === blockPopover.blockId);
         if (!popBlock) return null;
-        const done = Boolean(popBlock.taskId && doneTaskIds.has(popBlock.taskId));
+        const sessionDone = isSessionDone(popBlock.status);
+        const taskDone = Boolean(popBlock.taskId && doneTaskIds.has(popBlock.taskId));
         if (popBlock.type === "external") {
           return (
             <GoogleEventPopover
@@ -2414,11 +2611,70 @@ export function PlannerApp({
         return (
           <PersonalOsBlockPopover
             block={popBlock}
-            done={done}
+            sessionDone={sessionDone}
+            taskDone={taskDone}
             anchor={blockPopover.rect}
             onClose={() => setBlockPopover(null)}
-            onRestore={() => {
-              if (popBlock.taskId) void restoreTask(popBlock.taskId);
+            onToggleSessionDone={(done) => {
+              void (async () => {
+                if (!liveDataRef.current) {
+                  setBlocks((current) => current.map((block) =>
+                    block.id === popBlock.id
+                      ? { ...block, status: done ? "DONE" : "PLANNED", completedAt: done ? new Date().toISOString() : null }
+                      : block,
+                  ));
+                  showToast(done ? "Session marked done · demo mode" : "Session reopened · demo mode");
+                  return;
+                }
+                try {
+                  const saved = await completeSession(popBlock.id, done);
+                  const mapped = timeBlockFromApi(saved, weekStart, projects);
+                  setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
+                  setEvidenceEpoch((value) => value + 1);
+                  setReloadKey((value) => value + 1);
+                  showToast(done ? "Session marked done" : "Session marked incomplete");
+                } catch {
+                  showToast("Could not update session", "warning");
+                }
+              })();
+            }}
+            onSaveNotes={(notes) => {
+              void (async () => {
+                setBlocks((current) => current.map((block) =>
+                  block.id === popBlock.id ? { ...block, notes } : block,
+                ));
+                if (!liveDataRef.current) return;
+                if (popBlock.repeatSeriesId) {
+                  setSeriesScopePrompt({
+                    kind: "session",
+                    id: popBlock.id,
+                    payload: { notes },
+                  });
+                  return;
+                }
+                try {
+                  const saved = await updateTimeBlock(popBlock.id, { notes });
+                  const mapped = timeBlockFromApi(saved, weekStart, projects);
+                  setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
+                } catch {
+                  showToast("Could not save session note", "warning");
+                }
+              })();
+            }}
+            onRepeatSession={popBlock.repeatSeriesId ? undefined : (weeks) => {
+              void (async () => {
+                if (!liveDataRef.current) {
+                  showToast(`Repeat session · ${weeks} weeks · demo mode`);
+                  return;
+                }
+                try {
+                  await repeatSession(popBlock.id, { weeks });
+                  setReloadKey((value) => value + 1);
+                  showToast(`Session repeated for ${weeks} weeks`);
+                } catch {
+                  showToast("Could not repeat session", "warning");
+                }
+              })();
             }}
             onOpenTask={() => {
               if (popBlock.taskId) setEditingTaskId(popBlock.taskId);
@@ -2434,6 +2690,34 @@ export function PlannerApp({
           />
         );
       })()}
+
+      {seriesScopePrompt && (
+        <SeriesScopeModal
+          entityLabel={seriesScopePrompt.kind === "task" ? "task" : "session"}
+          onClose={() => setSeriesScopePrompt(null)}
+          onChoose={(scope: ApiSeriesScope) => {
+            const prompt = seriesScopePrompt;
+            setSeriesScopePrompt(null);
+            void (async () => {
+              if (!liveDataRef.current) {
+                showToast("Series edit · demo mode");
+                return;
+              }
+              try {
+                if (prompt.kind === "task") {
+                  await updateTask(prompt.id, { ...prompt.payload, seriesScope: scope });
+                } else {
+                  await updateTimeBlock(prompt.id, { ...prompt.payload, seriesScope: scope });
+                }
+                setReloadKey((value) => value + 1);
+                showToast(scope === "THIS_AND_FUTURE" ? "Updated this and future" : "Updated this instance only");
+              } catch {
+                showToast("Could not apply series edit", "warning");
+              }
+            })();
+          }}
+        />
+      )}
 
       {toast && (
         <div className={`toast ${toastKind === "warning" ? "warning" : ""}`} role="status">
@@ -3174,6 +3458,13 @@ function TasksWorkspace({
     if (task.status === "done") {
       return block ? scheduleLabel(block) : "Done";
     }
+    const taskBlocks = blocks.filter((candidate) => candidate.type === "task" && candidate.taskId === task.id);
+    if ((horizon === "week" || horizon === "month") && taskBlocks.length > 0) {
+      const progress = deriveTaskProgressFromSessions(
+        taskBlocks.map((item) => ({ id: item.id, status: item.status ?? "PLANNED" })),
+      );
+      return formatSessionProgressLabel(progress);
+    }
     const aggregate = aggregateTaskSchedule(task.id, blocks.filter((candidate) => candidate.type === "task"));
     if ((horizon === "week" || horizon === "month") && aggregate.sessionCount > 0) {
       return `${aggregate.sessionCount} session${aggregate.sessionCount === 1 ? "" : "s"} · ${formatScheduledMinutes(aggregate.totalScheduledMinutes)} scheduled`;
@@ -3315,7 +3606,20 @@ function TaskEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [repeatWeeks, setRepeatWeeks] = useState("8");
+  const [pendingSeriesSave, setPendingSeriesSave] = useState<{ schedule: boolean } | null>(null);
   const scheduledBlock = taskBlocks[0];
+  const sessionProgress = deriveTaskProgressFromSessions(
+    taskBlocks.map((block) => ({ id: block.id, status: block.status ?? "PLANNED" })),
+  );
+  const completePolicyRaw = directTaskCompletePolicy(
+    taskBlocks.map((block) => ({ id: block.id, status: block.status ?? "PLANNED" })),
+  );
+  const completePolicy = completePolicyRaw.allow
+    ? "allow" as const
+    : completePolicyRaw.reason === "ZERO_SESSIONS"
+      ? "zero" as const
+      : "multi" as const;
   const selectedProject = projects.find((project) => project.id === projectId);
   const effectiveGoalId = goalId ?? selectedProject?.goalId ?? null;
   const selectedGoal = goals.find((goal) => goal.id === effectiveGoalId);
@@ -3374,15 +3678,7 @@ function TaskEditor({
     priority: priorityToApi(priority),
   });
 
-  const saveTask = async (schedule: boolean) => {
-    if (!title.trim()) {
-      setError("Task title cannot be empty.");
-      return;
-    }
-    if (schedule && (!scheduleDate || !scheduleTime)) {
-      setError("Choose a date and time before scheduling.");
-      return;
-    }
+  const persistTask = async (schedule: boolean, seriesScope?: ApiSeriesScope) => {
     setSaving(true);
     setError(null);
     if (!live) {
@@ -3391,7 +3687,11 @@ function TaskEditor({
     }
     try {
       const startAt = schedule ? scheduleStart(scheduleDate, scheduleTime) : undefined;
-      await updateTask(task.id, taskPayload());
+      const payload = {
+        ...taskPayload(),
+        ...(seriesScope ? { seriesScope } : {}),
+      };
+      await updateTask(task.id, payload);
       if (startAt) {
         const endAt = new Date(startAt.getTime() + sessionDuration * 60_000);
         await createPlannerTimeBlock({ taskId: task.id, projectId, title: title.trim(), color: priorityColor(priority), startAt: startAt.toISOString(), endAt: endAt.toISOString() });
@@ -3402,6 +3702,39 @@ function TaskEditor({
     } catch {
       setSaving(false);
       setError("Could not save these changes. Please try again.");
+    }
+  };
+
+  const saveTask = async (schedule: boolean) => {
+    if (!title.trim()) {
+      setError("Task title cannot be empty.");
+      return;
+    }
+    if (schedule && (!scheduleDate || !scheduleTime)) {
+      setError("Choose a date and time before scheduling.");
+      return;
+    }
+    if (task.repeatSeriesId && !schedule) {
+      setPendingSeriesSave({ schedule });
+      return;
+    }
+    await persistTask(schedule);
+  };
+
+  const runRepeatTask = async () => {
+    const weeks = Math.max(1, Math.min(52, Number(repeatWeeks) || 8));
+    setSaving(true);
+    setError(null);
+    if (!live) {
+      onChanged(`Repeat task · ${weeks} weeks · demo mode`);
+      return;
+    }
+    try {
+      await repeatTask(task.id, { weeks });
+      onChanged(`Task repeated for ${weeks} weeks`);
+    } catch {
+      setSaving(false);
+      setError("Could not repeat this task.");
     }
   };
 
@@ -3465,6 +3798,7 @@ function TaskEditor({
   }));
 
   return (
+    <>
     <TaskEditorView
       title={title}
       onTitleChange={setTitle}
@@ -3474,6 +3808,12 @@ function TaskEditor({
       scheduled={taskBlocks.length > 0}
       scheduleDisplay={scheduleDisplay}
       workSessions={taskBlocks}
+      sessionProgressLabel={formatSessionProgressLabel(sessionProgress)}
+      completePolicy={completePolicy}
+      showRepeatTask={!task.repeatSeriesId}
+      repeatWeeks={repeatWeeks}
+      onRepeatWeeksChange={setRepeatWeeks}
+      onRepeatTask={() => { void runRepeatTask(); }}
       projectId={projectId}
       onProjectChange={(nextProjectId) => {
         const nextProject = projects.find((project) => project.id === nextProjectId);
@@ -3522,7 +3862,7 @@ function TaskEditor({
       saving={saving}
       error={error}
       confirmDelete={confirmDelete}
-      onComplete={onComplete}
+      onComplete={completePolicy === "allow" ? onComplete : undefined}
       onRestore={onRestore}
       onUnschedule={scheduledBlock ? unscheduleTask : undefined}
       onDelete={removeTask}
@@ -3530,6 +3870,19 @@ function TaskEditor({
       onSchedule={() => saveTask(true)}
       onClose={onClose}
     />
+    {pendingSeriesSave && (
+      <SeriesScopeModal
+        entityLabel="task"
+        saving={saving}
+        onClose={() => setPendingSeriesSave(null)}
+        onChoose={(scope) => {
+          const pending = pendingSeriesSave;
+          setPendingSeriesSave(null);
+          void persistTask(pending.schedule, scope);
+        }}
+      />
+    )}
+    </>
   );
 }
 
@@ -3551,6 +3904,7 @@ function QuickAdd({
     priority: TaskPriority,
     scope: HorizonScope | null,
     when: Date,
+    repeatWeeks?: number | null,
   ) => void;
 }) {
   const defaultHorizon: Exclude<HorizonScope, "all"> =
@@ -3561,6 +3915,8 @@ function QuickAdd({
   const [priority, setPriority] = useState<TaskPriority>("p2");
   const [horizon, setHorizon] = useState<Exclude<HorizonScope, "all">>(defaultHorizon);
   const [when, setWhen] = useState(() => startOfDay(anchor));
+  const [repeatWeekly, setRepeatWeekly] = useState(false);
+  const [repeatWeeks, setRepeatWeeks] = useState("8");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -3568,7 +3924,10 @@ function QuickAdd({
     if (!title.trim() || saving) return;
     setSaving(true);
     setError(null);
-    onAdd(title.trim(), duration, projectId, priority, horizon, when);
+    const weeks = horizon === "week" && repeatWeekly
+      ? Math.max(1, Math.min(52, Number(repeatWeeks) || 8))
+      : null;
+    onAdd(title.trim(), duration, projectId, priority, horizon, when, weeks);
   };
 
   return (
@@ -3586,6 +3945,10 @@ function QuickAdd({
       onPriorityChange={setPriority}
       periodControl={<PeriodFields horizon={horizon} value={when} onChange={setWhen} />}
       contextHint={captureHint(horizon, when)}
+      repeatWeekly={repeatWeekly}
+      onRepeatWeeklyChange={setRepeatWeekly}
+      repeatWeeks={repeatWeeks}
+      onRepeatWeeksChange={setRepeatWeeks}
       saving={saving}
       error={error}
       onSubmit={submit}

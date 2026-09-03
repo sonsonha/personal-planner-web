@@ -21,6 +21,8 @@ export type TaskRowProps = {
   horizonLabel: string | null;
   onOpen: () => void;
   onToggleComplete: () => void;
+  /** When false, incomplete multi/zero-session Tasks cannot use the check control. */
+  completeEnabled?: boolean;
 };
 
 export function TaskRow({
@@ -32,6 +34,7 @@ export function TaskRow({
   horizonLabel,
   onOpen,
   onToggleComplete,
+  completeEnabled = true,
 }: TaskRowProps) {
   const priority = priorityMeta(task.priority);
   const done = task.status === "done";
@@ -51,8 +54,15 @@ export function TaskRow({
         type="button"
         className={cn("pos-task-check", done && "done")}
         aria-label={done ? `Restore ${task.title}` : `Complete ${task.title}`}
+        disabled={!done && !completeEnabled}
+        title={
+          !done && !completeEnabled
+            ? "Complete sessions on the Calendar"
+            : undefined
+        }
         onClick={(event) => {
           event.stopPropagation();
+          if (!done && !completeEnabled) return;
           onToggleComplete();
         }}
       >

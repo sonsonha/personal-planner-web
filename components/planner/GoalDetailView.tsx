@@ -9,10 +9,6 @@ import {
 import { formatProcessValue } from "@/lib/goal-progress-display";
 import { inProductWeek, startOfProductWeek } from "@/lib/product-week";
 import {
-  formatSystemPreferredDays,
-  formatSystemTarget,
-} from "./SystemEditorModal";
-import {
   ArrowLink,
   BackButton,
   CalendarStrip,
@@ -158,8 +154,6 @@ export type GoalDetailViewProps = {
   onSetMilestone: (id: string) => void;
   onAddWeekWork: (title: string) => void;
   onCreateProject: () => void;
-  onAddSystem: () => void;
-  onEditSystem: (systemId: string) => void;
   onAddProcess: () => void;
   onEditProcess: (processId: string) => void;
 };
@@ -185,8 +179,6 @@ export function GoalDetailView({
   onSetMilestone,
   onAddWeekWork,
   onCreateProject,
-  onAddSystem,
-  onEditSystem,
   onAddProcess,
   onEditProcess,
 }: GoalDetailViewProps) {
@@ -201,7 +193,6 @@ export function GoalDetailView({
   const milestones = goal.milestones ?? [];
   const processes = progress?.progress.processes ?? [];
   const goalProcesses = goal.processes ?? [];
-  const goalSystems = goal.systems ?? [];
   const consistency = progress?.progress.consistency;
   const currentIdx = Math.max(0, milestones.findIndex((m) => m.status === "current"));
   const weekLabel = weekRangeLabel(now);
@@ -341,7 +332,7 @@ export function GoalDetailView({
               {loadingProgress ? (
                 <p className="pos-muted">Loading evidence…</p>
               ) : processes.length === 0 ? (
-                <EmptyState title="No recurring system yet." sub="Add a process to measure weekly behavior." />
+                <EmptyState title="No process yet." sub="Add a process to measure weekly behavior." />
               ) : (
                 <div className="pos-process-grid">
                   {processes.map((proc, index) => (
@@ -410,7 +401,12 @@ export function GoalDetailView({
                       >
                         <div className="pos-project-card-top">
                           <div>
-                            <strong>{project.title}</strong>
+                            <strong>
+                              {project.title}
+                              {project.projectType === "HABIT" ? (
+                                <em className="pos-habit-badge">Habit</em>
+                              ) : null}
+                            </strong>
                             {process && <span>{process.name}</span>}
                           </div>
                         </div>
@@ -526,57 +522,6 @@ export function GoalDetailView({
                   Add
                 </button>
               </div>
-            </div>
-
-            <div className="pos-side-card">
-              <div className="pos-side-card-label">Systems</div>
-              <p className="pos-side-card-hint">Repeated behavior to maintain for N weeks.</p>
-              {goalSystems.length === 0 ? (
-                <p className="pos-muted">No systems yet. Add a repeated behavior you want to maintain for a period of time.</p>
-              ) : (
-                <ul className="pos-systems-list pos-systems-overview">
-                  {goalSystems.map((system, index) => {
-                    const statusKey = (system.status ?? "ACTIVE").toLowerCase();
-                    const statusLabel =
-                      statusKey === "paused" ? "Paused"
-                        : statusKey === "completed" ? "Completed"
-                          : "Active";
-                    const preferred = [
-                      formatSystemPreferredDays(system.preferredDays),
-                      system.preferredTime || null,
-                    ].filter(Boolean).join(" · ");
-                    return (
-                      <li
-                        key={system.id}
-                        className={statusKey === "completed" ? "is-completed" : statusKey === "paused" ? "is-paused" : undefined}
-                      >
-                        <i style={{ backgroundColor: processAccent(index).color }} />
-                        <div>
-                          <div className="pos-systems-row">
-                            <span>{system.title}</span>
-                            <em className={`pos-system-status ${statusKey}`}>{statusLabel}</em>
-                          </div>
-                          <div className="pos-muted">
-                            {formatSystemTarget(system)}
-                            {system.durationWeeks ? ` · ${system.durationWeeks} weeks` : ""}
-                          </div>
-                          {preferred ? <div className="pos-muted">Preferred · {preferred}</div> : null}
-                          <button
-                            type="button"
-                            className="pos-btn-ghost pos-system-edit"
-                            onClick={() => onEditSystem(system.id)}
-                          >
-                            Edit
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              <button type="button" className="pos-btn-ghost" onClick={onAddSystem}>
-                + Add System
-              </button>
             </div>
 
             <div className="pos-side-card">

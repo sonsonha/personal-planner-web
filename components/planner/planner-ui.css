@@ -4836,3 +4836,117 @@
     width: min(100vw, 100%);
   }
 }
+
+
+/* Habit project badge */
+.pos-habit-badge {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #0f766e;
+  background: #ccfbf1;
+  vertical-align: middle;
+}
+
+.pos-proj-row-title-line .pos-habit-badge {
+  margin-left: 0.35rem;
+}
+
+/* Session evidence in task editor */
+.pos-te-progress {
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
+  color: #334155;
+}
+
+.pos-te-session-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.pos-te-session-list li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.pos-te-session-list li.done .pos-mono {
+  color: #0f766e;
+}
+
+.pos-te-session-check {
+  width: 1rem;
+  text-align: center;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.pos-te-session-list li.done .pos-te-session-check {
+  color: #0f766e;
+}
+
+.pos-te-repeat,
+.pos-qa-repeat,
+.pos-cal-popover-repeat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.pos-te-repeat label,
+.pos-qa-repeat-weeks,
+.pos-cal-popover-repeat label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.pos-te-repeat input,
+.pos-qa-repeat-weeks input,
+.pos-cal-popover-repeat input {
+  width: 3.5rem;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.pos-qa-repeat-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #334155;
+}
+
+.pos-cal-popover-notes {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0 0 0.5rem;
+  padding: 0 2px;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.pos-cal-popover-notes textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 2.6rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+  color: #0f172a;
+}

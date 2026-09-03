@@ -52,7 +52,7 @@ export function processOnTargetSummary(
     const bucket = processBucketForPeriod(item, period);
     return bucket.target > 0 && bucket.completed / bucket.target >= threshold;
   }).length;
-  const noun = processes.length === 1 ? "system" : "systems";
+  const noun = processes.length === 1 ? "process" : "processes";
   const qualifier = period === "week" ? " currently" : "";
   return `${onTarget} of ${processes.length} ${noun}${qualifier} on target`;
 }

@@ -118,7 +118,10 @@ export function ProjectDetailView({
       <div className="pos-proj-detail-scroll">
         <div className="pos-proj-detail-inner">
           <header className="pos-proj-detail-hero">
-            <h1 className="pos-display">{project.title}</h1>
+            <h1 className="pos-display">
+              {project.title}
+              {project.projectType === "HABIT" ? <em className="pos-habit-badge">Habit</em> : null}
+            </h1>
             <div className="pos-proj-detail-meta">
               {goal && <GoalBadge focus={goal.focusType ?? "FOCUS"} />}
               {processThisWeek && (

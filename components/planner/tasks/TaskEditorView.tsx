@@ -29,7 +29,19 @@ export type TaskEditorViewProps = {
   status: TaskStatus;
   scheduled: boolean;
   scheduleDisplay?: string | null;
-  workSessions?: Array<{ id: string; startAt: string; endAt: string }>;
+  workSessions?: Array<{
+    id: string;
+    startAt: string;
+    endAt: string;
+    status?: string | null;
+    notes?: string | null;
+  }>;
+  sessionProgressLabel?: string | null;
+  completePolicy?: "allow" | "zero" | "multi";
+  showRepeatTask?: boolean;
+  repeatWeeks?: string;
+  onRepeatWeeksChange?: (value: string) => void;
+  onRepeatTask?: () => void;
   projectId: string | null;
   onProjectChange: (projectId: string | null) => void;
   projects: TasksProjectOption[];
@@ -80,6 +92,12 @@ export function TaskEditorView({
   scheduled,
   scheduleDisplay,
   workSessions = [],
+  sessionProgressLabel = null,
+  completePolicy = "allow",
+  showRepeatTask = false,
+  repeatWeeks = "8",
+  onRepeatWeeksChange,
+  onRepeatTask,
   projectId,
   onProjectChange,
   projects,
@@ -122,6 +140,7 @@ export function TaskEditorView({
   const selectedGoal = goals.find((goal) => goal.id === goalId);
   const processes = (selectedGoal?.processes ?? []).filter((process) => process.active);
   const statusLabel = status === "done" ? "Completed" : scheduled ? "Scheduled" : "Unscheduled";
+  const canMarkComplete = status !== "done" && completePolicy === "allow" && Boolean(onComplete);
 
   return (
     <div className="pos-te-backdrop">
@@ -148,16 +167,20 @@ export function TaskEditorView({
               >
                 Restore
               </button>
-            ) : (
+            ) : canMarkComplete ? (
               <button
                 type="button"
                 className="pos-te-status-pill complete"
                 onClick={onComplete}
-                disabled={saving || !onComplete}
+                disabled={saving}
               >
                 Mark complete
               </button>
-            )}
+            ) : completePolicy === "zero" ? (
+              <span className="pos-te-schedule-chip unscheduled">Schedule a session to complete</span>
+            ) : completePolicy === "multi" ? (
+              <span className="pos-te-schedule-chip scheduled">Mark sessions done on Calendar</span>
+            ) : null}
             <span className={cn("pos-te-schedule-chip", scheduled ? "scheduled" : "unscheduled")}>
               {statusLabel}
             </span>
@@ -297,18 +320,50 @@ export function TaskEditorView({
             <h3 id="pos-te-calendar" className="pos-te-section-title">
               Work sessions
             </h3>
+            {sessionProgressLabel && (
+              <p className="pos-te-progress pos-mono">{sessionProgressLabel}</p>
+            )}
             {loadingSchedule ? (
               <p className="pos-te-help">Checking schedule…</p>
             ) : workSessions.length ? (
               <div className="pos-te-schedule-display">
-                {workSessions.map((session) => {
-                  const start = new Date(session.startAt);
-                  const end = new Date(session.endAt);
-                  return <p key={session.id} className="pos-mono">{start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}–{end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</p>;
-                })}
-                <p className="pos-te-help">These are calendar sessions for working on this Task. They do not determine whether the Task is complete.</p>
+                <ul className="pos-te-session-list">
+                  {workSessions.map((session) => {
+                    const start = new Date(session.startAt);
+                    const end = new Date(session.endAt);
+                    const done = (session.status ?? "").toUpperCase() === "DONE"
+                      || (session.status ?? "").toUpperCase() === "COMPLETED";
+                    return (
+                      <li key={session.id} className={cn(done && "done")}>
+                        <span className="pos-te-session-check" aria-hidden="true">{done ? "✓" : "○"}</span>
+                        <div>
+                          <p className="pos-mono">
+                            {start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                            {" · "}
+                            {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                            –
+                            {end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                          </p>
+                          {session.notes?.trim() ? (
+                            <p className="pos-te-help">{session.notes.trim()}</p>
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {completePolicy === "multi" && (
+                  <p className="pos-te-help">
+                    Mark each session done on the Calendar. The Task completes when all sessions are done.
+                  </p>
+                )}
+                {completePolicy === "zero" && (
+                  <p className="pos-te-help">Schedule at least one session before marking this Task complete.</p>
+                )}
               </div>
-            ) : <p className="pos-te-help">No work sessions scheduled.</p>}
+            ) : (
+              <p className="pos-te-help">No work sessions scheduled. Add a calendar session to track progress.</p>
+            )}
             <div className="pos-te-schedule-fields">
               <label>
                 <span>Date</span>
@@ -344,6 +399,25 @@ export function TaskEditorView({
               >
                 Unschedule
               </button>
+            )}
+            {showRepeatTask && onRepeatTask && onRepeatWeeksChange && (
+              <div className="pos-te-repeat">
+                <label>
+                  <span>Repeat weekly for</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={52}
+                    value={repeatWeeks}
+                    onChange={(event) => onRepeatWeeksChange(event.target.value)}
+                    disabled={saving}
+                  />
+                  <span>weeks</span>
+                </label>
+                <button type="button" className="pos-btn-ghost" onClick={onRepeatTask} disabled={saving}>
+                  Repeat task
+                </button>
+              </div>
             )}
             <p className="pos-te-help">
               {scheduled

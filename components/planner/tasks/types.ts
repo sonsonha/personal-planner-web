@@ -28,6 +28,9 @@ export type TasksViewBlock = {
   duration: number;
   day?: number;
   syncStatus?: "PENDING" | "SYNCED" | "FAILED";
+  status?: string | null;
+  notes?: string | null;
+  repeatSeriesId?: string | null;
 };
 
 export type TasksProjectOption = {

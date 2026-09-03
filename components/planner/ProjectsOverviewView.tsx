@@ -55,6 +55,7 @@ function ProjectRow({
         <div className="pos-proj-row-title-line">
           <i className="pos-proj-dot" style={{ background: project.color }} />
           <span className="pos-proj-row-title">{project.title}</span>
+          {project.projectType === "HABIT" ? <em className="pos-habit-badge">Habit</em> : null}
         </div>
         <div className="pos-proj-row-meta">
           {goal && <GoalBadge focus={goal.focusType ?? "FOCUS"} size="xs" />}
@@ -236,6 +237,7 @@ export function ProjectsOverviewView({
                       <button type="button" onClick={() => onOpen(project.id)}>
                         <i className="pos-proj-dot" style={{ background: project.color }} />
                         <span>{project.title}</span>
+                        {project.projectType === "HABIT" ? <em className="pos-habit-badge">Habit</em> : null}
                       </button>
                     </li>
                   ))}

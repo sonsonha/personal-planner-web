@@ -4,6 +4,7 @@ import type { ReactNode, RefObject } from "react";
 import { EmptyState } from "../shared";
 import { cn } from "../utils";
 import { groupTasks } from "@/lib/task-groups";
+import { directTaskCompletePolicy } from "@/lib/session-evidence";
 import { TaskRow } from "./TaskRow";
 import type {
   HorizonScope,
@@ -236,6 +237,13 @@ export function TasksWorkspaceView({
               <div className="pos-task-group-list">
                 {group.tasks.map((task) => {
                   const block = blockForTask(task.id, blocks);
+                  const taskBlocks = blocks.filter((candidate) => candidate.taskId === task.id);
+                  const policy = directTaskCompletePolicy(
+                    taskBlocks.map((item) => ({
+                      id: item.id,
+                      status: item.status ?? "PLANNED",
+                    })),
+                  );
                   return (
                     <TaskRow
                       key={task.id}
@@ -246,9 +254,15 @@ export function TasksWorkspaceView({
                       scheduleLabel={getScheduleLabel(task, block)}
                       horizonLabel={getHorizonLabel(task)}
                       onOpen={() => onOpenTask(task.id)}
-                      onToggleComplete={() =>
-                        task.status === "done" ? onRestore(task.id) : onComplete(task.id)
-                      }
+                      completeEnabled={task.status === "done" || policy.allow}
+                      onToggleComplete={() => {
+                        if (task.status === "done") {
+                          onRestore(task.id);
+                          return;
+                        }
+                        if (!policy.allow) return;
+                        onComplete(task.id);
+                      }}
                     />
                   );
                 })}

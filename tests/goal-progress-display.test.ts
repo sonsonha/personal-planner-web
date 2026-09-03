@@ -7,7 +7,7 @@ import {
   processOnTargetSummary,
 } from "../lib/goal-progress-display.ts";
 
-test("processOnTargetSummary counts systems meeting threshold", () => {
+test("processOnTargetSummary counts processes meeting threshold", () => {
   const processes = [
     {
       id: "a",
@@ -31,7 +31,7 @@ test("processOnTargetSummary counts systems meeting threshold", () => {
       allTime: { completed: 4, target: 4, planned: 4 },
     },
   ];
-  assert.equal(processOnTargetSummary(processes, "week"), "2 of 3 systems currently on target");
+  assert.equal(processOnTargetSummary(processes, "week"), "2 of 3 processes currently on target");
 });
 
 test("processBucketCompact separates target and planned", () => {

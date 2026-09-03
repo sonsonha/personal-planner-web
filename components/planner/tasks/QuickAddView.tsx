@@ -33,6 +33,11 @@ export type QuickAddViewProps = {
   /** Parent-owned period picker (date / week / month). */
   periodControl?: ReactNode;
   contextHint: string;
+  /** Optional weekly repeat when For = Week. */
+  repeatWeekly?: boolean;
+  onRepeatWeeklyChange?: (value: boolean) => void;
+  repeatWeeks?: string;
+  onRepeatWeeksChange?: (value: string) => void;
   saving?: boolean;
   error?: string | null;
   onSubmit: () => void;
@@ -53,6 +58,10 @@ export function QuickAddView({
   onPriorityChange,
   periodControl,
   contextHint,
+  repeatWeekly = false,
+  onRepeatWeeklyChange,
+  repeatWeeks = "8",
+  onRepeatWeeksChange,
   saving = false,
   error,
   onSubmit,
@@ -135,6 +144,33 @@ export function QuickAddView({
                   ? "Belongs somewhere in this week — not a Monday deadline."
                   : "Belongs somewhere in this month — not a day-1 deadline."}
               </p>
+            )}
+            {forHorizon === "week" && onRepeatWeeklyChange && (
+              <div className="pos-qa-repeat">
+                <label className="pos-qa-repeat-toggle">
+                  <input
+                    type="checkbox"
+                    checked={repeatWeekly}
+                    onChange={(event) => onRepeatWeeklyChange(event.target.checked)}
+                    disabled={saving}
+                  />
+                  <span>Repeat weekly</span>
+                </label>
+                {repeatWeekly && onRepeatWeeksChange && (
+                  <label className="pos-qa-repeat-weeks">
+                    <span>for</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={52}
+                      value={repeatWeeks}
+                      onChange={(event) => onRepeatWeeksChange(event.target.value)}
+                      disabled={saving}
+                    />
+                    <span>weeks</span>
+                  </label>
+                )}
+              </div>
             )}
           </div>
 

@@ -9,6 +9,10 @@ export type ApiPriority =
   | "P3"
   | "P4";
 
+export type ApiSeriesScope = "THIS_INSTANCE" | "THIS_AND_FUTURE";
+export type ApiTimeBlockStatus = "PLANNED" | "DONE";
+export type ApiProjectType = "STANDARD" | "HABIT";
+
 export type ApiTask = {
   id: string;
   title: string;
@@ -22,6 +26,9 @@ export type ApiTask = {
   priority: ApiPriority;
   status: ApiTaskStatus;
   completedAt?: string | null;
+  repeatSeriesId?: string | null;
+  carryOverFromTaskId?: string | null;
+  carryOverNote?: string | null;
   revision: number;
   updatedAt?: string;
 };
@@ -115,6 +122,7 @@ export type ApiProject = {
   description?: string;
   targetDate?: string | null;
   active: boolean;
+  projectType?: ApiProjectType;
   revision?: number;
 };
 
@@ -193,6 +201,10 @@ export type ApiTimeBlock = {
   googleEventId: string | null;
   syncStatus: "PENDING" | "SYNCED" | "FAILED";
   reminderMinutes: number | null;
+  notes?: string | null;
+  status?: ApiTimeBlockStatus;
+  completedAt?: string | null;
+  repeatSeriesId?: string | null;
   revision: number;
 };
 
@@ -315,10 +327,26 @@ export function updateTask(id: string, input: Partial<{
   durationMinutes: number;
   priority: ApiPriority;
   status: ApiTaskStatus;
+  seriesScope: ApiSeriesScope;
+  repeatSeriesId: string | null;
+  carryOverFromTaskId: string | null;
+  carryOverNote: string | null;
 }>) {
   return requestJson<ApiTask>(
     `/api/tasks/${encodeURIComponent(id)}`,
     { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+export function repeatTask(id: string, input: { weeks?: number; until?: string } = {}) {
+  return requestJson<{
+    seriesId: string;
+    sourceTaskId: string;
+    createdTaskIds: string[];
+    weeks: number;
+  }>(
+    `/api/tasks/${encodeURIComponent(id)}/repeat`,
+    { method: "POST", body: JSON.stringify(input) },
   );
 }
 
@@ -343,6 +371,8 @@ export function createTimeBlock(input: {
   startAt: string;
   endAt: string;
   color: string;
+  notes?: string | null;
+  status?: ApiTimeBlockStatus;
 }) {
   return requestJson<ApiTimeBlock>("/api/time-blocks", {
     method: "POST",
@@ -360,12 +390,48 @@ export function updateTimeBlock(
     endAt: string;
     color: string;
     reminderMinutes: number | null;
+    notes: string | null;
+    status: ApiTimeBlockStatus;
+    seriesScope: ApiSeriesScope;
   }>,
 ) {
   return requestJson<ApiTimeBlock>(`/api/time-blocks/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+export function completeSession(id: string, done: boolean) {
+  return requestJson<ApiTimeBlock>(
+    `/api/time-blocks/${encodeURIComponent(id)}/complete`,
+    { method: "POST", body: JSON.stringify({ done }) },
+  );
+}
+
+export function repeatSession(id: string, input: { weeks?: number; until?: string } = {}) {
+  return requestJson<{
+    taskSeriesId: string;
+    sessionSeriesId: string;
+    sourceBlockId: string;
+    createdTaskIds: string[];
+    createdBlockIds: string[];
+    weeks: number;
+  }>(
+    `/api/time-blocks/${encodeURIComponent(id)}/repeat`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function carryOverSession(id: string, targetStartAt: string) {
+  return requestJson<{
+    sourceTaskId: string;
+    newTaskId: string;
+    timeBlockId: string;
+    carryOverNote: string;
+  }>(
+    `/api/time-blocks/${encodeURIComponent(id)}/carry-over`,
+    { method: "POST", body: JSON.stringify({ targetStartAt }) },
+  );
 }
 
 export function deleteTimeBlock(id: string) {
@@ -384,6 +450,7 @@ export function createProject(input: {
   description?: string;
   active?: boolean;
   targetDate?: string | null;
+  projectType?: ApiProjectType;
 }) {
   return requestJson<ApiProject>("/api/projects", {
     method: "POST",
@@ -402,6 +469,7 @@ export function updateProject(
     description: string;
     active: boolean;
     targetDate: string | null;
+    projectType: ApiProjectType;
   }>,
 ) {
   return requestJson<ApiProject>(`/api/projects/${encodeURIComponent(id)}`, {
@@ -435,15 +503,17 @@ export function createGoal(input: {
   closedAt?: string | null;
   currentMilestoneId?: string | null;
   milestones?: GoalMilestone[];
+  /** Dormant — web no longer sends systems on create. Kept for type compatibility. */
   systems?: GoalSystem[];
   processes?: GoalProcess[];
   metricObservations?: GoalMetricObservation[];
   reflection?: GoalReflection | null;
   reviewSnapshot?: GoalReviewSnapshot | null;
 }) {
+  const { systems: _systems, ...body } = input;
   return requestJson<ApiGoal>("/api/goals", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify(body),
   });
 }
 
@@ -467,6 +537,7 @@ export function updateGoal(
     closedAt: string | null;
     currentMilestoneId: string | null;
     milestones: GoalMilestone[];
+    /** Dormant — web no longer sends systems on update. Kept for type compatibility. */
     systems: GoalSystem[];
     processes: GoalProcess[];
     metricObservations: GoalMetricObservation[];
@@ -474,9 +545,10 @@ export function updateGoal(
     reviewSnapshot: GoalReviewSnapshot | null;
   }>,
 ) {
+  const { systems: _systems, ...body } = input;
   return requestJson<ApiGoal>(`/api/goals/${encodeURIComponent(id)}`, {
     method: "PATCH",
-    body: JSON.stringify(input),
+    body: JSON.stringify(body),
   });
 }
 
