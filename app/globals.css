@@ -2854,16 +2854,18 @@ button {
 }
 
 .pos-cal-side .task-tabs button {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   height: 30px;
+  padding: 0 4px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: #6b7280;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  text-transform: capitalize;
+  white-space: nowrap;
 }
 
 .pos-cal-side .task-tabs button.active {
@@ -2873,13 +2875,19 @@ button {
 }
 
 .pos-cal-side-count {
-  margin-left: 4px;
-  padding: 1px 5px;
+  margin-left: 3px;
+  padding: 1px 4px;
   border-radius: 999px;
   background: #fef3c7;
   color: #b45309;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
+}
+
+.pos-cal-side-progress {
+  margin-top: 2px;
+  color: #78716c;
+  font-size: 10px;
 }
 
 .pos-cal-side .quick-capture {

@@ -187,7 +187,13 @@ test("ships the core planning interactions", async () => {
   assert.match(source, /handleSyncChipClick/);
   assert.doesNotMatch(source, /handleCalendarConnection/);
   assert.match(source, /Today's work/);
-  assert.match(source, /Unscheduled work/);
+  assert.match(source, /This week's work/);
+  assert.match(source, /Inbox · Unscheduled/);
+  assert.match(source, /This Week/);
+  assert.match(source, /taskInCalendarDrawer/);
+  assert.match(source, /No tasks for today/);
+  assert.match(source, /No remaining tasks this week/);
+  assert.match(source, /No unscheduled tasks/);
 
   assert.match(progressDisplay, /processOnTargetSummary/);
   assert.match(progressDisplay, /processBucketCompact/);

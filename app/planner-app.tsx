@@ -90,6 +90,7 @@ import { parsePlannerPath, plannerPath, type PlannerSection } from "./planner-ro
 import { aggregateTaskSchedule, formatScheduledMinutes, remainingSessionsAfterRemove } from "@/lib/task-schedule";
 
 type TaskStatus = "inbox" | "scheduled" | "done";
+type CalendarDrawerFilter = "today" | "week" | "inbox";
 type TaskPriority = "p1" | "p2" | "p3" | "p4";
 
 type PlannerTask = {
@@ -712,6 +713,44 @@ function taskDueHorizon(task: PlannerTask): "day" | "week" | "month" | null {
   return dueHorizonFromApi(null, task.dueAt);
 }
 
+/** Calendar side-drawer membership — Task planning semantics, not TimeBlock cards. */
+function taskInCalendarDrawer(
+  task: PlannerTask,
+  filter: CalendarDrawerFilter,
+  opts: {
+    now: Date;
+    blocks: CalendarBlock[];
+    rangeReferenceStart: Date;
+  },
+): boolean {
+  if (task.status === "done") return false;
+  const horizon = taskDueHorizon(task);
+  const due = parseDateValue(task.dueAt);
+  const hasSessionToday = opts.blocks.some((block) =>
+    block.type === "task"
+    && block.taskId === task.id
+    && sameDay(addDays(opts.rangeReferenceStart, block.day), opts.now),
+  );
+
+  if (filter === "today") {
+    if (horizon === "day" && due && sameDay(due, opts.now)) return true;
+    if (hasSessionToday) return true;
+    return false;
+  }
+
+  if (filter === "week") {
+    // WEEK commitment for the current Mon–Sun — Sessions do not move membership.
+    if (horizon !== "week") return false;
+    if (!due) return true;
+    return startOfWeek(due).getTime() === startOfWeek(opts.now).getTime();
+  }
+
+  // Inbox: genuinely unplanned — no DAY/WEEK/MONTH horizon.
+  // WEEK/MONTH with zero Sessions are NOT Inbox.
+  if (horizon === "day" || horizon === "week" || horizon === "month") return false;
+  return true;
+}
+
 function taskBelongsToHorizon(
   task: PlannerTask,
   horizon: HorizonScope,
@@ -871,7 +910,7 @@ export function PlannerApp({
   const [postConnectBanner, setPostConnectBanner] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [evidenceEpoch, setEvidenceEpoch] = useState(0);
-  const [taskFilter, setTaskFilter] = useState<"inbox" | "today">("today");
+  const [taskFilter, setTaskFilter] = useState<CalendarDrawerFilter>("today");
   const [taskHorizon, setTaskHorizon] = useState<HorizonScope>("week");
   const [taskAnchor, setTaskAnchor] = useState(() => startOfDay(new Date()));
   const [captureScope, setCaptureScope] = useState<HorizonScope | null>(null);
@@ -1334,19 +1373,21 @@ export function PlannerApp({
   ]);
 
   const rangeReferenceStart = view === "month" ? monthGridDays(monthAnchor)[0]! : weekStart;
-  const isTaskBlockOnDate = (taskId: string, date: Date) =>
-    blocks.some((block) =>
-      block.type === "task"
-      && block.taskId === taskId
-      && sameDay(addDays(rangeReferenceStart, block.day), date),
-    );
+  const drawerOpts = {
+    now,
+    blocks,
+    rangeReferenceStart,
+  };
+  const drawerCounts = {
+    today: tasks.filter((task) => taskInCalendarDrawer(task, "today", drawerOpts)).length,
+    week: tasks.filter((task) => taskInCalendarDrawer(task, "week", drawerOpts)).length,
+    inbox: tasks.filter((task) => taskInCalendarDrawer(task, "inbox", drawerOpts)).length,
+  };
 
   const filteredTasks = tasks
     .filter((task) => {
       if (!task.title.toLowerCase().includes(search.toLowerCase())) return false;
-      if (taskFilter === "inbox") return task.status === "inbox";
-      if (isTaskBlockOnDate(task.id, now)) return true;
-      return task.status !== "done" && Boolean(task.dueAt && sameDay(new Date(task.dueAt), now));
+      return taskInCalendarDrawer(task, taskFilter, drawerOpts);
     })
     .sort((left, right) => {
       if (left.status === "done" && right.status !== "done") return 1;
@@ -2397,7 +2438,11 @@ export function PlannerApp({
               className={`tasks-toggle ${taskPanelOpen ? "active" : ""}`}
               onClick={() => setTaskPanelOpen((open) => !open)}
             >
-              <ListTodo size={17} /> {taskFilter === "inbox" ? "Inbox" : "Today"}
+              <ListTodo size={17} /> {
+                taskFilter === "inbox" ? "Inbox"
+                  : taskFilter === "week" ? "This Week"
+                    : "Today"
+              }
             </button>
           </div>
         </section>
@@ -2670,7 +2715,7 @@ export function PlannerApp({
           {taskPanelOpen && view !== "month" && (
             <TaskPanel
               tasks={filteredTasks}
-              count={filteredTasks.filter((task) => task.status !== "done").length}
+              counts={drawerCounts}
               filter={taskFilter}
               search={search}
               searchRef={searchRef}
@@ -2687,6 +2732,7 @@ export function PlannerApp({
               onPriorityChange={setTaskPriority}
               onOpenTask={setEditingTaskId}
               onDropBlock={onTaskPanelDrop}
+              blocks={blocks}
             />
           )}
         </div>
@@ -3506,7 +3552,7 @@ function MonthCalendar({
 
 function TaskPanel({
   tasks,
-  count,
+  counts,
   filter,
   search,
   searchRef,
@@ -3520,14 +3566,15 @@ function TaskPanel({
   onPriorityChange: _onPriorityChange,
   onOpenTask,
   onDropBlock,
+  blocks,
 }: {
   tasks: PlannerTask[];
-  count: number;
-  filter: "inbox" | "today";
+  counts: { today: number; week: number; inbox: number };
+  filter: CalendarDrawerFilter;
   search: string;
   searchRef: React.RefObject<HTMLInputElement | null>;
   onSearch: (value: string) => void;
-  onFilter: (value: "inbox" | "today") => void;
+  onFilter: (value: CalendarDrawerFilter) => void;
   onClose: () => void;
   onQuickAdd: () => void;
   onDragStart: (event: React.DragEvent, payload: DragPayload) => void;
@@ -3536,6 +3583,7 @@ function TaskPanel({
   onPriorityChange: (taskId: string, priority: TaskPriority) => void;
   onOpenTask: (taskId: string) => void;
   onDropBlock: (event: React.DragEvent) => void;
+  blocks: CalendarBlock[];
 }) {
   const [dropActive, setDropActive] = useState(false);
 
@@ -3557,10 +3605,25 @@ function TaskPanel({
     onDropBlock(event);
   };
 
+  const ariaLabel =
+    filter === "today" ? "Today's work"
+      : filter === "week" ? "This week's work"
+        : "Inbox · Unscheduled";
+
+  const emptyCopy =
+    filter === "today"
+      ? { title: "No tasks for today.", hint: "Drag from This Week or Inbox to protect time." }
+      : filter === "week"
+        ? { title: "No remaining tasks this week.", hint: "Capture a WEEK commitment or enjoy the open week." }
+        : { title: "No unscheduled tasks.", hint: "Capture something new or enjoy the open time." };
+
+  const tabBadge = (key: keyof typeof counts) =>
+    counts[key] > 0 ? <span className="pos-mono pos-cal-side-count">{counts[key]}</span> : null;
+
   return (
     <aside
       className={`task-panel pos-cal-side ${dropActive ? "drop-target" : ""}`}
-      aria-label={filter === "today" ? "Today's work" : "Unscheduled work"}
+      aria-label={ariaLabel}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -3581,6 +3644,17 @@ function TaskPanel({
             onClick={() => onFilter("today")}
           >
             Today
+            {tabBadge("today")}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={filter === "week"}
+            className={filter === "week" ? "active" : ""}
+            onClick={() => onFilter("week")}
+          >
+            This Week
+            {tabBadge("week")}
           </button>
           <button
             type="button"
@@ -3590,7 +3664,7 @@ function TaskPanel({
             onClick={() => onFilter("inbox")}
           >
             Inbox
-            {count > 0 && <span className="pos-mono pos-cal-side-count">{count}</span>}
+            {tabBadge("inbox")}
           </button>
         </div>
         <button className="icon-button" aria-label="Close task panel" onClick={onClose}><X size={16} /></button>
@@ -3608,14 +3682,17 @@ function TaskPanel({
 
       <div className="drag-hint">
         <GripVertical size={14} />
-        {filter === "today"
-          ? "Drag onto free time to schedule"
-          : "Drag onto the grid to schedule · drop here to unschedule"}
+        Drag onto free time to schedule
       </div>
 
       <div className="task-list">
         {tasks.map((task) => {
           const priority = priorityMeta(task.priority);
+          const taskBlocks = blocks.filter((block) => block.type === "task" && block.taskId === task.id);
+          const progress = deriveTaskProgressFromSessions(
+            taskBlocks.map((block) => ({ id: block.id, status: block.status ?? "PLANNED" })),
+          );
+          const scheduledMinutes = taskBlocks.reduce((total, block) => total + block.duration, 0);
           return (
           <article
             className={`task-card${task.status === "done" ? " done" : ""}`}
@@ -3637,8 +3714,18 @@ function TaskPanel({
               </button>
               <div className="task-meta">
                 <span className="task-project"><i style={{ background: task.color }} />{task.project}</span>
-                <span className="pos-mono">Est. effort {durationLabel(task.duration)}</span>
+                <span className="pos-mono">Est. {durationLabel(task.duration)}</span>
               </div>
+              {progress.activeCount > 0 && (
+                <div className="task-meta pos-cal-side-progress">
+                  <span className="pos-mono">
+                    {progress.completedCount} / {progress.activeCount} sessions
+                  </span>
+                  {scheduledMinutes > 0 && (
+                    <span className="pos-mono">{formatScheduledMinutes(scheduledMinutes)} scheduled</span>
+                  )}
+                </div>
+              )}
             </div>
             {task.status !== "done" && <GripVertical className="drag-handle" size={15} />}
           </article>
@@ -3647,12 +3734,8 @@ function TaskPanel({
 
         {tasks.length === 0 && (
           <div className="empty-tasks">
-            <strong>{filter === "today" ? "Nothing for today yet" : "Inbox is clear"}</strong>
-            <span>
-              {filter === "today"
-                ? "Drag from Inbox or add a task to protect time."
-                : "Capture something new or enjoy the open time."}
-            </span>
+            <strong>{emptyCopy.title}</strong>
+            <span>{emptyCopy.hint}</span>
           </div>
         )}
       </div>
