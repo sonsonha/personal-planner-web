@@ -159,7 +159,14 @@ type GoogleConnectionState =
 type ActiveSection = PlannerSection;
 type CalendarView = "week" | "day" | "month";
 type ToastKind = "info" | "warning";
-type SlotPicker = { day: number; start: number; duration: number; anchor: DOMRect };
+type SlotPicker = {
+  day: number;
+  start: number;
+  duration: number;
+  anchor: DOMRect;
+  /** Live title preview while editing Quick Create. */
+  title?: string;
+};
 
 type DragPayload =
   | { kind: "task"; taskId: string }
@@ -1259,6 +1266,7 @@ export function PlannerApp({
         const start = pasteFocus?.start
           ?? Math.max(START_HOUR * 60, Math.min(END_HOUR * 60 - blockClipboard.duration, nowMinute));
         // Replace empty quick-create draft with an immediate Session paste.
+        setSlotSelectPreview(null);
         setSlotPicker(null);
         const pendingId = `pending-${crypto.randomUUID()}`;
         const block: CalendarBlock = {
@@ -1402,6 +1410,7 @@ export function PlannerApp({
       }
       if (event.key === "Escape") {
         setQuickAddOpen(false);
+        setSlotSelectPreview(null);
         setSlotPicker(null);
         setEditingTaskId(null);
         setBlockPopover(null);
@@ -2482,7 +2491,10 @@ export function PlannerApp({
                     onPointerDown={(event) => {
                       if ((event.target as HTMLElement).closest(".calendar-event")) return;
                       if ((event.target as HTMLElement).closest(".pos-cal-slot-select")) return;
+                      if ((event.target as HTMLElement).closest(".pos-cal-draft-block")) return;
                       if (event.button !== 0) return;
+                      // Starting a new selection dismisses any open draft.
+                      if (slotPicker) setSlotPicker(null);
                       const rect = event.currentTarget.getBoundingClientRect();
                       const start = slotMinutesFromClick(event.clientY, rect);
                       emptySelectRef.current = {
@@ -2544,7 +2556,6 @@ export function PlannerApp({
                       } catch {
                         // ignore
                       }
-                      setSlotSelectPreview(null);
                       let start = state.start;
                       let duration = state.dragging
                         ? state.duration
@@ -2565,7 +2576,10 @@ export function PlannerApp({
                         Math.max(30, slotHeight),
                       );
                       setPasteFocus({ day: state.day, start });
-                      setSlotPicker({ day: state.day, start, duration, anchor });
+                      // Same batch: clear drag preview and open draft so the
+                      // rectangle stays continuous as a quick-create draft block.
+                      setSlotSelectPreview(null);
+                      setSlotPicker({ day: state.day, start, duration, anchor, title: "" });
                     }}
                     onPointerCancel={() => {
                       emptySelectRef.current = null;
@@ -2594,6 +2608,21 @@ export function PlannerApp({
                         <span className="pos-mono">{minutesToTime(slotSelectPreview.start)}</span>
                         <span className="pos-mono">
                           {minutesToTime(slotSelectPreview.start + slotSelectPreview.duration)}
+                        </span>
+                      </div>
+                    )}
+                    {slotPicker?.day === dayIndex && !slotSelectPreview && (
+                      <div
+                        className="pos-cal-draft-block"
+                        aria-hidden="true"
+                        style={{
+                          top: slotPicker.start - START_HOUR * 60 + 1,
+                          height: Math.max(28, slotPicker.duration - 2),
+                        }}
+                      >
+                        <strong>{slotPicker.title?.trim() || "(No title)"}</strong>
+                        <span className="pos-mono">
+                          {minutesToTime(slotPicker.start)}–{minutesToTime(slotPicker.start + slotPicker.duration)}
                         </span>
                       </div>
                     )}
@@ -2788,7 +2817,7 @@ export function PlannerApp({
         })} · ${minutesToTime(slotPicker.start)}–${minutesToTime(end)}`;
         return (
           <CalendarQuickCreatePopover
-            key={`${slotPicker.day}-${slotPicker.start}-${slotPicker.duration}`}
+            key={`${slotPicker.day}-${slotPicker.start}`}
             day={slotPicker.day}
             start={slotPicker.start}
             duration={slotPicker.duration}
@@ -2806,7 +2835,20 @@ export function PlannerApp({
               dueHorizon: task.dueHorizon,
             }))}
             projects={projects.map((project) => ({ id: project.id, title: project.title }))}
-            onClose={() => setSlotPicker(null)}
+            onClose={() => {
+              setSlotSelectPreview(null);
+              setSlotPicker(null);
+            }}
+            onDraftChange={(draft) => {
+              setSlotPicker((current) => {
+                if (!current) return current;
+                return {
+                  ...current,
+                  title: draft.title ?? current.title,
+                  duration: draft.duration ?? current.duration,
+                };
+              });
+            }}
             onPasteSession={async () => {
               if (!blockClipboard) {
                 showToast("Nothing copied yet", "warning");
@@ -2814,6 +2856,7 @@ export function PlannerApp({
               }
               const day = slotPicker.day;
               const start = slotPicker.start;
+              setSlotSelectPreview(null);
               setSlotPicker(null);
               const task = tasks.find((item) => item.id === blockClipboard.taskId);
               if (!task || task.status === "done") {
@@ -2870,6 +2913,7 @@ export function PlannerApp({
               const pendingId = `pending-${crypto.randomUUID()}`;
               const day = slotPicker.day;
               const start = slotPicker.start;
+              setSlotSelectPreview(null);
               setSlotPicker(null);
               await scheduleTaskAtSlot(task, day, start, pendingId, {
                 duration,
@@ -2881,6 +2925,7 @@ export function PlannerApp({
               const start = slotPicker.start;
               const created = await addTask(title, duration, projectId);
               const pendingId = `pending-${crypto.randomUUID()}`;
+              setSlotSelectPreview(null);
               setSlotPicker(null);
               if (created) {
                 await scheduleTaskAtSlot(created, day, start, pendingId, {

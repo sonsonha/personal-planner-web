@@ -24,6 +24,8 @@ export type CalendarQuickCreatePopoverProps = {
   anchor: DOMRect;
   live: boolean;
   onClose: () => void;
+  /** Keep Calendar draft block in sync with popover fields. */
+  onDraftChange?: (draft: { title?: string; duration?: number }) => void;
   onSaveExisting: (taskId: string, note: string, duration: number) => void | Promise<void>;
   onSaveNew: (input: {
     title: string;
@@ -45,6 +47,7 @@ export function CalendarQuickCreatePopover({
   anchor,
   live,
   onClose,
+  onDraftChange,
   onSaveExisting,
   onSaveNew,
   onPasteSession,
@@ -100,6 +103,10 @@ export function CalendarQuickCreatePopover({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, onPasteSession, saving]);
 
+  const displayTitle = taskId
+    ? (openTasks.find((t) => t.id === taskId)?.title ?? title)
+    : title;
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (saving) return;
@@ -139,10 +146,12 @@ export function CalendarQuickCreatePopover({
         <div className="pos-cal-quick-create-header">
           <input
             ref={titleRef}
-            value={taskId ? (openTasks.find((t) => t.id === taskId)?.title ?? title) : title}
+            value={displayTitle}
             onChange={(event) => {
-              setTitle(event.target.value);
+              const next = event.target.value;
+              setTitle(next);
               if (taskId) setTaskId("");
+              onDraftChange?.({ title: next });
             }}
             placeholder="Add title"
             disabled={saving || Boolean(taskId)}
@@ -160,6 +169,8 @@ export function CalendarQuickCreatePopover({
             onChange={(event) => {
               const next = event.target.value;
               setTaskId(next);
+              const selected = openTasks.find((item) => item.id === next);
+              onDraftChange?.({ title: selected?.title ?? title });
             }}
             disabled={saving}
           >
@@ -194,7 +205,11 @@ export function CalendarQuickCreatePopover({
           <span>Session length</span>
           <select
             value={sessionDuration}
-            onChange={(event) => setSessionDuration(Number(event.target.value))}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              setSessionDuration(next);
+              onDraftChange?.({ duration: next });
+            }}
             disabled={saving}
           >
             {durationOptions.map((mins) => (

@@ -163,6 +163,7 @@ test("ships the core planning interactions", async () => {
   assert.match(source, /DestructiveConfirmModal/);
   assert.match(source, /DEFAULT_SESSION_MINUTES/);
   assert.match(source, /pos-cal-slot-select/);
+  assert.match(source, /pos-cal-draft-block/);
   assert.match(source, /MIN_SESSION_MINUTES/);
   assert.match(popoverSource, /Repeat session/);
   assert.match(popoverSource, /Remove session/);
