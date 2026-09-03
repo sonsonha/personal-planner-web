@@ -185,6 +185,17 @@ export function GoalStructureReview({
           </section>
 
           <section className="gp-ai-section">
+            <div className="gp-ai-section-head"><h4>Systems</h4><button type="button" className="pos-btn-ghost" onClick={() => update({ systems: [...(suggestion.systems ?? []), { title: "New system", targetType: "COUNT", targetValue: 1, unit: "sessions", period: "WEEK", durationWeeks: 4 }] })}>+ Add</button></div>
+            {(suggestion.systems ?? []).map((system, index) => (
+              <div key={`s-${index}`} className="gp-ai-card">
+                <input value={system.title} onChange={(e) => { const systems = [...(suggestion.systems ?? [])]; systems[index] = { ...system, title: e.target.value }; update({ systems }); }} />
+                <div className="gp-ai-row"><label>Target / week<input type="number" value={system.targetValue} onChange={(e) => { const systems = [...(suggestion.systems ?? [])]; systems[index] = { ...system, targetValue: Number(e.target.value) || 0 }; update({ systems }); }} /></label><label>Duration (weeks)<input type="number" value={system.durationWeeks} onChange={(e) => { const systems = [...(suggestion.systems ?? [])]; systems[index] = { ...system, durationWeeks: Number(e.target.value) || 1 }; update({ systems }); }} /></label></div>
+                <button type="button" className="pos-btn-ghost" onClick={() => update({ systems: (suggestion.systems ?? []).filter((_, i) => i !== index) })}>Remove</button>
+              </div>
+            ))}
+          </section>
+
+          <section className="gp-ai-section">
             <div className="gp-ai-section-head">
               <h4>Milestones</h4>
               <button

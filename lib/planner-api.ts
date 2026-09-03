@@ -37,6 +37,15 @@ export type GoalMilestone = {
 export type GoalSystem = {
   id: string;
   title: string;
+  targetType?: "COUNT" | "DURATION";
+  targetValue?: number;
+  unit?: string | null;
+  period?: "WEEK";
+  durationWeeks?: number;
+  startDate?: string | null;
+  preferredDays?: number[] | null;
+  preferredTime?: string | null;
+  status?: "ACTIVE" | "PAUSED" | "COMPLETED";
   cadence?: string;
 };
 

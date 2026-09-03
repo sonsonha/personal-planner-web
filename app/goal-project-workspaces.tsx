@@ -715,6 +715,11 @@ function GoalDetailPage({
   const [processDraftTarget, setProcessDraftTarget] = useState("5");
   const [processDraftPeriod, setProcessDraftPeriod] = useState<GoalProcess["period"]>("WEEK");
   const [processDraftUnit, setProcessDraftUnit] = useState("");
+  const [systemDraftTitle, setSystemDraftTitle] = useState("");
+  const [systemDraftTarget, setSystemDraftTarget] = useState("4");
+  const [systemDraftType, setSystemDraftType] = useState<"COUNT" | "DURATION">("COUNT");
+  const [systemDraftWeeks, setSystemDraftWeeks] = useState("8");
+  const [systemDraftUnit, setSystemDraftUnit] = useState("sessions");
   const linked = projects.filter((p) => p.goalId === goal.id && p.active);
   const current = currentMilestone(goal);
   const health = healthLabel(goal, now);
@@ -795,6 +800,22 @@ function GoalDetailPage({
     setProcessDraftUnit("");
   };
 
+  const addSystem = async () => {
+    const targetValue = Number(systemDraftTarget);
+    const durationWeeks = Number(systemDraftWeeks);
+    if (!systemDraftTitle.trim() || !Number.isFinite(targetValue) || !Number.isFinite(durationWeeks) || durationWeeks < 1) return;
+    const next = [...(goal.systems ?? []), {
+      id: uid(), title: systemDraftTitle.trim(), targetType: systemDraftType,
+      targetValue, unit: systemDraftUnit.trim() || (systemDraftType === "DURATION" ? "min" : "sessions"),
+      period: "WEEK" as const, durationWeeks, status: "ACTIVE" as const,
+      startDate: null, preferredDays: null, preferredTime: null,
+    }];
+    if (!live) { onChanged("System added · demo mode"); return; }
+    await updateGoal(goal.id, { systems: next });
+    onChanged("System added");
+    setSystemDraftTitle("");
+  };
+
   return (
     <div className="gp-detail-page pos-goal-detail-host">
       <GoalDetailView
@@ -831,7 +852,22 @@ function GoalDetailPage({
         onToggleManageSystems={() => setManageSystems((value) => !value)}
         systemsEditor={(
           <div className="gp-process-editor" style={{ marginTop: 12 }}>
-            <p className="gp-muted">Repeated behavior measured from Tasks and Calendar — not entered as a score.</p>
+            <p className="gp-muted">Systems describe a repeated behavior for a limited number of weeks. They never create calendar events automatically.</p>
+            <div className="gp-process-form">
+              <input value={systemDraftTitle} onChange={(e) => setSystemDraftTitle(e.target.value)} placeholder="Morning running" />
+              <select value={systemDraftType} onChange={(e) => { const type = e.target.value as "COUNT" | "DURATION"; setSystemDraftType(type); setSystemDraftUnit(type === "DURATION" ? "min" : "sessions"); }}><option value="COUNT">Count</option><option value="DURATION">Duration</option></select>
+              <input type="number" min="0" value={systemDraftTarget} onChange={(e) => setSystemDraftTarget(e.target.value)} placeholder="4" />
+              <input value={systemDraftUnit} onChange={(e) => setSystemDraftUnit(e.target.value)} placeholder="sessions" />
+              <input type="number" min="1" value={systemDraftWeeks} onChange={(e) => setSystemDraftWeeks(e.target.value)} placeholder="8 weeks" />
+              <button type="button" className="ghost-button" onClick={addSystem}>Add system</button>
+            </div>
+            {(goal.systems ?? []).map((system) => (
+              <div key={system.id} className="gp-process-form" style={{ marginTop: 8 }}>
+                <strong>{system.title}</strong>
+                <button type="button" className="ghost-button" onClick={async () => { if (live) { await updateGoal(goal.id, { systems: (goal.systems ?? []).map((item) => item.id === system.id ? { ...item, status: item.status === "PAUSED" ? "ACTIVE" as const : "PAUSED" as const } : item) }); onChanged("System status updated"); } }}>{system.status === "PAUSED" ? "Resume" : "Pause"}</button>
+                <button type="button" className="ghost-button" onClick={async () => { if (live) { await updateGoal(goal.id, { systems: (goal.systems ?? []).filter((item) => item.id !== system.id) }); onChanged("System removed"); } }}>Remove</button>
+              </div>
+            ))}
             <div className="gp-process-form">
               <input value={processDraftName} onChange={(e) => setProcessDraftName(e.target.value)} placeholder="Applications" />
               <select value={processDraftType} onChange={(e) => setProcessDraftType(e.target.value as GoalProcess["measurementType"])}>

@@ -3166,6 +3166,14 @@ function TasksWorkspace({
     if (task.status === "done") {
       return block ? scheduleLabel(block) : "Done";
     }
+    const taskBlocks = blocks.filter((candidate) => candidate.type === "task" && candidate.taskId === task.id);
+    if ((horizon === "week" || horizon === "month") && taskBlocks.length > 0) {
+      const minutes = taskBlocks.reduce((sum, candidate) => sum + Math.max(0, candidate.duration), 0);
+      const hours = Math.floor(minutes / 60);
+      const rest = Math.round(minutes % 60);
+      const duration = hours ? `${hours}h${rest ? ` ${rest}m` : ""}` : `${rest}m`;
+      return `${taskBlocks.length} session${taskBlocks.length === 1 ? "" : "s"} · ${duration} scheduled`;
+    }
     if (block) return scheduleLabel(block);
     if (task.status === "scheduled") return "Scheduled";
     return "";

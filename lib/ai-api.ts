@@ -32,6 +32,18 @@ export type GoalStructureSuggestion = {
     rationale?: string;
     confidence: AiConfidence;
   }>;
+  systems?: Array<{
+    title: string;
+    targetType: "COUNT" | "DURATION";
+    targetValue: number;
+    unit?: string | null;
+    period: "WEEK";
+    durationWeeks: number;
+    startDate?: string | null;
+    preferredDays?: number[] | null;
+    preferredTime?: string | null;
+    rationale?: string | null;
+  }>;
   projects: Array<{
     title: string;
     purpose?: string;

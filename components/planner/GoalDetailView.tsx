@@ -195,6 +195,7 @@ export function GoalDetailView({
   const milestones = goal.milestones ?? [];
   const processes = progress?.progress.processes ?? [];
   const goalProcesses = goal.processes ?? [];
+  const goalSystems = goal.systems ?? [];
   const consistency = progress?.progress.consistency;
   const currentIdx = Math.max(0, milestones.findIndex((m) => m.status === "current"));
   const weekLabel = weekRangeLabel(now);
@@ -522,7 +523,22 @@ export function GoalDetailView({
             </div>
 
             <div className="pos-side-card">
-              <div className="pos-side-card-label">Systems / processes</div>
+              <div className="pos-side-card-label">Systems</div>
+              {goalSystems.length > 0 && (
+                <ul className="pos-systems-list">
+                  {goalSystems.map((system, index) => (
+                    <li key={system.id}>
+                      <i style={{ backgroundColor: processAccent(index).color }} />
+                      <div>
+                        <div className="pos-systems-row"><span>{system.title}</span><span className="pos-mono">{system.targetValue != null ? `${system.targetValue} ${system.unit ?? (system.targetType === "DURATION" ? "min" : "sessions")}/week` : system.cadence ?? "Weekly"}</span></div>
+                        <div className="pos-muted">{system.durationWeeks ? `${system.durationWeeks} weeks` : "Ongoing"} · {(system.status ?? "ACTIVE").toLowerCase()}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {goalSystems.length === 0 && <p className="pos-muted">No systems defined.</p>}
+              <div className="pos-side-card-label" style={{ marginTop: 16 }}>Processes</div>
               {goalProcesses.length === 0 ? (
                 <p className="pos-muted">No recurring process defined.</p>
               ) : (
