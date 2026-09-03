@@ -4,7 +4,6 @@ import {
   Bell,
   CalendarClock,
   CalendarDays,
-  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -69,7 +68,7 @@ import {
 } from "@/lib/planner-api";
 import { GoalsWorkspace, ProgressWorkspace, ProjectsWorkspace, type HorizonScope } from "./planner-workspaces";
 import { parsePlannerPath, plannerPath, type PlannerSection } from "./planner-routes";
-import { aggregateTaskSchedule, formatScheduledMinutes } from "@/lib/task-schedule";
+import { aggregateTaskSchedule, formatScheduledMinutes, remainingSessionsAfterRemove } from "@/lib/task-schedule";
 
 type TaskStatus = "inbox" | "scheduled" | "done";
 type TaskPriority = "p1" | "p2" | "p3" | "p4";
@@ -166,7 +165,7 @@ const COLORS = {
 
 const PRIORITY_LEVELS = [
   { id: "p1" as const, label: "Do now", hint: "Urgent · important", color: "#B33A22", api: "HIGH" as const },
-  { id: "p2" as const, label: "Schedule", hint: "Important", color: "#2F86C7", api: "NORMAL" as const },
+  { id: "p2" as const, label: "Important", hint: "Worth protecting time for", color: "#2F86C7", api: "NORMAL" as const },
   { id: "p3" as const, label: "Delegate", hint: "Urgent", color: "#3E8F3A", api: "LOW" as const },
   { id: "p4" as const, label: "Drop", hint: "Neither", color: "#C99212", api: "DROP" as const },
 ];
@@ -1448,21 +1447,35 @@ export function PlannerApp({
     }
 
     const taskId = block.taskId;
+    const remainingSessions = remainingSessionsAfterRemove(taskId, blockId, blocks);
+    const dropToInbox = remainingSessions === 0;
     const previousTasks = tasks;
     const previousBlocks = blocks;
     setBlocks((current) => current.filter((item) => item.id !== blockId));
-    setTasks((current) =>
-      current.map((task) => (task.id === taskId ? { ...task, status: "inbox" } : task)),
+    if (dropToInbox) {
+      setTasks((current) =>
+        current.map((task) => (task.id === taskId ? { ...task, status: "inbox" } : task)),
+      );
+      setTaskFilter("inbox");
+      setTaskPanelOpen(true);
+    }
+    showToast(
+      liveDataRef.current
+        ? "Removing session…"
+        : dropToInbox
+          ? "Removed from Calendar · demo mode"
+          : "Session removed · task still scheduled · demo mode",
     );
-    setTaskFilter("inbox");
-    setTaskPanelOpen(true);
-    showToast(liveDataRef.current ? "Removing from Calendar…" : "Removed from Calendar · demo mode");
     if (!liveDataRef.current) return;
 
     try {
       await deleteTimeBlock(block.id);
-      await updateTask(taskId, { status: "INBOX" });
-      showToast("Removed from Calendar — task kept");
+      if (dropToInbox) {
+        await updateTask(taskId, { status: "INBOX" });
+        showToast("Removed from Calendar — task kept");
+      } else {
+        showToast("Session removed — other work sessions kept");
+      }
     } catch {
       setTasks(previousTasks);
       setBlocks(previousBlocks);
@@ -2207,8 +2220,6 @@ export function PlannerApp({
                           layout={geometry}
                           selected={blockPopover?.blockId === block.id}
                           onDragStart={onDragStart}
-                          onComplete={completeTask}
-                          onRestore={restoreTask}
                           onOpenTask={setEditingTaskId}
                           onResize={onResizeBlock}
                           onSelect={(rect) => setBlockPopover({ blockId: block.id, rect })}
@@ -2406,9 +2417,6 @@ export function PlannerApp({
             done={done}
             anchor={blockPopover.rect}
             onClose={() => setBlockPopover(null)}
-            onComplete={() => {
-              if (popBlock.taskId) void completeTask(popBlock.taskId);
-            }}
             onRestore={() => {
               if (popBlock.taskId) void restoreTask(popBlock.taskId);
             }}
@@ -2447,8 +2455,6 @@ function CalendarEvent({
   layout,
   selected = false,
   onDragStart,
-  onComplete,
-  onRestore,
   onOpenTask,
   onResize,
   onSelect,
@@ -2458,8 +2464,6 @@ function CalendarEvent({
   layout: { left: string; right: string };
   selected?: boolean;
   onDragStart: (event: React.DragEvent, payload: DragPayload) => void;
-  onComplete: (taskId: string) => void;
-  onRestore: (taskId: string) => void;
   onOpenTask: (taskId: string) => void;
   onResize: (blockId: string, duration: number) => void;
   onSelect: (rect: DOMRect) => void;
@@ -2566,19 +2570,6 @@ function CalendarEvent({
         {done && !isExternal && <CheckCircle2 size={10} aria-hidden="true" />}
         {isFailed && <em className="sync-warning" aria-label="Sync failed">!</em>}
         <strong>{block.title}</strong>
-        {block.taskId && !isTiny && (
-          <button
-            className="event-complete"
-            aria-label={done ? `Restore ${block.title}` : `Complete ${block.title}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (done) onRestore(block.taskId!);
-              else onComplete(block.taskId!);
-            }}
-          >
-            {done ? <CheckCircle2 size={11} /> : <Check size={11} />}
-          </button>
-        )}
       </div>
       {showTime && (
         <span className="event-time pos-mono">

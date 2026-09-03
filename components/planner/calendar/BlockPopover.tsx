@@ -62,7 +62,6 @@ export type PersonalOsBlockPopoverProps = {
   done: boolean;
   anchor: DOMRect;
   onClose: () => void;
-  onComplete: () => void;
   onRestore: () => void;
   onOpenTask: () => void;
   onUnschedule: () => void;
@@ -74,7 +73,6 @@ export function PersonalOsBlockPopover({
   done,
   anchor,
   onClose,
-  onComplete,
   onRestore,
   onOpenTask,
   onUnschedule,
@@ -102,25 +100,21 @@ export function PersonalOsBlockPopover({
             Retry sync
           </button>
         )}
-        {!done ? (
-          <button type="button" className="pos-cal-popover-action emerald" onClick={() => { onComplete(); onClose(); }}>
-            <span>Mark complete</span>
-            <small>Block stays · completed style</small>
-          </button>
-        ) : (
-          <button type="button" className="pos-cal-popover-action indigo" onClick={() => { onRestore(); onClose(); }}>
-            Restore
-          </button>
-        )}
         {block.taskId && (
           <button type="button" className="pos-cal-popover-action" onClick={() => { onOpenTask(); onClose(); }}>
-            Open task
+            <span>Open task</span>
+            <small>Mark the deliverable done from Task Detail</small>
+          </button>
+        )}
+        {done && (
+          <button type="button" className="pos-cal-popover-action indigo" onClick={() => { onRestore(); onClose(); }}>
+            Restore task
           </button>
         )}
         <div className="pos-cal-popover-divider" />
         <button type="button" className="pos-cal-popover-action muted" onClick={() => { onUnschedule(); onClose(); }}>
-          <span>Unschedule</span>
-          <small>Remove from Calendar · keep task</small>
+          <span>Remove session</span>
+          <small>Drop this TimeBlock · keep the Task</small>
         </button>
       </div>
     </PopoverShell>

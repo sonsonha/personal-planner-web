@@ -63,6 +63,30 @@ const HORIZON_TABS: { id: HorizonScope; label: string }[] = [
   { id: "all", label: "All" },
 ];
 
+/** 0 = Sunday … 6 = Saturday (matches GoalSystem.preferredDays). */
+const SYSTEM_DAY_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+  { value: 0, label: "Sun" },
+];
+
+function formatPreferredDays(days: number[]) {
+  const labels = new Map(SYSTEM_DAY_OPTIONS.map((d) => [d.value, d.label]));
+  return [...days]
+    .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
+    .map((d) => labels.get(d) ?? String(d))
+    .join(" · ");
+}
+
+function togglePreferredDay(current: number[] | null | undefined, day: number) {
+  const list = current ?? [];
+  return list.includes(day) ? list.filter((d) => d !== day) : [...list, day];
+}
+
 function HorizonTabs({
   value,
   onChange,
@@ -426,7 +450,13 @@ function GoalCreateFlow({
   const [milestones, setMilestones] = useState<GoalMilestone[]>([]);
   const [systems, setSystems] = useState<GoalSystem[]>([]);
   const [milestoneDraft, setMilestoneDraft] = useState("");
-  const [systemDraft, setSystemDraft] = useState("");
+  const [systemDraftTitle, setSystemDraftTitle] = useState("");
+  const [systemDraftTarget, setSystemDraftTarget] = useState("4");
+  const [systemDraftType, setSystemDraftType] = useState<"COUNT" | "DURATION">("COUNT");
+  const [systemDraftUnit, setSystemDraftUnit] = useState("sessions");
+  const [systemDraftWeeks, setSystemDraftWeeks] = useState("8");
+  const [systemDraftPreferredDays, setSystemDraftPreferredDays] = useState<number[]>([]);
+  const [systemDraftPreferredTime, setSystemDraftPreferredTime] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
@@ -442,9 +472,27 @@ function GoalCreateFlow({
   };
 
   const addSystem = () => {
-    if (!systemDraft.trim()) return;
-    setSystems((current) => [...current, { id: uid(), title: systemDraft.trim() }]);
-    setSystemDraft("");
+    const targetValue = Number(systemDraftTarget);
+    const durationWeeks = Number(systemDraftWeeks);
+    if (!systemDraftTitle.trim() || !Number.isFinite(targetValue) || !Number.isFinite(durationWeeks) || durationWeeks < 1) return;
+    setSystems((current) => [...current, {
+      id: uid(),
+      title: systemDraftTitle.trim(),
+      targetType: systemDraftType,
+      targetValue,
+      unit: systemDraftUnit.trim() || (systemDraftType === "DURATION" ? "min" : "sessions"),
+      period: "WEEK",
+      durationWeeks,
+      status: "ACTIVE",
+      startDate: null,
+      preferredDays: systemDraftPreferredDays.length ? [...systemDraftPreferredDays].sort((a, b) => a - b) : null,
+      preferredTime: systemDraftPreferredTime.trim() || null,
+    }]);
+    setSystemDraftTitle("");
+    setSystemDraftTarget("4");
+    setSystemDraftWeeks("8");
+    setSystemDraftPreferredDays([]);
+    setSystemDraftPreferredTime("");
   };
 
   const requestAiStructure = async () => {
@@ -623,13 +671,87 @@ function GoalCreateFlow({
               )}
             </label>
             <label><span>Systems / repeated behavior (optional)</span>
-              <div className="gp-inline-add">
-                <input value={systemDraft} onChange={(e) => setSystemDraft(e.target.value)} placeholder="5 quality applications/week" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSystem())} />
+              <p className="gp-muted" style={{ marginTop: 4 }}>
+                Rhythm for N weeks — never auto-creates Tasks or Calendar blocks.
+              </p>
+              <div className="gp-process-form" style={{ marginTop: 8 }}>
+                <input
+                  value={systemDraftTitle}
+                  onChange={(e) => setSystemDraftTitle(e.target.value)}
+                  placeholder="Morning running"
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSystem())}
+                />
+                <select
+                  value={systemDraftType}
+                  onChange={(e) => {
+                    const type = e.target.value as "COUNT" | "DURATION";
+                    setSystemDraftType(type);
+                    setSystemDraftUnit(type === "DURATION" ? "min" : "sessions");
+                  }}
+                  aria-label="System target type"
+                >
+                  <option value="COUNT">Sessions</option>
+                  <option value="DURATION">Duration</option>
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  value={systemDraftTarget}
+                  onChange={(e) => setSystemDraftTarget(e.target.value)}
+                  placeholder="4"
+                  aria-label="Weekly target"
+                />
+                <input
+                  value={systemDraftUnit}
+                  onChange={(e) => setSystemDraftUnit(e.target.value)}
+                  placeholder="sessions"
+                  aria-label="Unit"
+                />
+                <input
+                  type="number"
+                  min="1"
+                  value={systemDraftWeeks}
+                  onChange={(e) => setSystemDraftWeeks(e.target.value)}
+                  placeholder="8"
+                  aria-label="Duration weeks"
+                />
                 <button type="button" className="ghost-button" onClick={addSystem}>Add</button>
+              </div>
+              <div className="gp-inline-add" style={{ marginTop: 8, flexWrap: "wrap", gap: 6 }}>
+                {SYSTEM_DAY_OPTIONS.map((day) => {
+                  const selected = systemDraftPreferredDays.includes(day.value);
+                  return (
+                    <button
+                      key={day.value}
+                      type="button"
+                      className={selected ? "primary-button" : "ghost-button"}
+                      aria-pressed={selected}
+                      onClick={() => setSystemDraftPreferredDays((current) =>
+                        selected ? current.filter((d) => d !== day.value) : [...current, day.value],
+                      )}
+                    >
+                      {day.label}
+                    </button>
+                  );
+                })}
+                <input
+                  type="time"
+                  value={systemDraftPreferredTime}
+                  onChange={(e) => setSystemDraftPreferredTime(e.target.value)}
+                  aria-label="Preferred time (optional)"
+                />
               </div>
               {systems.length > 0 && (
                 <ul className="gp-chip-list">
-                  {systems.map((s) => <li key={s.id}>{s.title}</li>)}
+                  {systems.map((s) => (
+                    <li key={s.id}>
+                      {s.title}
+                      {s.targetValue != null ? ` · ${s.targetValue}${s.unit ? ` ${s.unit}` : ""}/week` : ""}
+                      {s.durationWeeks ? ` · ${s.durationWeeks} weeks` : ""}
+                      {s.preferredDays?.length ? ` · ${formatPreferredDays(s.preferredDays)}` : ""}
+                      {s.preferredTime ? ` · ${s.preferredTime}` : ""}
+                    </li>
+                  ))}
                 </ul>
               )}
             </label>
@@ -720,6 +842,8 @@ function GoalDetailPage({
   const [systemDraftType, setSystemDraftType] = useState<"COUNT" | "DURATION">("COUNT");
   const [systemDraftWeeks, setSystemDraftWeeks] = useState("8");
   const [systemDraftUnit, setSystemDraftUnit] = useState("sessions");
+  const [systemDraftPreferredDays, setSystemDraftPreferredDays] = useState<number[]>([]);
+  const [systemDraftPreferredTime, setSystemDraftPreferredTime] = useState("");
   const linked = projects.filter((p) => p.goalId === goal.id && p.active);
   const current = currentMilestone(goal);
   const health = healthLabel(goal, now);
@@ -808,12 +932,16 @@ function GoalDetailPage({
       id: uid(), title: systemDraftTitle.trim(), targetType: systemDraftType,
       targetValue, unit: systemDraftUnit.trim() || (systemDraftType === "DURATION" ? "min" : "sessions"),
       period: "WEEK" as const, durationWeeks, status: "ACTIVE" as const,
-      startDate: null, preferredDays: null, preferredTime: null,
+      startDate: null,
+      preferredDays: systemDraftPreferredDays.length ? [...systemDraftPreferredDays].sort((a, b) => a - b) : null,
+      preferredTime: systemDraftPreferredTime.trim() || null,
     }];
     if (!live) { onChanged("System added · demo mode"); return; }
     await updateGoal(goal.id, { systems: next });
     onChanged("System added");
     setSystemDraftTitle("");
+    setSystemDraftPreferredDays([]);
+    setSystemDraftPreferredTime("");
   };
 
   return (
@@ -852,7 +980,7 @@ function GoalDetailPage({
         onToggleManageSystems={() => setManageSystems((value) => !value)}
         systemsEditor={(
           <div className="gp-process-editor" style={{ marginTop: 12 }}>
-            <p className="gp-muted">Systems describe a repeated behavior for a limited number of weeks. They never create calendar events automatically.</p>
+            <p className="gp-muted">Systems describe a repeated behavior for a limited number of weeks. They never create Tasks or calendar events automatically.</p>
             <div className="gp-process-form">
               <input value={systemDraftTitle} onChange={(e) => setSystemDraftTitle(e.target.value)} placeholder="Morning running" />
               <select value={systemDraftType} onChange={(e) => { const type = e.target.value as "COUNT" | "DURATION"; setSystemDraftType(type); setSystemDraftUnit(type === "DURATION" ? "min" : "sessions"); }}><option value="COUNT">Count</option><option value="DURATION">Duration</option></select>
@@ -861,17 +989,44 @@ function GoalDetailPage({
               <input type="number" min="1" value={systemDraftWeeks} onChange={(e) => setSystemDraftWeeks(e.target.value)} placeholder="8 weeks" />
               <button type="button" className="ghost-button" onClick={addSystem}>Add system</button>
             </div>
+            <div className="gp-inline-add" style={{ marginTop: 8, flexWrap: "wrap", gap: 6 }}>
+              {SYSTEM_DAY_OPTIONS.map((day) => {
+                const selected = systemDraftPreferredDays.includes(day.value);
+                return (
+                  <button
+                    key={day.value}
+                    type="button"
+                    className={selected ? "primary-button" : "ghost-button"}
+                    aria-pressed={selected}
+                    onClick={() => setSystemDraftPreferredDays((current) =>
+                      selected ? current.filter((d) => d !== day.value) : [...current, day.value],
+                    )}
+                  >
+                    {day.label}
+                  </button>
+                );
+              })}
+              <input
+                type="time"
+                value={systemDraftPreferredTime}
+                onChange={(e) => setSystemDraftPreferredTime(e.target.value)}
+                aria-label="Preferred time (optional)"
+              />
+            </div>
             {(goal.systems ?? []).map((system) => (
-              <form key={system.id} className="gp-process-form" style={{ marginTop: 8 }} onSubmit={async (event) => {
+              <form key={system.id} className="gp-process-form" style={{ marginTop: 8, flexWrap: "wrap" }} onSubmit={async (event) => {
                 event.preventDefault();
                 if (!live) return;
                 const data = new FormData(event.currentTarget);
+                const preferredTime = String(data.get("preferredTime") ?? "").trim() || null;
                 const next = (goal.systems ?? []).map((item) => item.id === system.id ? {
                   ...item,
                   title: String(data.get("title") ?? item.title).trim() || item.title,
                   targetValue: Number(data.get("targetValue")) || item.targetValue,
                   unit: String(data.get("unit") ?? item.unit ?? "").trim() || null,
                   durationWeeks: Math.max(1, Number(data.get("durationWeeks")) || item.durationWeeks || 1),
+                  preferredTime,
+                  preferredDays: item.preferredDays ?? null,
                 } : item);
                 await updateGoal(goal.id, { systems: next });
                 onChanged("System updated");
@@ -880,7 +1035,33 @@ function GoalDetailPage({
                 <input name="targetValue" type="number" min="0" defaultValue={system.targetValue ?? 1} aria-label="Weekly target" />
                 <input name="unit" defaultValue={system.unit ?? (system.targetType === "DURATION" ? "min" : "sessions")} aria-label="System unit" />
                 <input name="durationWeeks" type="number" min="1" defaultValue={system.durationWeeks ?? 1} aria-label="Duration weeks" />
+                <input name="preferredTime" type="time" defaultValue={system.preferredTime ?? ""} aria-label="Preferred time" />
                 <button type="submit" className="ghost-button">Save</button>
+                <div className="gp-inline-add" style={{ width: "100%", flexWrap: "wrap", gap: 6 }}>
+                  {SYSTEM_DAY_OPTIONS.map((day) => {
+                    const selected = (system.preferredDays ?? []).includes(day.value);
+                    return (
+                      <button
+                        key={day.value}
+                        type="button"
+                        className={selected ? "primary-button" : "ghost-button"}
+                        aria-pressed={selected}
+                        onClick={async () => {
+                          if (!live) return;
+                          const preferredDays = togglePreferredDay(system.preferredDays, day.value);
+                          await updateGoal(goal.id, {
+                            systems: (goal.systems ?? []).map((item) => item.id === system.id
+                              ? { ...item, preferredDays: preferredDays.length ? preferredDays.sort((a, b) => a - b) : null }
+                              : item),
+                          });
+                          onChanged("System preferred days updated");
+                        }}
+                      >
+                        {day.label}
+                      </button>
+                    );
+                  })}
+                </div>
                 <button type="button" className="ghost-button" onClick={async () => { if (live) { await updateGoal(goal.id, { systems: (goal.systems ?? []).map((item) => item.id === system.id ? { ...item, status: item.status === "PAUSED" ? "ACTIVE" as const : "PAUSED" as const } : item) }); onChanged("System status updated"); } }}>{system.status === "PAUSED" ? "Resume" : "Pause"}</button>
                 <button type="button" className="ghost-button" onClick={async () => { if (live) { await updateGoal(goal.id, { systems: (goal.systems ?? []).map((item) => item.id === system.id ? { ...item, status: "COMPLETED" as const } : item) }); onChanged("System completed"); } }}>Complete</button>
                 <button type="button" className="ghost-button" onClick={async () => { if (live) { await updateGoal(goal.id, { systems: (goal.systems ?? []).filter((item) => item.id !== system.id) }); onChanged("System removed"); } }}>Remove</button>

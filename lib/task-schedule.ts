@@ -15,6 +15,17 @@ export function aggregateTaskSchedule(taskId: string, blocks: TaskScheduleBlock[
   };
 }
 
+/** After removing one TimeBlock, how many sessions remain for the Task? */
+export function remainingSessionsAfterRemove(
+  taskId: string,
+  removeBlockId: string,
+  blocks: Array<{ id: string; taskId?: string | null }>,
+) {
+  return blocks.filter(
+    (block) => block.id !== removeBlockId && block.taskId === taskId,
+  ).length;
+}
+
 export function formatScheduledMinutes(minutes: number) {
   const hours = Math.floor(minutes / 60);
   const rest = Math.round(minutes % 60);

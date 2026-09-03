@@ -51,7 +51,7 @@ export const PRIORITY_META: Record<
   { id: TaskPriority; label: string; hint: string; color: string }
 > = {
   p1: { id: "p1", label: "Do now", hint: "Urgent · important", color: "#B33A22" },
-  p2: { id: "p2", label: "Important", hint: "Schedule when ready", color: "#2F86C7" },
+  p2: { id: "p2", label: "Important", hint: "Worth protecting time for", color: "#2F86C7" },
   p3: { id: "p3", label: "Delegate", hint: "Urgent", color: "#3E8F3A" },
   p4: { id: "p4", label: "Drop", hint: "Neither", color: "#C99212" },
 };
