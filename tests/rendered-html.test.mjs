@@ -112,6 +112,7 @@ test("ships the core planning interactions", async () => {
     quickAddView,
     taskEditorView,
     viteConfig,
+    popoverSource,
   ] = await Promise.all([
     readFile(new URL("../app/planner-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/(planner)/page.tsx", import.meta.url), "utf8"),
@@ -128,6 +129,7 @@ test("ships the core planning interactions", async () => {
     readFile(new URL("../components/planner/tasks/QuickAddView.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/planner/tasks/TaskEditorView.tsx", import.meta.url), "utf8"),
     readFile(new URL("../vite.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/planner/calendar/BlockPopover.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(plannerLayout, /getChatGPTUser/);
@@ -159,6 +161,13 @@ test("ships the core planning interactions", async () => {
   assert.doesNotMatch(source, /function SlotScheduleModal/);
   assert.match(source, /event-complete/);
   assert.match(source, /DestructiveConfirmModal/);
+  assert.match(source, /DEFAULT_SESSION_MINUTES/);
+  assert.match(source, /pos-cal-slot-select/);
+  assert.match(source, /MIN_SESSION_MINUTES/);
+  assert.match(popoverSource, /Repeat session/);
+  assert.match(popoverSource, /Remove session/);
+  assert.doesNotMatch(popoverSource, /Mark session done/);
+  assert.doesNotMatch(popoverSource, /Open task/);
   assert.match(source, /function MonthCalendar/);
   assert.match(source, /event-resize-handle/);
   assert.match(source, /resolveOverlapLayout/);

@@ -60,6 +60,20 @@ export function CalendarQuickCreatePopover({
   const pos = useMemo(() => positionPopover(anchor, 420, 420), [anchor]);
 
   const openTasks = tasks.filter((task) => task.status !== "done");
+  const durationOptions = useMemo(() => {
+    const base = [15, 30, 45, 60, 90, 120];
+    if (!base.includes(sessionDuration)) {
+      return [...base, sessionDuration].sort((a, b) => a - b);
+    }
+    return base;
+  }, [sessionDuration]);
+
+  const formatDurationOption = (mins: number) => {
+    if (mins < 60) return `${mins} min`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  };
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -183,8 +197,8 @@ export function CalendarQuickCreatePopover({
             onChange={(event) => setSessionDuration(Number(event.target.value))}
             disabled={saving}
           >
-            {[15, 30, 45, 60, 90, 120].map((mins) => (
-              <option key={mins} value={mins}>{mins < 60 ? `${mins} min` : `${mins / 60}h`}</option>
+            {durationOptions.map((mins) => (
+              <option key={mins} value={mins}>{formatDurationOption(mins)}</option>
             ))}
           </select>
         </label>

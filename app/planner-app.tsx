@@ -187,6 +187,8 @@ const MINUTES_VISIBLE = (END_HOUR - START_HOUR) * 60;
 /** Fine snap for Google Calendar–like precision (visual drag is continuous; time snaps). */
 const SNAP_MINUTES = 5;
 const DRAG_THRESHOLD_PX = 4;
+const MIN_SESSION_MINUTES = 15;
+const DEFAULT_SESSION_MINUTES = 60;
 const AUTO_SYNC_INTERVAL_MS = 5 * 60_000;
 const AUTO_SYNC_MIN_GAP_MS = 30_000;
 const AUTO_SYNC_ERROR_BACKOFF_MS = 5 * 60_000;
@@ -870,6 +872,25 @@ export function PlannerApp({
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [taskPanelOpen, setTaskPanelOpen] = useState(true);
   const [slotPicker, setSlotPicker] = useState<SlotPicker | null>(null);
+  const [slotSelectPreview, setSlotSelectPreview] = useState<{
+    day: number;
+    start: number;
+    duration: number;
+  } | null>(null);
+  const emptySelectRef = useRef<{
+    pointerId: number;
+    day: number;
+    originX: number;
+    originY: number;
+    originStart: number;
+    trackTop: number;
+    trackHeight: number;
+    trackLeft: number;
+    trackWidth: number;
+    dragging: boolean;
+    start: number;
+    duration: number;
+  } | null>(null);
   const [blockPopover, setBlockPopover] = useState<{
     blockId: string;
     rect: DOMRect;
@@ -1439,7 +1460,11 @@ export function PlannerApp({
   const onResizeBlock = async (blockId: string, nextDuration: number) => {
     const previous = blocks.find((block) => block.id === blockId);
     if (!previous || previous.type === "external") return;
-    const duration = Math.max(SNAP_MINUTES, nextDuration);
+    const maxDuration = Math.max(MIN_SESSION_MINUTES, END_HOUR * 60 - previous.start);
+    const duration = Math.max(
+      MIN_SESSION_MINUTES,
+      Math.min(maxDuration, Math.round(nextDuration / SNAP_MINUTES) * SNAP_MINUTES),
+    );
     const candidate = { ...previous, duration };
     setBlocks((current) =>
       current.map((block) => (block.id === blockId ? candidate : block)),
@@ -1565,7 +1590,7 @@ export function PlannerApp({
     pendingId: string,
     opts?: { duration?: number; notes?: string },
   ) => {
-    const duration = Math.max(SNAP_MINUTES, opts?.duration ?? task.duration);
+    const duration = Math.max(MIN_SESSION_MINUTES, opts?.duration ?? task.duration);
     const notes = opts?.notes?.trim() || undefined;
     const block: CalendarBlock = {
       id: pendingId,
@@ -2454,21 +2479,97 @@ export function PlannerApp({
                     key={dayIndex}
                     data-day-index={dayIndex}
                     role="presentation"
-                    onMouseDown={(event) => {
+                    onPointerDown={(event) => {
                       if ((event.target as HTMLElement).closest(".calendar-event")) return;
+                      if ((event.target as HTMLElement).closest(".pos-cal-slot-select")) return;
                       if (event.button !== 0) return;
                       const rect = event.currentTarget.getBoundingClientRect();
                       const start = slotMinutesFromClick(event.clientY, rect);
-                      const slotTop =
-                        ((start - START_HOUR * 60) / MINUTES_VISIBLE) * rect.height;
-                      const anchor = new DOMRect(
-                        rect.left + Math.min(rect.width * 0.35, 80),
-                        rect.top + slotTop,
-                        Math.max(40, rect.width * 0.45),
-                        30,
+                      emptySelectRef.current = {
+                        pointerId: event.pointerId,
+                        day: dayIndex,
+                        originX: event.clientX,
+                        originY: event.clientY,
+                        originStart: start,
+                        trackTop: rect.top,
+                        trackHeight: rect.height,
+                        trackLeft: rect.left,
+                        trackWidth: rect.width,
+                        dragging: false,
+                        start,
+                        duration: DEFAULT_SESSION_MINUTES,
+                      };
+                      try {
+                        event.currentTarget.setPointerCapture(event.pointerId);
+                      } catch {
+                        // ignore capture failures
+                      }
+                    }}
+                    onPointerMove={(event) => {
+                      const state = emptySelectRef.current;
+                      if (!state || event.pointerId !== state.pointerId) return;
+                      const dy = event.clientY - state.originY;
+                      const dx = event.clientX - state.originX;
+                      if (!state.dragging) {
+                        if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+                        state.dragging = true;
+                      }
+                      const y = Math.max(0, Math.min(state.trackHeight, event.clientY - state.trackTop));
+                      const rawCurrent = START_HOUR * 60 + (y / state.trackHeight) * MINUTES_VISIBLE;
+                      const current = Math.round(rawCurrent / SNAP_MINUTES) * SNAP_MINUTES;
+                      const clampedCurrent = Math.max(
+                        START_HOUR * 60,
+                        Math.min(END_HOUR * 60, current),
                       );
-                      setPasteFocus({ day: dayIndex, start });
-                      setSlotPicker({ day: dayIndex, start, duration: 30, anchor });
+                      const rangeStart = Math.min(state.originStart, clampedCurrent);
+                      const rangeEnd = Math.max(state.originStart, clampedCurrent);
+                      const duration = Math.max(
+                        MIN_SESSION_MINUTES,
+                        Math.min(END_HOUR * 60 - rangeStart, rangeEnd - rangeStart || MIN_SESSION_MINUTES),
+                      );
+                      state.start = rangeStart;
+                      state.duration = duration;
+                      setSlotSelectPreview({
+                        day: state.day,
+                        start: rangeStart,
+                        duration,
+                      });
+                    }}
+                    onPointerUp={(event) => {
+                      const state = emptySelectRef.current;
+                      if (!state || event.pointerId !== state.pointerId) return;
+                      emptySelectRef.current = null;
+                      try {
+                        event.currentTarget.releasePointerCapture(event.pointerId);
+                      } catch {
+                        // ignore
+                      }
+                      setSlotSelectPreview(null);
+                      let start = state.start;
+                      let duration = state.dragging
+                        ? state.duration
+                        : DEFAULT_SESSION_MINUTES;
+                      if (!state.dragging) {
+                        start = state.originStart;
+                        duration = Math.min(DEFAULT_SESSION_MINUTES, END_HOUR * 60 - start);
+                        duration = Math.max(MIN_SESSION_MINUTES, duration);
+                      }
+                      const slotTop =
+                        ((start - START_HOUR * 60) / MINUTES_VISIBLE) * state.trackHeight;
+                      const slotHeight =
+                        (duration / MINUTES_VISIBLE) * state.trackHeight;
+                      const anchor = new DOMRect(
+                        state.trackLeft + Math.min(state.trackWidth * 0.35, 80),
+                        state.trackTop + slotTop,
+                        Math.max(40, state.trackWidth * 0.45),
+                        Math.max(30, slotHeight),
+                      );
+                      setPasteFocus({ day: state.day, start });
+                      setSlotPicker({ day: state.day, start, duration, anchor });
+                    }}
+                    onPointerCancel={() => {
+                      emptySelectRef.current = null;
+                      setSlotSelectPreview(null);
                     }}
                     onDragOver={(event) => {
                       event.preventDefault();
@@ -2479,6 +2580,21 @@ export function PlannerApp({
                     {isCurrentWeek && dayIndex === nowDay && nowMinute >= START_HOUR * 60 && nowMinute <= END_HOUR * 60 && (
                       <div className="now-line" style={{ top: nowMinute - START_HOUR * 60 }}>
                         <span className="pos-mono">{minutesToTime(nowMinute)}</span>
+                      </div>
+                    )}
+                    {slotSelectPreview?.day === dayIndex && (
+                      <div
+                        className="pos-cal-slot-select"
+                        aria-hidden="true"
+                        style={{
+                          top: slotSelectPreview.start - START_HOUR * 60,
+                          height: Math.max(18, slotSelectPreview.duration),
+                        }}
+                      >
+                        <span className="pos-mono">{minutesToTime(slotSelectPreview.start)}</span>
+                        <span className="pos-mono">
+                          {minutesToTime(slotSelectPreview.start + slotSelectPreview.duration)}
+                        </span>
                       </div>
                     )}
                     {laidOut.map((block) => {
@@ -2493,7 +2609,10 @@ export function PlannerApp({
                           sessionDone={sessionDone}
                           layout={geometry}
                           selected={blockPopover?.blockId === block.id}
-                          onOpenTask={setEditingTaskId}
+                          onOpenTask={(taskId) => {
+                            setBlockPopover(null);
+                            setEditingTaskId(taskId);
+                          }}
                           onResize={onResizeBlock}
                           onMovePreview={setBlockDragPreview}
                           onMoveCommit={(blockId, day, start) => {
@@ -2669,6 +2788,7 @@ export function PlannerApp({
         })} · ${minutesToTime(slotPicker.start)}–${minutesToTime(end)}`;
         return (
           <CalendarQuickCreatePopover
+            key={`${slotPicker.day}-${slotPicker.start}-${slotPicker.duration}`}
             day={slotPicker.day}
             start={slotPicker.start}
             duration={slotPicker.duration}
@@ -2777,7 +2897,6 @@ export function PlannerApp({
         const popBlock = blocks.find((block) => block.id === blockPopover.blockId);
         if (!popBlock) return null;
         const sessionDone = isSessionDone(popBlock.status);
-        const taskDone = Boolean(popBlock.taskId && doneTaskIds.has(popBlock.taskId));
         if (popBlock.type === "external") {
           return (
             <GoogleEventPopover
@@ -2791,12 +2910,8 @@ export function PlannerApp({
           <PersonalOsBlockPopover
             block={popBlock}
             sessionDone={sessionDone}
-            taskDone={taskDone}
             anchor={blockPopover.rect}
             onClose={() => setBlockPopover(null)}
-            onToggleSessionDone={(done) => {
-              void toggleSessionDone(popBlock.id, done);
-            }}
             onSaveNotes={(notes) => {
               void (async () => {
                 setBlocks((current) => current.map((block) =>
@@ -2834,9 +2949,6 @@ export function PlannerApp({
                   showToast("Could not repeat session", "warning");
                 }
               })();
-            }}
-            onOpenTask={() => {
-              if (popBlock.taskId) setEditingTaskId(popBlock.taskId);
             }}
             onUnschedule={() => {
               if (popBlock.repeatSeriesId) {
@@ -2969,9 +3081,16 @@ function CalendarEvent({
   onMovePreview: (preview: { id: string; day: number; start: number } | null) => void;
   onToggleSessionDone?: (done: boolean) => void;
 }) {
-  const resizeStartRef = useRef<{ y: number; duration: number } | null>(null);
+  const resizeStartRef = useRef<{
+    pointerId: number;
+    y: number;
+    duration: number;
+    start: number;
+  } | null>(null);
   const previewRef = useRef<number | null>(null);
   const [previewDuration, setPreviewDuration] = useState<number | null>(null);
+  const clickTimerRef = useRef<number | null>(null);
+  const suppressSelectRef = useRef(false);
   const moveRef = useRef<{
     pointerId: number;
     startX: number;
@@ -2992,6 +3111,10 @@ function CalendarEvent({
   const showTime = displayDuration >= 25;
   const showMeta = displayDuration >= 45;
 
+  useEffect(() => () => {
+    if (clickTimerRef.current != null) window.clearTimeout(clickTimerRef.current);
+  }, []);
+
   const snapStart = (raw: number) => {
     const snapped = Math.round(raw / SNAP_MINUTES) * SNAP_MINUTES;
     return Math.max(
@@ -3009,36 +3132,70 @@ function CalendarEvent({
   };
 
   const onResizePointerDown = (event: React.PointerEvent) => {
-    if (block.type !== "task") return;
+    if (block.type !== "task" || event.button !== 0) return;
     event.stopPropagation();
     event.preventDefault();
-    resizeStartRef.current = { y: event.clientY, duration: block.duration };
+    const handle = event.currentTarget;
+    resizeStartRef.current = {
+      pointerId: event.pointerId,
+      y: event.clientY,
+      duration: block.duration,
+      start: block.start,
+    };
+    previewRef.current = block.duration;
+    try {
+      handle.setPointerCapture(event.pointerId);
+    } catch {
+      // ignore
+    }
 
     const onMove = (moveEvent: PointerEvent) => {
-      if (!resizeStartRef.current) return;
-      const delta = moveEvent.clientY - resizeStartRef.current.y;
-      const deltaMinutes = Math.round((delta / 60) / SNAP_MINUTES) * SNAP_MINUTES;
+      const state = resizeStartRef.current;
+      if (!state || moveEvent.pointerId !== state.pointerId) return;
+      moveEvent.preventDefault();
+      // Calendar geometry: 1px ≈ 1 minute (hour rows are 60px tall).
+      const delta = moveEvent.clientY - state.y;
+      const deltaMinutes = Math.round(delta / SNAP_MINUTES) * SNAP_MINUTES;
+      const maxDuration = Math.max(MIN_SESSION_MINUTES, END_HOUR * 60 - state.start);
       const nextDuration = Math.max(
-        SNAP_MINUTES,
-        Math.min(MINUTES_VISIBLE, resizeStartRef.current.duration + deltaMinutes),
+        MIN_SESSION_MINUTES,
+        Math.min(maxDuration, state.duration + deltaMinutes),
       );
       previewRef.current = nextDuration;
       setPreviewDuration(nextDuration);
     };
-    const onUp = () => {
-      const start = resizeStartRef.current;
-      const finalDuration = previewRef.current;
+
+    const onUp = (upEvent: PointerEvent) => {
+      const state = resizeStartRef.current;
+      if (!state || upEvent.pointerId !== state.pointerId) return;
       resizeStartRef.current = null;
+      const finalDuration = previewRef.current;
       previewRef.current = null;
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      if (start && finalDuration && finalDuration !== block.duration) {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
+      try {
+        handle.releasePointerCapture(upEvent.pointerId);
+      } catch {
+        // ignore
+      }
+      if (finalDuration != null && finalDuration !== block.duration) {
         onResize(block.id, finalDuration);
       }
       setPreviewDuration(null);
     };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
+  };
+
+  const openPopover = (rect: DOMRect) => {
+    if (suppressSelectRef.current) {
+      suppressSelectRef.current = false;
+      return;
+    }
+    onSelect(rect);
   };
 
   const onMovePointerDown = (event: React.PointerEvent) => {
@@ -3069,6 +3226,10 @@ function CalendarEvent({
       if (!state.dragging) {
         if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
         state.dragging = true;
+        if (clickTimerRef.current != null) {
+          window.clearTimeout(clickTimerRef.current);
+          clickTimerRef.current = null;
+        }
       }
       moveEvent.preventDefault();
       const day = dayFromPoint(moveEvent.clientX, moveEvent.clientY) ?? state.day;
@@ -3076,12 +3237,10 @@ function CalendarEvent({
       const rect = track?.getBoundingClientRect();
       let nextStart = state.originStart;
       if (rect && rect.height > 0) {
-        // Pointer-delta from original block top, not absolute cell Y under cursor.
         const originTopPx = ((state.originStart - START_HOUR * 60) / MINUTES_VISIBLE) * rect.height;
         const newTopPx = originTopPx + dy;
         const rawMinutes = START_HOUR * 60 + (newTopPx / rect.height) * MINUTES_VISIBLE;
         nextStart = snapStart(rawMinutes);
-        // Keep end within day.
         nextStart = Math.min(nextStart, END_HOUR * 60 - state.duration);
         nextStart = Math.max(START_HOUR * 60, nextStart);
         nextStart = snapStart(nextStart);
@@ -3102,7 +3261,13 @@ function CalendarEvent({
         const upTarget = upEvent.target as HTMLElement | null;
         if (upTarget?.closest?.(".event-complete")) return;
         const article = upTarget?.closest?.("article.calendar-event") as HTMLElement | null;
-        if (article) onSelect(article.getBoundingClientRect());
+        if (!article) return;
+        const rect = article.getBoundingClientRect();
+        if (clickTimerRef.current != null) window.clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = window.setTimeout(() => {
+          clickTimerRef.current = null;
+          openPopover(rect);
+        }, 220);
         return;
       }
       if (state.day !== state.originDay || state.start !== state.originStart) {
@@ -3112,6 +3277,19 @@ function CalendarEvent({
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+  };
+
+  const onBlockDoubleClick = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if ((event.target as HTMLElement).closest(".event-complete")) return;
+    if ((event.target as HTMLElement).closest(".event-resize-handle")) return;
+    if (clickTimerRef.current != null) {
+      window.clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+    suppressSelectRef.current = true;
+    if (block.taskId) onOpenTask(block.taskId);
   };
 
   return (
@@ -3151,15 +3329,13 @@ function CalendarEvent({
         touchAction: "none",
       } as React.CSSProperties}
       onPointerDown={onMovePointerDown}
+      onDoubleClick={onBlockDoubleClick}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           event.stopPropagation();
-          onSelect(event.currentTarget.getBoundingClientRect());
+          openPopover(event.currentTarget.getBoundingClientRect());
         }
-      }}
-      onDoubleClick={() => {
-        if (block.taskId) onOpenTask(block.taskId);
       }}
     >
       <div className={`event-title-row${isTiny ? " inline" : ""}`}>
@@ -3177,6 +3353,10 @@ function CalendarEvent({
               event.preventDefault();
               onToggleSessionDone(!sessionDone);
             }}
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              event.preventDefault();
+            }}
           >
             {sessionDone ? <CheckCircle2 size={10} aria-hidden="true" /> : null}
           </button>
@@ -3188,7 +3368,7 @@ function CalendarEvent({
       {showTime && (
         <span className="event-time pos-mono">
           {isCompact
-            ? minutesToTime(block.start)
+            ? `${minutesToTime(block.start)}–${minutesToTime(block.start + displayDuration)}`
             : `${minutesToTime(block.start)} · ${durationLabel(displayDuration)}`}
         </span>
       )}

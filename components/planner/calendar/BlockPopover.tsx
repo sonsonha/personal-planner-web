@@ -66,14 +66,11 @@ export type PersonalOsBlockPopoverProps = {
   block: CalendarPopoverBlock;
   /** Session done (block.status), not only task done. */
   sessionDone: boolean;
-  taskDone?: boolean;
   anchor: DOMRect;
   saving?: boolean;
   onClose: () => void;
-  onToggleSessionDone: (done: boolean) => void;
   onSaveNotes: (notes: string) => void;
   onRepeatSession?: (weeks: number) => void;
-  onOpenTask: () => void;
   onUnschedule: () => void;
   onRetrySync?: () => void;
 };
@@ -81,14 +78,11 @@ export type PersonalOsBlockPopoverProps = {
 export function PersonalOsBlockPopover({
   block,
   sessionDone,
-  taskDone = false,
   anchor,
   saving = false,
   onClose,
-  onToggleSessionDone,
   onSaveNotes,
   onRepeatSession,
-  onOpenTask,
   onUnschedule,
   onRetrySync,
 }: PersonalOsBlockPopoverProps) {
@@ -135,27 +129,6 @@ export function PersonalOsBlockPopover({
         {failed && onRetrySync && (
           <button type="button" className="pos-cal-popover-action amber" onClick={() => { onRetrySync(); onClose(); }}>
             Retry sync
-          </button>
-        )}
-
-        <button
-          type="button"
-          className={cn("pos-cal-popover-action", sessionDone ? "indigo" : "")}
-          disabled={saving}
-          onClick={() => onToggleSessionDone(!sessionDone)}
-        >
-          <span>{sessionDone ? "Mark session incomplete" : "Mark session done"}</span>
-          <small>{sessionDone ? "Reopen this calendar session" : "Evidence for this TimeBlock only"}</small>
-        </button>
-
-        {block.taskId && (
-          <button type="button" className="pos-cal-popover-action" onClick={() => { onOpenTask(); onClose(); }}>
-            <span>Open task</span>
-            <small>
-              {taskDone
-                ? "Task is complete"
-                : "Progress and multi-session completion live on the Task"}
-            </small>
           </button>
         )}
 
