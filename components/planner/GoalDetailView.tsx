@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import {
   type ApiGoal,
   type ApiGoalProgress,
@@ -8,6 +8,10 @@ import {
 } from "@/lib/planner-api";
 import { formatProcessValue } from "@/lib/goal-progress-display";
 import { inProductWeek, startOfProductWeek } from "@/lib/product-week";
+import {
+  formatSystemPreferredDays,
+  formatSystemTarget,
+} from "./SystemEditorModal";
 import {
   ArrowLink,
   BackButton,
@@ -154,9 +158,10 @@ export type GoalDetailViewProps = {
   onSetMilestone: (id: string) => void;
   onAddWeekWork: (title: string) => void;
   onCreateProject: () => void;
-  manageSystems: boolean;
-  onToggleManageSystems: () => void;
-  systemsEditor?: ReactNode;
+  onAddSystem: () => void;
+  onEditSystem: (systemId: string) => void;
+  onAddProcess: () => void;
+  onEditProcess: (processId: string) => void;
 };
 
 export function GoalDetailView({
@@ -180,9 +185,10 @@ export function GoalDetailView({
   onSetMilestone,
   onAddWeekWork,
   onCreateProject,
-  manageSystems,
-  onToggleManageSystems,
-  systemsEditor,
+  onAddSystem,
+  onEditSystem,
+  onAddProcess,
+  onEditProcess,
 }: GoalDetailViewProps) {
   const [weekDraft, setWeekDraft] = useState("");
   const focus = goal.focusType ?? "FOCUS";
@@ -441,7 +447,7 @@ export function GoalDetailView({
                 </div>
               )}
               <button type="button" className="pos-btn-ghost" onClick={onCreateProject}>
-                + Link project
+                + Add Project
               </button>
             </section>
           </div>
@@ -466,7 +472,7 @@ export function GoalDetailView({
                   <div className="pos-next-action-actions">
                     {!nextBlock && (
                       <button type="button" className="pos-btn-on-indigo" onClick={onGoCalendar}>
-                        Schedule
+                        Schedule session
                       </button>
                     )}
                     <button type="button" className="pos-btn-ghost-on-indigo" onClick={() => onOpenTask(nextTask.id)}>
@@ -524,25 +530,62 @@ export function GoalDetailView({
 
             <div className="pos-side-card">
               <div className="pos-side-card-label">Systems</div>
-              {goalSystems.length > 0 && (
-                <ul className="pos-systems-list">
-                  {goalSystems.map((system, index) => (
-                    <li key={system.id}>
-                      <i style={{ backgroundColor: processAccent(index).color }} />
-                      <div>
-                        <div className="pos-systems-row"><span>{system.title}</span><span className="pos-mono">{system.targetValue != null ? `${system.targetValue} ${system.unit ?? (system.targetType === "DURATION" ? "min" : "sessions")}/week` : system.cadence ?? "Weekly"}</span></div>
-                        <div className="pos-muted">{system.durationWeeks ? `${system.durationWeeks} weeks` : "Ongoing"} · {(system.status ?? "ACTIVE").toLowerCase()}</div>
-                      </div>
-                    </li>
-                  ))}
+              <p className="pos-side-card-hint">Repeated behavior to maintain for N weeks.</p>
+              {goalSystems.length === 0 ? (
+                <p className="pos-muted">No systems yet. Add a repeated behavior you want to maintain for a period of time.</p>
+              ) : (
+                <ul className="pos-systems-list pos-systems-overview">
+                  {goalSystems.map((system, index) => {
+                    const statusKey = (system.status ?? "ACTIVE").toLowerCase();
+                    const statusLabel =
+                      statusKey === "paused" ? "Paused"
+                        : statusKey === "completed" ? "Completed"
+                          : "Active";
+                    const preferred = [
+                      formatSystemPreferredDays(system.preferredDays),
+                      system.preferredTime || null,
+                    ].filter(Boolean).join(" · ");
+                    return (
+                      <li
+                        key={system.id}
+                        className={statusKey === "completed" ? "is-completed" : statusKey === "paused" ? "is-paused" : undefined}
+                      >
+                        <i style={{ backgroundColor: processAccent(index).color }} />
+                        <div>
+                          <div className="pos-systems-row">
+                            <span>{system.title}</span>
+                            <em className={`pos-system-status ${statusKey}`}>{statusLabel}</em>
+                          </div>
+                          <div className="pos-muted">
+                            {formatSystemTarget(system)}
+                            {system.durationWeeks ? ` · ${system.durationWeeks} weeks` : ""}
+                          </div>
+                          {preferred ? <div className="pos-muted">Preferred · {preferred}</div> : null}
+                          <button
+                            type="button"
+                            className="pos-btn-ghost pos-system-edit"
+                            onClick={() => onEditSystem(system.id)}
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
-              {goalSystems.length === 0 && <p className="pos-muted">No systems defined.</p>}
-              <div className="pos-side-card-label" style={{ marginTop: 16 }}>Processes</div>
+              <button type="button" className="pos-btn-ghost" onClick={onAddSystem}>
+                + Add System
+              </button>
+            </div>
+
+            <div className="pos-side-card">
+              <div className="pos-side-card-label">Processes</div>
+              <p className="pos-side-card-hint">Measurement / quota used for Goal progress.</p>
               {goalProcesses.length === 0 ? (
-                <p className="pos-muted">No recurring process defined.</p>
+                <p className="pos-muted">No processes defined. Processes measure repeated Goal progress.</p>
               ) : (
-                <ul className="pos-systems-list">
+                <ul className="pos-systems-list pos-systems-overview">
                   {goalProcesses.map((proc, index) => {
                     const accent = processAccent(index);
                     const bucket = processes.find((p) => p.id === proc.id)?.thisWeek;
@@ -562,22 +605,33 @@ export function GoalDetailView({
                               </span>
                             )}
                           </div>
-                          <div className="pos-process-track thin" aria-hidden="true">
-                            <div
-                              className="pos-process-completed-fill"
-                              style={{ width: `${pct}%`, backgroundColor: accent.color }}
-                            />
+                          <div className="pos-muted">
+                            {proc.targetValue}{proc.unit ? ` ${proc.unit}` : ""} / {proc.period.toLowerCase()}
                           </div>
+                          {bucket && (
+                            <div className="pos-process-track thin" aria-hidden="true">
+                              <div
+                                className="pos-process-completed-fill"
+                                style={{ width: `${pct}%`, backgroundColor: accent.color }}
+                              />
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            className="pos-btn-ghost pos-system-edit"
+                            onClick={() => onEditProcess(proc.id)}
+                          >
+                            Edit
+                          </button>
                         </div>
                       </li>
                     );
                   })}
                 </ul>
               )}
-              <button type="button" className="pos-btn-ghost" onClick={onToggleManageSystems}>
-                {manageSystems ? "Hide editor" : "Manage systems"}
+              <button type="button" className="pos-btn-ghost" onClick={onAddProcess}>
+                + Add Process
               </button>
-              {manageSystems && systemsEditor}
             </div>
 
             <div className="pos-side-links">

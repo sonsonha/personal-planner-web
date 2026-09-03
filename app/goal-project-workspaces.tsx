@@ -51,8 +51,10 @@ import { GoalDetailView } from "@/components/planner/GoalDetailView";
 import { GoalProgressPageView } from "@/components/planner/GoalProgressPageView";
 import { GoalReviewView } from "@/components/planner/GoalReviewView";
 import { GoalsOverviewView } from "@/components/planner/GoalsOverviewView";
+import { ProcessEditorModal } from "@/components/planner/ProcessEditorModal";
 import { ProjectDetailView } from "@/components/planner/ProjectDetailView";
 import { ProjectsOverviewView } from "@/components/planner/ProjectsOverviewView";
+import { SystemEditorModal } from "@/components/planner/SystemEditorModal";
 import { weekRangeLabel } from "@/components/planner/utils";
 type HorizonScope = "day" | "week" | "month" | "all";
 
@@ -80,11 +82,6 @@ function formatPreferredDays(days: number[]) {
     .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
     .map((d) => labels.get(d) ?? String(d))
     .join(" · ");
-}
-
-function togglePreferredDay(current: number[] | null | undefined, day: number) {
-  const list = current ?? [];
-  return list.includes(day) ? list.filter((d) => d !== day) : [...list, day];
 }
 
 function HorizonTabs({
@@ -380,6 +377,7 @@ export function GoalsWorkspace({
       <section className="gp-workspace gp-workspace-detail" aria-label="Goal detail">
         <GoalDetailPage
           goal={detailGoal}
+          goals={goals}
           projects={projects}
           tasks={tasks}
           blocks={blocks}
@@ -795,6 +793,7 @@ function GoalCreateFlow({
 
 function GoalDetailPage({
   goal,
+  goals,
   projects,
   tasks,
   blocks,
@@ -811,6 +810,7 @@ function GoalDetailPage({
   openReview = false,
 }: {
   goal: ApiGoal;
+  goals: ApiGoal[];
   projects: ApiProject[];
   tasks: WorkspaceTask[];
   blocks: WorkspaceBlock[];
@@ -829,21 +829,12 @@ function GoalDetailPage({
   const [creatingProject, setCreatingProject] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
   const [showReview, setShowReview] = useState(openReview);
-  const [manageSystems, setManageSystems] = useState(false);
   const [progress, setProgress] = useState<ApiGoalProgress | null>(null);
   const [loadingProgress, setLoadingProgress] = useState(live);
-  const [processDraftName, setProcessDraftName] = useState("");
-  const [processDraftType, setProcessDraftType] = useState<GoalProcess["measurementType"]>("COUNT");
-  const [processDraftTarget, setProcessDraftTarget] = useState("5");
-  const [processDraftPeriod, setProcessDraftPeriod] = useState<GoalProcess["period"]>("WEEK");
-  const [processDraftUnit, setProcessDraftUnit] = useState("");
-  const [systemDraftTitle, setSystemDraftTitle] = useState("");
-  const [systemDraftTarget, setSystemDraftTarget] = useState("4");
-  const [systemDraftType, setSystemDraftType] = useState<"COUNT" | "DURATION">("COUNT");
-  const [systemDraftWeeks, setSystemDraftWeeks] = useState("8");
-  const [systemDraftUnit, setSystemDraftUnit] = useState("sessions");
-  const [systemDraftPreferredDays, setSystemDraftPreferredDays] = useState<number[]>([]);
-  const [systemDraftPreferredTime, setSystemDraftPreferredTime] = useState("");
+  const [systemModal, setSystemModal] = useState<"create" | GoalSystem | null>(null);
+  const [processModal, setProcessModal] = useState<"create" | GoalProcess | null>(null);
+  const [entitySaving, setEntitySaving] = useState(false);
+  const [entityError, setEntityError] = useState<string | null>(null);
   const linked = projects.filter((p) => p.goalId === goal.id && p.active);
   const current = currentMilestone(goal);
   const health = healthLabel(goal, now);
@@ -897,51 +888,42 @@ function GoalDetailPage({
     onChanged("Current milestone updated");
   };
 
-  const addProcess = async () => {
-    const processes = goal.processes ?? [];
-    const target = Number(processDraftTarget);
-    if (!processDraftName.trim() || !Number.isFinite(target)) return;
-    const next = [
-      ...processes,
-      {
-        id: uid(),
-        name: processDraftName.trim(),
-        measurementType: processDraftType,
-        targetValue: target,
-        unit: processDraftType === "DURATION" ? (processDraftUnit || "h") : (processDraftUnit || undefined),
-        period: processDraftPeriod,
-        active: true,
-      },
-    ];
-    if (!live) {
-      onChanged("Process added · demo mode");
-      return;
+  const saveSystems = async (systems: GoalSystem[], message: string) => {
+    setEntitySaving(true);
+    setEntityError(null);
+    try {
+      if (!live) {
+        onChanged(`${message} · demo mode`);
+        setSystemModal(null);
+        return;
+      }
+      await updateGoal(goal.id, { systems });
+      onChanged(message);
+      setSystemModal(null);
+    } catch {
+      setEntityError("Could not save this system.");
+    } finally {
+      setEntitySaving(false);
     }
-    await updateGoal(goal.id, { processes: next });
-    onChanged("Goal process added");
-    setProcessDraftName("");
-    setProcessDraftTarget("5");
-    setProcessDraftUnit("");
   };
 
-  const addSystem = async () => {
-    const targetValue = Number(systemDraftTarget);
-    const durationWeeks = Number(systemDraftWeeks);
-    if (!systemDraftTitle.trim() || !Number.isFinite(targetValue) || !Number.isFinite(durationWeeks) || durationWeeks < 1) return;
-    const next = [...(goal.systems ?? []), {
-      id: uid(), title: systemDraftTitle.trim(), targetType: systemDraftType,
-      targetValue, unit: systemDraftUnit.trim() || (systemDraftType === "DURATION" ? "min" : "sessions"),
-      period: "WEEK" as const, durationWeeks, status: "ACTIVE" as const,
-      startDate: null,
-      preferredDays: systemDraftPreferredDays.length ? [...systemDraftPreferredDays].sort((a, b) => a - b) : null,
-      preferredTime: systemDraftPreferredTime.trim() || null,
-    }];
-    if (!live) { onChanged("System added · demo mode"); return; }
-    await updateGoal(goal.id, { systems: next });
-    onChanged("System added");
-    setSystemDraftTitle("");
-    setSystemDraftPreferredDays([]);
-    setSystemDraftPreferredTime("");
+  const saveProcesses = async (processes: GoalProcess[], message: string) => {
+    setEntitySaving(true);
+    setEntityError(null);
+    try {
+      if (!live) {
+        onChanged(`${message} · demo mode`);
+        setProcessModal(null);
+        return;
+      }
+      await updateGoal(goal.id, { processes });
+      onChanged(message);
+      setProcessModal(null);
+    } catch {
+      setEntityError("Could not save this process.");
+    } finally {
+      setEntitySaving(false);
+    }
   };
 
   return (
@@ -976,122 +958,80 @@ function GoalDetailPage({
           onAddWeekTask(linked[0]!.id, title);
         }}
         onCreateProject={() => setCreatingProject(true)}
-        manageSystems={manageSystems}
-        onToggleManageSystems={() => setManageSystems((value) => !value)}
-        systemsEditor={(
-          <div className="gp-process-editor" style={{ marginTop: 12 }}>
-            <p className="gp-muted">Systems describe a repeated behavior for a limited number of weeks. They never create Tasks or calendar events automatically.</p>
-            <div className="gp-process-form">
-              <input value={systemDraftTitle} onChange={(e) => setSystemDraftTitle(e.target.value)} placeholder="Morning running" />
-              <select value={systemDraftType} onChange={(e) => { const type = e.target.value as "COUNT" | "DURATION"; setSystemDraftType(type); setSystemDraftUnit(type === "DURATION" ? "min" : "sessions"); }}><option value="COUNT">Count</option><option value="DURATION">Duration</option></select>
-              <input type="number" min="0" value={systemDraftTarget} onChange={(e) => setSystemDraftTarget(e.target.value)} placeholder="4" />
-              <input value={systemDraftUnit} onChange={(e) => setSystemDraftUnit(e.target.value)} placeholder="sessions" />
-              <input type="number" min="1" value={systemDraftWeeks} onChange={(e) => setSystemDraftWeeks(e.target.value)} placeholder="8 weeks" />
-              <button type="button" className="ghost-button" onClick={addSystem}>Add system</button>
-            </div>
-            <div className="gp-inline-add" style={{ marginTop: 8, flexWrap: "wrap", gap: 6 }}>
-              {SYSTEM_DAY_OPTIONS.map((day) => {
-                const selected = systemDraftPreferredDays.includes(day.value);
-                return (
-                  <button
-                    key={day.value}
-                    type="button"
-                    className={selected ? "primary-button" : "ghost-button"}
-                    aria-pressed={selected}
-                    onClick={() => setSystemDraftPreferredDays((current) =>
-                      selected ? current.filter((d) => d !== day.value) : [...current, day.value],
-                    )}
-                  >
-                    {day.label}
-                  </button>
-                );
-              })}
-              <input
-                type="time"
-                value={systemDraftPreferredTime}
-                onChange={(e) => setSystemDraftPreferredTime(e.target.value)}
-                aria-label="Preferred time (optional)"
-              />
-            </div>
-            {(goal.systems ?? []).map((system) => (
-              <form key={system.id} className="gp-process-form" style={{ marginTop: 8, flexWrap: "wrap" }} onSubmit={async (event) => {
-                event.preventDefault();
-                if (!live) return;
-                const data = new FormData(event.currentTarget);
-                const preferredTime = String(data.get("preferredTime") ?? "").trim() || null;
-                const next = (goal.systems ?? []).map((item) => item.id === system.id ? {
-                  ...item,
-                  title: String(data.get("title") ?? item.title).trim() || item.title,
-                  targetValue: Number(data.get("targetValue")) || item.targetValue,
-                  unit: String(data.get("unit") ?? item.unit ?? "").trim() || null,
-                  durationWeeks: Math.max(1, Number(data.get("durationWeeks")) || item.durationWeeks || 1),
-                  preferredTime,
-                  preferredDays: item.preferredDays ?? null,
-                } : item);
-                await updateGoal(goal.id, { systems: next });
-                onChanged("System updated");
-              }}>
-                <input name="title" defaultValue={system.title} aria-label="System title" />
-                <input name="targetValue" type="number" min="0" defaultValue={system.targetValue ?? 1} aria-label="Weekly target" />
-                <input name="unit" defaultValue={system.unit ?? (system.targetType === "DURATION" ? "min" : "sessions")} aria-label="System unit" />
-                <input name="durationWeeks" type="number" min="1" defaultValue={system.durationWeeks ?? 1} aria-label="Duration weeks" />
-                <input name="preferredTime" type="time" defaultValue={system.preferredTime ?? ""} aria-label="Preferred time" />
-                <button type="submit" className="ghost-button">Save</button>
-                <div className="gp-inline-add" style={{ width: "100%", flexWrap: "wrap", gap: 6 }}>
-                  {SYSTEM_DAY_OPTIONS.map((day) => {
-                    const selected = (system.preferredDays ?? []).includes(day.value);
-                    return (
-                      <button
-                        key={day.value}
-                        type="button"
-                        className={selected ? "primary-button" : "ghost-button"}
-                        aria-pressed={selected}
-                        onClick={async () => {
-                          if (!live) return;
-                          const preferredDays = togglePreferredDay(system.preferredDays, day.value);
-                          await updateGoal(goal.id, {
-                            systems: (goal.systems ?? []).map((item) => item.id === system.id
-                              ? { ...item, preferredDays: preferredDays.length ? preferredDays.sort((a, b) => a - b) : null }
-                              : item),
-                          });
-                          onChanged("System preferred days updated");
-                        }}
-                      >
-                        {day.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button type="button" className="ghost-button" onClick={async () => { if (live) { await updateGoal(goal.id, { systems: (goal.systems ?? []).map((item) => item.id === system.id ? { ...item, status: item.status === "PAUSED" ? "ACTIVE" as const : "PAUSED" as const } : item) }); onChanged("System status updated"); } }}>{system.status === "PAUSED" ? "Resume" : "Pause"}</button>
-                <button type="button" className="ghost-button" onClick={async () => { if (live) { await updateGoal(goal.id, { systems: (goal.systems ?? []).map((item) => item.id === system.id ? { ...item, status: "COMPLETED" as const } : item) }); onChanged("System completed"); } }}>Complete</button>
-                <button type="button" className="ghost-button" onClick={async () => { if (live) { await updateGoal(goal.id, { systems: (goal.systems ?? []).filter((item) => item.id !== system.id) }); onChanged("System removed"); } }}>Remove</button>
-              </form>
-            ))}
-            <div className="gp-process-form">
-              <input value={processDraftName} onChange={(e) => setProcessDraftName(e.target.value)} placeholder="Applications" />
-              <select value={processDraftType} onChange={(e) => setProcessDraftType(e.target.value as GoalProcess["measurementType"])}>
-                <option value="COUNT">Count</option>
-                <option value="DURATION">Duration</option>
-                <option value="BINARY">Binary</option>
-                <option value="CUSTOM_METRIC">Custom metric</option>
-              </select>
-              <input value={processDraftTarget} onChange={(e) => setProcessDraftTarget(e.target.value)} placeholder="5" />
-              <input value={processDraftUnit} onChange={(e) => setProcessDraftUnit(e.target.value)} placeholder={processDraftType === "DURATION" ? "h" : "unit"} />
-              <select value={processDraftPeriod} onChange={(e) => setProcessDraftPeriod(e.target.value as GoalProcess["period"])}>
-                <option value="WEEK">Week</option>
-                <option value="MONTH">Month</option>
-                <option value="DAY">Day</option>
-              </select>
-              <button type="button" className="ghost-button" onClick={addProcess}>Add process</button>
-            </div>
-          </div>
-        )}
+        onAddSystem={() => { setEntityError(null); setSystemModal("create"); }}
+        onEditSystem={(systemId) => {
+          const system = (goal.systems ?? []).find((item) => item.id === systemId);
+          if (system) {
+            setEntityError(null);
+            setSystemModal(system);
+          }
+        }}
+        onAddProcess={() => { setEntityError(null); setProcessModal("create"); }}
+        onEditProcess={(processId) => {
+          const process = (goal.processes ?? []).find((item) => item.id === processId);
+          if (process) {
+            setEntityError(null);
+            setProcessModal(process);
+          }
+        }}
       />
+
+      {systemModal && (
+        <SystemEditorModal
+          system={systemModal === "create" ? null : systemModal}
+          saving={entitySaving}
+          error={entityError}
+          onClose={() => { if (!entitySaving) setSystemModal(null); }}
+          onSave={async (next) => {
+            const existing = goal.systems ?? [];
+            const systems = systemModal === "create"
+              ? [...existing, next]
+              : existing.map((item) => (item.id === next.id ? next : item));
+            await saveSystems(systems, systemModal === "create" ? "System added" : "System updated");
+          }}
+          onPauseResume={systemModal === "create" ? undefined : async (system) => {
+            const systems = (goal.systems ?? []).map((item) => item.id === system.id
+              ? { ...item, status: item.status === "PAUSED" ? "ACTIVE" as const : "PAUSED" as const }
+              : item);
+            await saveSystems(systems, "System status updated");
+          }}
+          onComplete={systemModal === "create" ? undefined : async (system) => {
+            const systems = (goal.systems ?? []).map((item) => item.id === system.id
+              ? { ...item, status: "COMPLETED" as const }
+              : item);
+            await saveSystems(systems, "System completed");
+          }}
+          onDelete={systemModal === "create" ? undefined : async (system) => {
+            const systems = (goal.systems ?? []).filter((item) => item.id !== system.id);
+            await saveSystems(systems, "System removed");
+          }}
+        />
+      )}
+
+      {processModal && (
+        <ProcessEditorModal
+          process={processModal === "create" ? null : processModal}
+          saving={entitySaving}
+          error={entityError}
+          onClose={() => { if (!entitySaving) setProcessModal(null); }}
+          onSave={async (next) => {
+            const existing = goal.processes ?? [];
+            const processes = processModal === "create"
+              ? [...existing, next]
+              : existing.map((item) => (item.id === next.id ? next : item));
+            await saveProcesses(processes, processModal === "create" ? "Process added" : "Process updated");
+          }}
+          onDelete={processModal === "create" ? undefined : async (process) => {
+            const processes = (goal.processes ?? []).filter((item) => item.id !== process.id);
+            await saveProcesses(processes, "Process removed");
+          }}
+        />
+      )}
 
       {creatingProject && (
         <ProjectEditorModal
           project={null}
-          goals={[goal]}
+          goals={goals}
           prefillGoalId={goal.id}
           live={live}
           onClose={() => setCreatingProject(false)}
@@ -1424,6 +1364,14 @@ function ProjectEditorModal({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, saving]);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!title.trim()) { setError("Project title is required."); return; }
@@ -1466,31 +1414,62 @@ function ProjectEditorModal({
   };
 
   return (
-    <div className="entity-modal-backdrop">
-      <button className="modal-dismiss" type="button" aria-label="Close" onClick={onClose} />
-      <form className="entity-modal gp-project-modal" onSubmit={submit}>
-        <div className="entity-modal-header">
-          <div><div className="eyebrow">Project</div><h3>{project ? "Edit project" : "New project"}</h3></div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
+    <div className="pos-qa-backdrop">
+      <button className="pos-qa-dismiss" type="button" aria-label="Close" onClick={onClose} disabled={saving} />
+      <form
+        className="pos-qa-modal pos-entity-form-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={project ? "Edit project" : "New project"}
+        onSubmit={submit}
+      >
+        <div className="pos-qa-header">
+          <span className="pos-qa-eyebrow">{project ? "Edit project" : "New project"}</span>
+          <button type="button" className="pos-qa-close" onClick={onClose} aria-label="Close" disabled={saving}>
+            <X size={16} />
+          </button>
         </div>
-        <label><span>Title</span><input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus /></label>
-        <label><span>Linked goal</span>
-          <select value={goalId} onChange={(e) => setGoalId(e.target.value)}>
-            <option value="">None</option>
-            {goals.filter((g) => g.status === "ACTIVE").map((g) => (
-              <option key={g.id} value={g.id}>{goalOutcome(g)}</option>
-            ))}
-          </select>
-        </label>
-        <label><span>Deadline (optional)</span><input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} /></label>
-        <label><span>Color</span><input type="color" value={color} onChange={(e) => setColor(e.target.value)} /></label>
-        <label><span>Notes</span><textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} /></label>
-        {error && <p className="entity-error">{error}</p>}
-        <div className="entity-modal-actions">
-          {project && <button type="button" className="danger-button" onClick={remove} disabled={saving}><Trash2 size={15} /> {confirmDelete ? "Confirm delete" : "Delete"}</button>}
-          <div className="entity-modal-actions-right">
-            <button type="button" className="ghost-button" onClick={onClose}>Cancel</button>
-            <button type="submit" className="primary-button" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+        <div className="pos-qa-fields">
+          <label className="pos-qa-field">
+            <span className="pos-qa-field-label">Project name</span>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="IELTS Writing Improvement" autoFocus disabled={saving} />
+          </label>
+          <label className="pos-qa-field">
+            <span className="pos-qa-field-label">Goal</span>
+            <select value={goalId} onChange={(e) => setGoalId(e.target.value)} disabled={saving}>
+              <option value="">None</option>
+              {goals.filter((g) => g.status === "ACTIVE").map((g) => (
+                <option key={g.id} value={g.id}>{goalOutcome(g)}</option>
+              ))}
+            </select>
+          </label>
+          <label className="pos-qa-field pos-entity-span-2">
+            <span className="pos-qa-field-label">Description</span>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} disabled={saving} placeholder="Optional" />
+          </label>
+          <label className="pos-qa-field">
+            <span className="pos-qa-field-label">Target date</span>
+            <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} disabled={saving} />
+          </label>
+          <label className="pos-qa-field">
+            <span className="pos-qa-field-label">Color</span>
+            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} disabled={saving} />
+          </label>
+        </div>
+        {error && <p className="pos-entity-form-error">{error}</p>}
+        <div className="pos-entity-form-footer">
+          {project && (
+            <div className="pos-entity-form-secondary">
+              <button type="button" className="pos-btn-ghost danger" onClick={remove} disabled={saving}>
+                <Trash2 size={15} /> {confirmDelete ? "Confirm delete" : "Delete"}
+              </button>
+            </div>
+          )}
+          <div className="pos-entity-form-primary">
+            <button type="button" className="pos-btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="submit" className="pos-btn-primary" disabled={saving}>
+              {saving ? "Saving…" : project ? "Save changes" : "Add Project"}
+            </button>
           </div>
         </div>
       </form>
