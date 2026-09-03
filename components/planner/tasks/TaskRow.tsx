@@ -49,6 +49,8 @@ export function TaskRow({
         isOverdue && "overdue",
       )}
       data-task-id={task.id}
+      data-priority={task.priority}
+      style={{ "--pos-task-priority-color": priority.color } as CSSProperties}
     >
       <button
         type="button"
@@ -109,7 +111,6 @@ export function TaskRow({
 
       <div
         className="pos-task-priority"
-        style={{ "--pos-task-priority-color": priority.color } as CSSProperties}
         title={`${priority.label} · ${priority.hint}`}
       >
         <i aria-hidden="true" />

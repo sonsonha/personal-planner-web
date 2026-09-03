@@ -12,6 +12,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { plannerPath, type PlannerSection } from "@/app/planner-routes";
+import { ThemeToggle } from "./ThemeToggle";
 import { cn } from "./utils";
 
 export type SidebarGoogleState = "live" | "syncing" | "demo" | "error" | "loading";
@@ -233,6 +234,8 @@ export function PlannerSidebar({
           <i className={cn("pos-gcal-dot", googleDotClass)} />
         </button>
       )}
+
+      <ThemeToggle collapsed={collapsed} />
 
       {collapsed && (
         <button

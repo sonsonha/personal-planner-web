@@ -124,6 +124,8 @@ type CalendarBlock = {
   color: string;
   type: "task" | "external";
   taskId?: string;
+  /** Task priority for Personal OS Sessions — drives calendar fill color. */
+  priority?: TaskPriority;
   projectId?: string | null;
   meta?: string;
   syncStatus?: "PENDING" | "SYNCED" | "FAILED";
@@ -209,10 +211,10 @@ const COLORS = {
 };
 
 const PRIORITY_LEVELS = [
-  { id: "p1" as const, label: "Do now", hint: "Urgent · important", color: "#B33A22", api: "HIGH" as const },
-  { id: "p2" as const, label: "Important", hint: "Worth protecting time for", color: "#2F86C7", api: "NORMAL" as const },
-  { id: "p3" as const, label: "Delegate", hint: "Urgent", color: "#3E8F3A", api: "LOW" as const },
-  { id: "p4" as const, label: "Drop", hint: "Neither", color: "#C99212", api: "DROP" as const },
+  { id: "p1" as const, label: "Do now", hint: "Urgent · important", color: "#dc2626", api: "HIGH" as const },
+  { id: "p2" as const, label: "Important", hint: "Worth protecting time for", color: "#2563eb", api: "NORMAL" as const },
+  { id: "p3" as const, label: "Delegate", hint: "Urgent", color: "#16a34a", api: "LOW" as const },
+  { id: "p4" as const, label: "Drop", hint: "Neither", color: "#ca8a04", api: "DROP" as const },
 ];
 
 function priorityFromApi(value: string): TaskPriority {
@@ -1424,7 +1426,9 @@ export function PlannerApp({
     .map((block) => {
       if (block.type !== "task" || !block.taskId) return block;
       const task = tasks.find((item) => item.id === block.taskId);
-      return task ? { ...block, color: priorityColor(task.priority) } : block;
+      return task
+        ? { ...block, color: priorityColor(task.priority), priority: task.priority }
+        : block;
     });
 
   const changePeriod = useCallback((amount: number) => {
@@ -1651,6 +1655,7 @@ export function PlannerApp({
       color: priorityColor(task.priority),
       type: "task",
       taskId: task.id,
+      priority: task.priority,
       projectId: task.projectId,
       meta: task.project,
       syncStatus: "PENDING",
@@ -2050,7 +2055,7 @@ export function PlannerApp({
     );
     setBlocks((current) =>
       current.map((block) => (block.taskId === taskId && block.type === "task"
-        ? { ...block, color }
+        ? { ...block, color, priority }
         : block)),
     );
     if (!liveDataRef.current) return;
@@ -3395,6 +3400,7 @@ function CalendarEvent({
         isTiny ? "tiny" : isCompact ? "compact" : "",
       ].filter(Boolean).join(" ")}
       data-sync={block.syncStatus?.toLowerCase()}
+      data-priority={!isExternal ? (block.priority ?? "p2") : undefined}
       role="button"
       tabIndex={0}
       aria-label={
@@ -3697,6 +3703,7 @@ function TaskPanel({
           <article
             className={`task-card${task.status === "done" ? " done" : ""}`}
             key={task.id}
+            data-priority={task.priority}
             draggable={task.status !== "done"}
             onDragStart={(event) => onDragStart(event, { kind: "task", taskId: task.id })}
             style={{ "--priority-color": priority.color } as React.CSSProperties}

@@ -53,10 +53,10 @@ export const PRIORITY_META: Record<
   TaskPriority,
   { id: TaskPriority; label: string; hint: string; color: string }
 > = {
-  p1: { id: "p1", label: "Do now", hint: "Urgent · important", color: "#B33A22" },
-  p2: { id: "p2", label: "Important", hint: "Worth protecting time for", color: "#2F86C7" },
-  p3: { id: "p3", label: "Delegate", hint: "Urgent", color: "#3E8F3A" },
-  p4: { id: "p4", label: "Drop", hint: "Neither", color: "#C99212" },
+  p1: { id: "p1", label: "Do now", hint: "Urgent · important", color: "#dc2626" },
+  p2: { id: "p2", label: "Important", hint: "Worth protecting time for", color: "#2563eb" },
+  p3: { id: "p3", label: "Delegate", hint: "Urgent", color: "#16a34a" },
+  p4: { id: "p4", label: "Drop", hint: "Neither", color: "#ca8a04" },
 };
 
 export function priorityMeta(priority: TaskPriority) {

@@ -920,23 +920,24 @@ button {
 }
 
 .task-card {
-  --priority-color: #6ba8d4;
+  --priority-color: var(--priority-solid, #2563eb);
   display: grid;
   grid-template-columns: 23px 1fr 16px;
   gap: 6px;
   padding: 11px 9px 10px;
-  border: 1px solid color-mix(in srgb, var(--priority-color), #fff 55%);
-  border-left: 6px solid var(--priority-color);
+  border: 1px solid color-mix(in srgb, var(--priority-border, var(--priority-color)) 35%, var(--pos-border));
+  border-left: 4px solid var(--priority-strong, var(--priority-color));
   border-radius: 11px;
-  background: color-mix(in srgb, var(--priority-color), #fff 84%);
-  box-shadow: 0 2px 5px rgba(25, 30, 50, 0.025);
+  background: color-mix(in srgb, var(--priority-soft, var(--priority-bg)) 88%, var(--pos-card));
+  color: var(--pos-ink);
+  box-shadow: var(--pos-shadow-sm);
   cursor: grab;
   transition: border 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
 .task-card:hover {
-  border-color: #cbc5fb;
-  box-shadow: 0 8px 24px rgba(41, 37, 82, 0.09);
+  border-color: color-mix(in srgb, var(--priority-border) 55%, var(--pos-border));
+  box-shadow: var(--pos-shadow-md);
   transform: translateY(-1px);
 }
 
@@ -2415,110 +2416,110 @@ button {
   gap: 12px;
   min-height: 48px;
   padding: 0 16px 0 20px;
-  border-bottom: 1px solid #e4dfd4;
-  background: var(--pos-canvas, #f3f1eb);
+  border-bottom: 1px solid var(--pos-border);
+  background: var(--pos-canvas);
 }
 
 .pos-cal-toolbar .today-button,
 .pos-cal-toolbar .tasks-toggle {
-  border-color: #e4dfd4;
+  border-color: var(--pos-border);
   border-radius: 10px;
-  background: #fff;
-  color: #374151;
+  background: var(--pos-card);
+  color: var(--pos-ink-secondary);
   font-size: 12px;
   font-weight: 600;
 }
 
 .pos-cal-toolbar .today-button:hover,
 .pos-cal-toolbar .tasks-toggle:hover {
-  border-color: #c7d2fe;
-  background: #eef2ff;
+  border-color: var(--pos-primary-ring);
+  background: var(--pos-primary-soft);
 }
 
 .pos-cal-toolbar .tasks-toggle.active {
-  border-color: #c7d2fe;
-  background: #eef2ff;
-  color: #3730a3;
+  border-color: var(--pos-primary-ring);
+  background: var(--pos-primary-soft);
+  color: var(--pos-primary);
 }
 
 .pos-cal-toolbar .pager {
-  border-color: #e4dfd4;
+  border-color: var(--pos-border);
   border-radius: 10px;
 }
 
 .pos-cal-toolbar .pager button {
-  background: #fff;
+  background: var(--pos-card);
 }
 
 .pos-cal-toolbar .pager button:hover {
-  background: #f9f8f5;
+  background: var(--pos-surface-alt);
 }
 
 .pos-cal-toolbar .week-range {
-  color: #4b5563;
+  color: var(--pos-ink-secondary);
   font-size: 12px;
   font-weight: 600;
 }
 
 .pos-cal-toolbar .capacity-summary {
-  color: #6b7280;
+  color: var(--pos-ink-muted);
   font-size: 11px;
 }
 
 .pos-cal-toolbar .capacity-summary strong {
-  color: #374151;
+  color: var(--pos-ink-secondary);
 }
 
 .pos-cal-toolbar .view-switcher {
   padding: 3px;
-  border: 1px solid #e4dfd4;
+  border: 1px solid var(--pos-border);
   border-radius: 12px;
-  background: #f3efe6;
+  background: var(--pos-surface-alt);
 }
 
 .pos-cal-toolbar .view-switcher button {
   height: 28px;
   padding: 0 12px;
   border-radius: 9px;
-  color: #6b7280;
+  color: var(--pos-ink-muted);
   font-size: 12px;
   font-weight: 600;
 }
 
 .pos-cal-toolbar .view-switcher button.active {
-  background: #fff;
-  color: #111827;
-  box-shadow: 0 1px 2px rgba(11, 14, 26, 0.06);
+  background: var(--pos-card);
+  color: var(--pos-ink);
+  box-shadow: var(--pos-shadow-sm);
 }
 
 .calendar-card.pos-cal {
-  border: 1px solid #e4dfd4;
+  border: 1px solid var(--pos-border);
   border-radius: 16px;
-  background: #fff;
+  background: var(--pos-card);
   overflow: hidden;
 }
 
 .pos-cal .calendar-days {
-  border-bottom: 1px solid #e4dfd4;
-  background: #fff;
+  border-bottom: 1px solid var(--pos-border);
+  background: var(--pos-cal-header);
 }
 
 .pos-cal .timezone,
 .pos-cal .all-day-label {
-  color: #9ca3af;
+  color: var(--pos-cal-rail);
   font-family: var(--pos-font-mono);
   font-size: 10px;
 }
 
 .pos-cal .day-heading {
-  border-left: 1px solid #f0ede6;
+  border-left: 1px solid var(--pos-border-light);
   flex-direction: column;
   gap: 2px;
   padding: 8px 4px;
 }
 
 .pos-cal .day-heading span {
-  color: #9ca3af;
+  color: var(--pos-ink-muted);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -2530,19 +2531,19 @@ button {
   border-radius: 999px;
   font-size: 13px;
   font-weight: 700;
-  color: #374151;
+  color: var(--pos-ink-secondary);
 }
 
 .pos-cal .day-heading.today {
-  background: rgba(238, 242, 255, 0.55);
+  background: var(--pos-cal-today-wash);
 }
 
 .pos-cal .day-heading.today span {
-  color: #4f46e5;
+  color: var(--pos-primary);
 }
 
 .pos-cal .day-heading.today strong {
-  background: #4f46e5;
+  background: var(--pos-primary);
   color: #fff;
   box-shadow: none;
 }
@@ -2552,60 +2553,58 @@ button {
 }
 
 .pos-cal .all-day-row {
-  border-bottom: 1px solid #e4dfd4;
-  background: #faf9f6;
+  border-bottom: 1px solid var(--pos-border);
+  background: var(--pos-surface-alt);
 }
 
 .pos-cal .day-track {
-  border-left: 1px solid #f0ede6;
+  border-left: 1px solid var(--pos-border-light);
   background-image:
-    linear-gradient(to bottom, transparent 59px, #f3f4f6 59px, #f3f4f6 60px, transparent 60px),
-    linear-gradient(to bottom, transparent 29px, #f9fafb 29px, #f9fafb 30px, transparent 30px);
+    linear-gradient(to bottom, transparent 59px, var(--pos-cal-grid-line) 59px, var(--pos-cal-grid-line) 60px, transparent 60px),
+    linear-gradient(to bottom, transparent 29px, var(--pos-cal-grid-half) 29px, var(--pos-cal-grid-half) 30px, transparent 30px);
   background-size: 100% 60px;
 }
 
 .pos-cal .day-track.today {
-  background-color: rgba(238, 242, 255, 0.18);
+  background-color: var(--pos-cal-today-wash);
 }
 
 .pos-cal .day-track:hover {
-  background-color: rgba(238, 242, 255, 0.12);
+  background-color: var(--pos-cal-hover-wash);
 }
 
 .pos-cal .time-rail span {
-  color: #9ca3af;
+  color: var(--pos-cal-rail);
   font-family: var(--pos-font-mono);
   font-size: 10px;
 }
 
-/* Personal OS / Google / done / sync — Make treatments. Geometry via inline top/height/left/right. */
+/* Personal OS / Google / done / sync — priority full-fill for Personal OS Sessions. */
 .pos-cal .calendar-event {
-  --event-color: #4338ca;
+  --event-color: var(--priority-solid, #2563eb);
   z-index: 2;
   overflow: hidden;
-  padding: 4px 6px;
-  border-top: 1px solid rgba(67, 56, 202, 0.18);
-  border-right: 1px solid rgba(67, 56, 202, 0.18);
-  border-bottom: 1px solid rgba(67, 56, 202, 0.18);
-  border-left: 3px solid var(--event-color);
-  border-radius: 6px;
-  background: rgba(67, 56, 202, 0.08);
-  color: #1e1b4b;
-  box-shadow: none;
+  padding: 4px 7px;
+  border: 1px solid color-mix(in srgb, var(--priority-border, var(--event-color)) 70%, transparent);
+  border-left: 3px solid var(--priority-strong, var(--event-color));
+  border-radius: 7px;
+  background: var(--priority-fill, var(--event-color));
+  color: var(--priority-on-fill, #fff);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
   transform: none;
   cursor: grab;
 }
 
 .pos-cal .calendar-event:hover {
   z-index: 4;
-  box-shadow: none;
-  transform: none;
-  background: rgba(67, 56, 202, 0.11);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.18);
+  filter: brightness(1.04);
 }
 
 .pos-cal .calendar-event.selected {
-  outline: 2px solid #818cf8;
+  outline: 2px solid color-mix(in srgb, var(--priority-on-fill, #fff) 55%, var(--priority-border));
   outline-offset: 1px;
+  box-shadow: 0 0 0 1px var(--priority-border), 0 6px 16px rgba(15, 23, 42, 0.2);
 }
 
 .pos-cal .calendar-event:focus-visible {
@@ -2614,43 +2613,33 @@ button {
 }
 
 .pos-cal .calendar-event.external {
-  border-top: 1px dashed rgba(156, 163, 175, 0.55);
-  border-right: 1px dashed rgba(156, 163, 175, 0.55);
-  border-bottom: 1px dashed rgba(156, 163, 175, 0.55);
-  border-left: 1px dashed rgba(156, 163, 175, 0.55);
-  background: rgba(107, 114, 128, 0.1);
-  color: #374151;
+  border: 1px dashed color-mix(in srgb, var(--event-color, var(--pos-ink-muted)) 45%, var(--pos-border));
+  border-left: 3px solid color-mix(in srgb, var(--event-color, var(--pos-ink-muted)) 70%, transparent);
+  background: color-mix(in srgb, var(--event-color, var(--pos-ink-muted)) 14%, var(--pos-card));
+  color: var(--pos-ink-secondary);
+  box-shadow: none;
+  filter: none;
   cursor: default;
 }
 
 .pos-cal .calendar-event.done {
-  opacity: 1;
-  border-top-color: rgba(5, 150, 105, 0.22);
-  border-right-color: rgba(5, 150, 105, 0.22);
-  border-bottom-color: rgba(5, 150, 105, 0.22);
-  border-left: 3px solid #059669;
-  background: rgba(5, 150, 105, 0.08);
-  color: #065f46;
+  opacity: 0.72;
+  filter: saturate(0.75);
   cursor: default;
 }
 
 .pos-cal .calendar-event.done .event-title-row strong {
   text-decoration: line-through;
-  opacity: 0.75;
+  opacity: 0.85;
 }
 
 .pos-cal .calendar-event.sync-failed {
-  border-top-color: rgba(217, 119, 6, 0.3);
-  border-right-color: rgba(217, 119, 6, 0.3);
-  border-bottom-color: rgba(217, 119, 6, 0.3);
-  border-left: 3px solid #d97706;
-  background: rgba(217, 119, 6, 0.09);
-  color: #92400e;
+  box-shadow: inset 0 0 0 1px var(--pos-amber);
 }
 
 .pos-cal .calendar-event.sync-pending,
 .pos-cal .calendar-event[data-sync="pending"] {
-  opacity: 0.85;
+  opacity: 0.88;
 }
 
 .pos-cal .calendar-event.tiny {
@@ -2682,7 +2671,7 @@ button {
   display: block;
   margin-top: 1px;
   overflow: hidden;
-  color: #6b7280;
+  color: color-mix(in srgb, var(--priority-on-fill, #fff) 78%, transparent);
   font-size: 10px;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -2691,16 +2680,16 @@ button {
 
 .pos-cal .calendar-event.done .event-time,
 .pos-cal .calendar-event.done .event-meta {
-  color: #34d399;
+  color: color-mix(in srgb, var(--priority-on-fill, #fff) 70%, transparent);
 }
 
 .pos-cal .calendar-event.external .event-time,
 .pos-cal .calendar-event.external .event-meta {
-  color: #9ca3af;
+  color: var(--pos-ink-muted);
 }
 
 .pos-cal .calendar-event.sync-failed .event-sync-note {
-  color: #d97706;
+  color: var(--pos-amber);
   font-family: var(--pos-font-mono);
   font-size: 9px;
 }
@@ -2709,14 +2698,14 @@ button {
   width: 16px;
   height: 16px;
   min-width: 16px;
-  border-color: rgba(67, 56, 202, 0.28);
-  background: rgba(255, 255, 255, 0.78);
-  color: #fff;
+  border-color: color-mix(in srgb, var(--priority-on-fill, #fff) 55%, transparent);
+  background: color-mix(in srgb, var(--priority-on-fill, #fff) 18%, transparent);
+  color: var(--priority-on-fill, #fff);
 }
 
 .pos-cal .calendar-event.done .event-complete,
 .pos-cal .event-complete.checked {
-  border-color: #059669;
+  border-color: #fff;
   background: #059669;
   color: #fff;
   opacity: 1;
@@ -2730,17 +2719,17 @@ button {
 }
 
 .pos-cal .now-line {
-  background: #ef4444;
-  opacity: 0.85;
+  background: var(--pos-now-line);
+  opacity: 0.9;
 }
 
 .pos-cal .now-line::before {
-  background: #ef4444;
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+  background: var(--pos-now-line);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pos-now-line) 25%, transparent);
 }
 
 .pos-cal .now-line span {
-  background: #ef4444;
+  background: var(--pos-now-line);
   font-family: var(--pos-font-mono);
   font-size: 9px;
 }
@@ -2763,13 +2752,13 @@ button {
   flex-direction: column;
   justify-content: space-between;
   padding: 4px 6px;
-  border: 1.5px solid rgba(67, 56, 202, 0.55);
+  border: 1.5px solid color-mix(in srgb, var(--pos-primary) 55%, transparent);
   border-radius: 8px;
-  background: rgba(99, 102, 241, 0.18);
-  color: #3730a3;
+  background: color-mix(in srgb, var(--pos-primary) 18%, transparent);
+  color: var(--pos-primary);
   font-size: 10px;
   pointer-events: none;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pos-card) 35%, transparent);
 }
 
 .pos-cal-draft-block {
@@ -2781,11 +2770,11 @@ button {
   flex-direction: column;
   gap: 2px;
   padding: 4px 6px;
-  border: 1px dashed color-mix(in srgb, #6366f1 55%, #fff);
+  border: 1px dashed color-mix(in srgb, var(--pos-primary) 55%, var(--pos-border));
   border-radius: 8px;
-  background: color-mix(in srgb, #6366f1 22%, #fff);
-  color: #312e81;
-  box-shadow: 0 1px 0 rgba(49, 46, 129, 0.08);
+  background: color-mix(in srgb, var(--pos-primary) 18%, var(--pos-card));
+  color: var(--pos-ink);
+  box-shadow: var(--pos-shadow-sm);
   pointer-events: none;
   overflow: hidden;
 }
@@ -2800,20 +2789,20 @@ button {
 }
 
 .pos-cal-draft-block span {
-  color: color-mix(in srgb, #312e81 72%, transparent);
+  color: var(--pos-ink-secondary);
   font-size: 10px;
 }
 
 /* Side panel */
 .task-panel.pos-cal-side {
-  border-left: 1px solid #e4dfd4;
-  background: #f9f8f5;
+  border-left: 1px solid var(--pos-border);
+  background: var(--pos-surface-alt);
   box-shadow: none;
 }
 
 .task-panel.pos-cal-side.drop-target {
-  background: #fffbeb;
-  box-shadow: inset 0 0 0 2px rgba(217, 119, 6, 0.35);
+  background: var(--pos-amber-soft);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--pos-amber) 35%, transparent);
 }
 
 .pos-cal-unschedule-banner {
@@ -2850,7 +2839,7 @@ button {
   gap: 2px;
   padding: 3px;
   border-radius: 10px;
-  background: #eceae3;
+  background: var(--pos-border-light);
 }
 
 .pos-cal-side .task-tabs button {
@@ -2861,7 +2850,7 @@ button {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #6b7280;
+  color: var(--pos-ink-muted);
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
@@ -2869,9 +2858,9 @@ button {
 }
 
 .pos-cal-side .task-tabs button.active {
-  background: #fff;
-  color: #111827;
-  box-shadow: 0 1px 2px rgba(11, 14, 26, 0.06);
+  background: var(--pos-card);
+  color: var(--pos-ink);
+  box-shadow: var(--pos-shadow-sm);
 }
 
 .pos-cal-side-count {
@@ -2892,14 +2881,14 @@ button {
 
 .pos-cal-side .quick-capture {
   margin: 10px 12px 0;
-  border: 1px solid #e4dfd4;
+  border: 1px solid var(--pos-border);
   border-radius: 10px;
   background: #fff;
 }
 
 .pos-cal-side .task-search {
   margin: 8px 12px 0;
-  border: 1px solid #e4dfd4;
+  border: 1px solid var(--pos-border);
   border-radius: 10px;
   background: #fff;
 }
@@ -2912,7 +2901,7 @@ button {
 
 .pos-cal-side .task-card {
   margin: 0 10px 8px;
-  border: 1px solid #e4dfd4;
+  border: 1px solid var(--pos-border);
   border-radius: 10px;
   background: #fff;
   box-shadow: none;
@@ -2955,7 +2944,7 @@ button {
 
 .pos-cal-month .month-weekdays {
   gap: 0;
-  border-bottom: 1px solid #e4dfd4;
+  border-bottom: 1px solid var(--pos-border);
   background: #fff;
 }
 
@@ -2992,11 +2981,11 @@ button {
 
 .pos-cal-month .month-cell.today {
   background: rgba(238, 242, 255, 0.45);
-  border-color: #e4dfd4;
+  border-color: var(--pos-border);
 }
 
 .pos-cal-month .month-cell.muted {
-  background: #fafaf8;
+  background: var(--pos-surface-alt);
 }
 
 .pos-cal-month .month-cell-head {
@@ -3075,7 +3064,7 @@ button {
   gap: 14px;
   padding: 8px 14px;
   border-top: 1px solid #f0ede6;
-  background: #faf9f6;
+  background: var(--pos-surface-alt);
   color: #6b7280;
   font-size: 10px;
 }
@@ -3095,7 +3084,7 @@ button {
 /* Slot modal compact */
 .slot-schedule-modal.pos-cal-slot {
   width: min(420px, calc(100vw - 28px));
-  border-color: #e4dfd4;
+  border-color: var(--pos-border);
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 24px 64px -12px rgba(11, 14, 26, 0.28);
@@ -3120,20 +3109,21 @@ button {
   z-index: 56;
   width: 220px;
   overflow: hidden;
-  border: 1px solid #e4dfd4;
+  border: 1px solid var(--pos-border);
   border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 16px 40px -12px rgba(11, 14, 26, 0.28);
+  background: var(--pos-card);
+  box-shadow: var(--pos-shadow-lg);
+  color: var(--pos-ink);
 }
 
 .pos-cal-popover-head {
   padding: 12px 12px 10px;
-  border-bottom: 1px solid #f0ede6;
+  border-bottom: 1px solid var(--pos-border-light);
 }
 
 .pos-cal-popover-title {
   margin: 0;
-  color: #111827;
+  color: var(--pos-ink);
   font-size: 12px;
   font-weight: 650;
   line-height: 1.35;
@@ -3142,7 +3132,7 @@ button {
 .pos-cal-popover-sub,
 .pos-cal-popover-time {
   margin: 4px 0 0;
-  color: #9ca3af;
+  color: var(--pos-ink-muted);
   font-size: 11px;
 }
 
@@ -3152,16 +3142,16 @@ button {
   gap: 2px;
   margin-top: 8px;
   padding: 8px;
-  border: 1px solid #fde68a;
+  border: 1px solid color-mix(in srgb, var(--pos-amber) 40%, var(--pos-border));
   border-radius: 8px;
-  background: #fffbeb;
-  color: #b45309;
+  background: var(--pos-amber-soft);
+  color: var(--pos-amber);
   font-size: 10px;
 }
 
 .pos-cal-popover-sync-fail strong {
   font-size: 11px;
-  color: #92400e;
+  color: var(--pos-ink);
 }
 
 .pos-cal-popover-actions {
@@ -3179,7 +3169,7 @@ button {
   padding: 8px 12px;
   border: 0;
   background: transparent;
-  color: #374151;
+  color: var(--pos-ink-secondary);
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
@@ -3187,24 +3177,24 @@ button {
 }
 
 .pos-cal-popover-action small {
-  color: #9ca3af;
+  color: var(--pos-ink-muted);
   font-size: 10px;
   font-weight: 500;
 }
 
 .pos-cal-popover-action:hover {
-  background: #f9fafb;
+  background: var(--pos-surface-alt);
 }
 
-.pos-cal-popover-action.emerald { color: #047857; }
-.pos-cal-popover-action.amber { color: #b45309; }
-.pos-cal-popover-action.indigo { color: #4338ca; }
-.pos-cal-popover-action.muted { color: #6b7280; }
+.pos-cal-popover-action.emerald { color: var(--pos-emerald); }
+.pos-cal-popover-action.amber { color: var(--pos-amber); }
+.pos-cal-popover-action.indigo { color: var(--pos-primary); }
+.pos-cal-popover-action.muted { color: var(--pos-ink-muted); }
 
 .pos-cal-popover-divider {
   height: 1px;
   margin: 4px 12px;
-  background: #f0ede6;
+  background: var(--pos-border-light);
 }
 
 .pos-cal-popover-readonly {
@@ -3212,9 +3202,9 @@ button {
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  border-top: 1px solid #f0ede6;
-  background: #f9fafb;
-  color: #9ca3af;
+  border-top: 1px solid var(--pos-border-light);
+  background: var(--pos-surface-alt);
+  color: var(--pos-ink-muted);
   font-size: 10px;
 }
 
@@ -3227,7 +3217,7 @@ button {
   padding: 14px 14px 12px;
   border: 1px solid #e7e2d8;
   border-radius: 14px;
-  background: #fffdf8;
+  background: var(--pos-card);
   box-shadow: 0 18px 48px rgba(28, 25, 23, 0.18);
 }
 
@@ -3422,7 +3412,7 @@ button {
 .gp-summary-box {
   border: 1px solid #d9d3c7;
   border-radius: var(--pos-radius-md, 12px);
-  background: #f9f7f2;
+  background: var(--pos-surface-alt);
 }
 
 /* Batch A — Google identity login */
@@ -3742,7 +3732,9 @@ button {
   border-radius: 16px;
   padding: 0;
   max-width: min(420px, calc(100vw - 32px));
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+  background: var(--pos-card);
+  color: var(--pos-ink);
+  box-shadow: var(--pos-shadow-lg);
 }
 
 .pos-confirm-dialog::backdrop {
@@ -3753,7 +3745,7 @@ button {
   display: grid;
   gap: 12px;
   padding: 22px;
-  color: #0f172a;
+  color: var(--pos-ink);
 }
 
 .pos-confirm-dialog-body h2 {
@@ -3763,7 +3755,7 @@ button {
 
 .pos-confirm-dialog-body p {
   margin: 0;
-  color: #475569;
+  color: var(--pos-ink-secondary);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -3776,8 +3768,8 @@ button {
 }
 
 .pos-confirm-dialog-actions .pos-btn-secondary {
-  background: #f1f5f9;
-  color: #0f172a;
+  background: var(--pos-surface-alt);
+  color: var(--pos-ink);
   border: 0;
 }
 

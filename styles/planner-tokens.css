@@ -1,24 +1,26 @@
-/* Personal OS V2 — Figma Make tokens (Batch 1)
-   Visual SoT: Figma Make. Do not invent alternate palettes. */
+/* Personal OS V2 — Design tokens
+   Surfaces + priority families. Light = :root, Dark = [data-theme="dark"]. */
 
 :root {
+  color-scheme: light;
+
   /* Surfaces */
   --pos-sidebar: #0b0e1a;
-  --pos-canvas: #f3f1eb;
-  --pos-surface-alt: #f9f8f5;
+  --pos-canvas: #f4f6f9;
+  --pos-surface-alt: #eef1f6;
   --pos-card: #ffffff;
-  --pos-border: #e4dfd4;
-  --pos-border-light: #ede9e0;
+  --pos-border: #e2e8f0;
+  --pos-border-light: #eef2f7;
 
   /* Text */
-  --pos-ink: #111827;
-  --pos-ink-secondary: #4b5563;
-  --pos-ink-muted: #9ca3af;
-  --pos-ink-faint: #d1d5db;
+  --pos-ink: #0f172a;
+  --pos-ink-secondary: #475569;
+  --pos-ink-muted: #94a3b8;
+  --pos-ink-faint: #cbd5e1;
 
   /* Brand / accents */
-  --pos-primary: #4338ca;
-  --pos-primary-hover: #3730a3;
+  --pos-primary: #4f46e5;
+  --pos-primary-hover: #4338ca;
   --pos-primary-soft: #eef2ff;
   --pos-primary-ring: #c7d2fe;
   --pos-blue: #2563eb;
@@ -54,7 +56,7 @@
   --pos-proc-e: #db2777;
   --pos-proc-e-soft: #fce7f3;
 
-  /* Sidebar chrome */
+  /* Sidebar chrome (always dark rail) */
   --pos-sidebar-text: #94a3b8;
   --pos-sidebar-text-hover: #e2e8f0;
   --pos-sidebar-muted: #64748b;
@@ -62,14 +64,73 @@
   --pos-sidebar-hover: rgba(255, 255, 255, 0.05);
   --pos-sidebar-divider: rgba(255, 255, 255, 0.05);
 
+  /* Calendar */
+  --pos-cal-grid-line: #e8edf3;
+  --pos-cal-grid-half: #f1f5f9;
+  --pos-cal-today-wash: rgba(79, 70, 229, 0.06);
+  --pos-cal-hover-wash: rgba(79, 70, 229, 0.04);
+  --pos-cal-header: #ffffff;
+  --pos-cal-rail: #94a3b8;
+  --pos-now-line: #ef4444;
+
+  /* Priority — Do now (p1) red / urgent */
+  --priority-p1: #dc2626;
+  --priority-p1-text: #7f1d1d;
+  --priority-p1-on-fill: #ffffff;
+  --priority-p1-bg: #fee2e2;
+  --priority-p1-fill: #ef4444;
+  --priority-p1-border: #dc2626;
+  --priority-p1-soft: #fef2f2;
+  --priority-p1-strong: #b91c1c;
+
+  /* Priority — Important (p2) blue */
+  --priority-p2: #2563eb;
+  --priority-p2-text: #1e3a8a;
+  --priority-p2-on-fill: #ffffff;
+  --priority-p2-bg: #dbeafe;
+  --priority-p2-fill: #3b82f6;
+  --priority-p2-border: #2563eb;
+  --priority-p2-soft: #eff6ff;
+  --priority-p2-strong: #1d4ed8;
+
+  /* Priority — Delegate (p3) green */
+  --priority-p3: #16a34a;
+  --priority-p3-text: #14532d;
+  --priority-p3-on-fill: #ffffff;
+  --priority-p3-bg: #dcfce7;
+  --priority-p3-fill: #22c55e;
+  --priority-p3-border: #16a34a;
+  --priority-p3-soft: #f0fdf4;
+  --priority-p3-strong: #15803d;
+
+  /* Priority — Drop (p4) amber / muted */
+  --priority-p4: #ca8a04;
+  --priority-p4-text: #713f12;
+  --priority-p4-on-fill: #1c1917;
+  --priority-p4-bg: #fef9c3;
+  --priority-p4-fill: #eab308;
+  --priority-p4-border: #ca8a04;
+  --priority-p4-soft: #fefce8;
+  --priority-p4-strong: #a16207;
+
+  /* Alias used by event blocks (overridden per data-priority) */
+  --priority-fill: var(--priority-p2-fill);
+  --priority-on-fill: var(--priority-p2-on-fill);
+  --priority-border: var(--priority-p2-border);
+  --priority-soft: var(--priority-p2-soft);
+  --priority-text: var(--priority-p2-text);
+  --priority-solid: var(--priority-p2);
+  --priority-bg: var(--priority-p2-bg);
+  --priority-strong: var(--priority-p2-strong);
+
   /* Radius / shadow / spacing */
   --pos-radius-sm: 8px;
   --pos-radius-md: 12px;
   --pos-radius-lg: 16px;
   --pos-radius-xl: 16px;
-  --pos-shadow-sm: 0 1px 2px rgba(11, 14, 26, 0.04);
-  --pos-shadow-md: 0 8px 24px rgba(11, 14, 26, 0.08);
-  --pos-shadow-lg: 0 24px 64px -12px rgba(11, 14, 26, 0.35);
+  --pos-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --pos-shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --pos-shadow-lg: 0 24px 64px -12px rgba(15, 23, 42, 0.28);
   --pos-sidebar-width: 220px;
   --pos-sidebar-collapsed: 52px;
   --pos-space-1: 4px;
@@ -80,12 +141,12 @@
   --pos-space-6: 24px;
   --pos-space-8: 32px;
 
-  /* Typography stacks (wired from next/font variables) */
+  /* Typography stacks */
   --pos-font-sans: var(--font-inter), var(--font-geist-sans), system-ui, sans-serif;
   --pos-font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
   --pos-font-mono: var(--font-jetbrains), var(--font-geist-mono), ui-monospace, monospace;
 
-  /* Map legacy tokens → Make canvas so the shell updates without orphan gray SaaS */
+  /* Legacy token map */
   --ink: var(--pos-ink);
   --muted: var(--pos-ink-secondary);
   --faint: var(--pos-ink-muted);
@@ -112,4 +173,134 @@
   --sidebar: var(--pos-sidebar);
   --sidebar-muted: var(--pos-sidebar-muted);
   --radius: var(--pos-radius-lg);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --pos-sidebar: #06080f;
+  --pos-canvas: #0f1419;
+  --pos-surface-alt: #161b22;
+  --pos-card: #1a2029;
+  --pos-border: #2a3340;
+  --pos-border-light: #232b36;
+
+  --pos-ink: #f1f5f9;
+  --pos-ink-secondary: #94a3b8;
+  --pos-ink-muted: #64748b;
+  --pos-ink-faint: #475569;
+
+  --pos-primary: #818cf8;
+  --pos-primary-hover: #a5b4fc;
+  --pos-primary-soft: rgba(99, 102, 241, 0.18);
+  --pos-primary-ring: #6366f1;
+  --pos-blue: #60a5fa;
+  --pos-blue-soft: rgba(37, 99, 235, 0.22);
+  --pos-emerald: #34d399;
+  --pos-emerald-soft: rgba(5, 150, 105, 0.2);
+  --pos-amber: #fbbf24;
+  --pos-amber-soft: rgba(217, 119, 6, 0.22);
+  --pos-danger: #f87171;
+  --pos-danger-soft: rgba(220, 38, 38, 0.2);
+  --pos-cyan: #22d3ee;
+  --pos-cyan-soft: rgba(8, 145, 178, 0.22);
+
+  --pos-focus: #818cf8;
+  --pos-focus-soft: rgba(99, 102, 241, 0.18);
+  --pos-maintain: #22d3ee;
+  --pos-maintain-soft: rgba(8, 145, 178, 0.2);
+  --pos-maintain-text: #67e8f9;
+  --pos-explore: #94a3b8;
+  --pos-explore-soft: rgba(148, 163, 184, 0.12);
+  --pos-explore-text: #cbd5e1;
+
+  --pos-cal-grid-line: #243040;
+  --pos-cal-grid-half: #1c2430;
+  --pos-cal-today-wash: rgba(129, 140, 248, 0.1);
+  --pos-cal-hover-wash: rgba(129, 140, 248, 0.06);
+  --pos-cal-header: #1a2029;
+  --pos-cal-rail: #64748b;
+  --pos-now-line: #f87171;
+
+  --priority-p1: #f87171;
+  --priority-p1-text: #fecaca;
+  --priority-p1-on-fill: #ffffff;
+  --priority-p1-bg: rgba(220, 38, 38, 0.22);
+  --priority-p1-fill: #ef4444;
+  --priority-p1-border: #f87171;
+  --priority-p1-soft: rgba(220, 38, 38, 0.14);
+  --priority-p1-strong: #dc2626;
+
+  --priority-p2: #60a5fa;
+  --priority-p2-text: #bfdbfe;
+  --priority-p2-on-fill: #ffffff;
+  --priority-p2-bg: rgba(37, 99, 235, 0.24);
+  --priority-p2-fill: #3b82f6;
+  --priority-p2-border: #60a5fa;
+  --priority-p2-soft: rgba(37, 99, 235, 0.14);
+  --priority-p2-strong: #2563eb;
+
+  --priority-p3: #4ade80;
+  --priority-p3-text: #bbf7d0;
+  --priority-p3-on-fill: #052e16;
+  --priority-p3-bg: rgba(22, 163, 74, 0.24);
+  --priority-p3-fill: #22c55e;
+  --priority-p3-border: #4ade80;
+  --priority-p3-soft: rgba(22, 163, 74, 0.14);
+  --priority-p3-strong: #16a34a;
+
+  --priority-p4: #fbbf24;
+  --priority-p4-text: #fde68a;
+  --priority-p4-on-fill: #1c1917;
+  --priority-p4-bg: rgba(202, 138, 4, 0.22);
+  --priority-p4-fill: #eab308;
+  --priority-p4-border: #fbbf24;
+  --priority-p4-soft: rgba(202, 138, 4, 0.14);
+  --priority-p4-strong: #ca8a04;
+
+  --pos-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --pos-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --pos-shadow-lg: 0 24px 64px -12px rgba(0, 0, 0, 0.55);
+}
+
+/* Priority attribute helpers — apply to Task rows & Calendar Sessions */
+[data-priority="p1"] {
+  --priority-fill: var(--priority-p1-fill);
+  --priority-on-fill: var(--priority-p1-on-fill);
+  --priority-border: var(--priority-p1-border);
+  --priority-soft: var(--priority-p1-soft);
+  --priority-text: var(--priority-p1-text);
+  --priority-solid: var(--priority-p1);
+  --priority-bg: var(--priority-p1-bg);
+  --priority-strong: var(--priority-p1-strong);
+}
+[data-priority="p2"] {
+  --priority-fill: var(--priority-p2-fill);
+  --priority-on-fill: var(--priority-p2-on-fill);
+  --priority-border: var(--priority-p2-border);
+  --priority-soft: var(--priority-p2-soft);
+  --priority-text: var(--priority-p2-text);
+  --priority-solid: var(--priority-p2);
+  --priority-bg: var(--priority-p2-bg);
+  --priority-strong: var(--priority-p2-strong);
+}
+[data-priority="p3"] {
+  --priority-fill: var(--priority-p3-fill);
+  --priority-on-fill: var(--priority-p3-on-fill);
+  --priority-border: var(--priority-p3-border);
+  --priority-soft: var(--priority-p3-soft);
+  --priority-text: var(--priority-p3-text);
+  --priority-solid: var(--priority-p3);
+  --priority-bg: var(--priority-p3-bg);
+  --priority-strong: var(--priority-p3-strong);
+}
+[data-priority="p4"] {
+  --priority-fill: var(--priority-p4-fill);
+  --priority-on-fill: var(--priority-p4-on-fill);
+  --priority-border: var(--priority-p4-border);
+  --priority-soft: var(--priority-p4-soft);
+  --priority-text: var(--priority-p4-text);
+  --priority-solid: var(--priority-p4);
+  --priority-bg: var(--priority-p4-bg);
+  --priority-strong: var(--priority-p4-strong);
 }

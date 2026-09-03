@@ -136,6 +136,9 @@ test("ships the core planning interactions", async () => {
   assert.match(plannerLayout, /AuthGate/);
   assert.match(page, /redirect\(["']\/calendar["']\)/);
   assert.match(layout, /Personal OS — Calendar Planner/);
+  assert.match(layout, /THEME_BOOT_SCRIPT|theme-boot/);
+  assert.match(layout, /ThemeProvider/);
+  assert.match(source, /data-priority/);
   assert.match(source, /onCalendarDrop/);
   assert.match(source, /application\/x-personal-os/);
   assert.match(source, /completeTask/);
