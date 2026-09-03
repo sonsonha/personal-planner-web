@@ -365,14 +365,15 @@ export function deleteTask(id: string) {
 }
 
 export function createTimeBlock(input: {
-  taskId: string | null;
-  projectId: string | null;
+  taskId?: string | null;
+  projectId?: string | null;
   title: string;
   startAt: string;
   endAt: string;
-  color: string;
+  color?: string;
   notes?: string | null;
   status?: ApiTimeBlockStatus;
+  seriesScope?: ApiSeriesScope;
 }) {
   return requestJson<ApiTimeBlock>("/api/time-blocks", {
     method: "POST",
@@ -434,10 +435,46 @@ export function carryOverSession(id: string, targetStartAt: string) {
   );
 }
 
-export function deleteTimeBlock(id: string) {
-  return requestJson<{ id: string; deleted: true }>(
-    `/api/time-blocks/${encodeURIComponent(id)}`,
+export function deleteTimeBlock(id: string, opts?: { seriesScope?: ApiSeriesScope }) {
+  const query = opts?.seriesScope
+    ? `?seriesScope=${encodeURIComponent(opts.seriesScope)}`
+    : "";
+  return requestJson<{ id: string; deleted: true; removedCount?: number }>(
+    `/api/time-blocks/${encodeURIComponent(id)}${query}`,
     { method: "DELETE" },
+  );
+}
+
+export type ApiTaskRepeatSummary = {
+  seriesId: string;
+  cadence: "WEEKLY";
+  instanceCount: number;
+  weekCount: number;
+  startsAt: string | null;
+  endsAt: string | null;
+};
+
+export function fetchTaskRepeatSummary(id: string) {
+  return requestJson<ApiTaskRepeatSummary | null>(
+    `/api/tasks/${encodeURIComponent(id)}/repeat`,
+    { method: "GET" },
+  );
+}
+
+export function updateTaskRepeat(
+  id: string,
+  input: { weeks?: number; until?: string | null; stopAfterThis?: boolean },
+) {
+  return requestJson<{
+    seriesId: string;
+    action: string;
+    weekCount?: number;
+    createdTaskIds?: string[];
+    removed?: number;
+    detached?: number;
+  }>(
+    `/api/tasks/${encodeURIComponent(id)}/repeat`,
+    { method: "PATCH", body: JSON.stringify(input) },
   );
 }
 

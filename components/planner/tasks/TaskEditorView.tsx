@@ -42,6 +42,9 @@ export type TaskEditorViewProps = {
   repeatWeeks?: string;
   onRepeatWeeksChange?: (value: string) => void;
   onRepeatTask?: () => void;
+  /** Shown when Task already belongs to a series. */
+  repeatSummaryLabel?: string | null;
+  onEditRepeat?: () => void;
   projectId: string | null;
   onProjectChange: (projectId: string | null) => void;
   projects: TasksProjectOption[];
@@ -98,6 +101,8 @@ export function TaskEditorView({
   repeatWeeks = "8",
   onRepeatWeeksChange,
   onRepeatTask,
+  repeatSummaryLabel = null,
+  onEditRepeat,
   projectId,
   onProjectChange,
   projects,
@@ -416,6 +421,17 @@ export function TaskEditorView({
                 </label>
                 <button type="button" className="pos-btn-ghost" onClick={onRepeatTask} disabled={saving}>
                   Repeat task
+                </button>
+              </div>
+            )}
+            {repeatSummaryLabel && onEditRepeat && (
+              <div className="pos-te-repeat pos-te-repeat-summary">
+                <div>
+                  <span className="pos-te-field-label">Repeat</span>
+                  <p className="pos-te-help" style={{ margin: "4px 0 8px" }}>{repeatSummaryLabel}</p>
+                </div>
+                <button type="button" className="pos-btn-ghost" onClick={onEditRepeat} disabled={saving}>
+                  Edit repeat
                 </button>
               </div>
             )}

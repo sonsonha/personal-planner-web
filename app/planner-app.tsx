@@ -54,16 +54,19 @@ import {
   deleteTimeBlock,
   fetchGoogleIntegration,
   fetchPlanner,
+  fetchTaskRepeatSummary,
   fetchTaskTimeBlocks,
   getGoogleAuthUrl,
   PlannerApiError,
   repeatSession,
   repeatTask,
   updateTask,
+  updateTaskRepeat,
   updateTimeBlock,
   syncGoogleCalendar,
   disconnectGoogleCalendar,
   type ApiSeriesScope,
+  type ApiTaskRepeatSummary,
   type CalendarSyncSummary,
   type ApiExternalEvent,
   type ApiGoal,
@@ -72,6 +75,7 @@ import {
   type ApiTimeBlock,
 } from "@/lib/planner-api";
 import { SeriesScopeModal } from "@/components/planner/SeriesScopeModal";
+import { EditRepeatModal } from "@/components/planner/EditRepeatModal";
 import {
   deriveTaskProgressFromSessions,
   directTaskCompletePolicy,
@@ -178,7 +182,9 @@ function calendarSyncMessage(summary: CalendarSyncSummary): string {
 const START_HOUR = 7;
 const END_HOUR = 22;
 const MINUTES_VISIBLE = (END_HOUR - START_HOUR) * 60;
-const SNAP_MINUTES = 15;
+/** Fine snap for Google Calendar–like precision (visual drag is continuous; time snaps). */
+const SNAP_MINUTES = 5;
+const DRAG_THRESHOLD_PX = 4;
 const AUTO_SYNC_INTERVAL_MS = 5 * 60_000;
 const AUTO_SYNC_MIN_GAP_MS = 30_000;
 const AUTO_SYNC_ERROR_BACKOFF_MS = 5 * 60_000;
@@ -869,9 +875,15 @@ export function PlannerApp({
   const [blockClipboard, setBlockClipboard] = useState<BlockClipboard | null>(null);
   const [pasteFocus, setPasteFocus] = useState<{ day: number; start: number } | null>(null);
   const [seriesScopePrompt, setSeriesScopePrompt] = useState<{
-    kind: "task" | "session";
+    kind: "task" | "session" | "session-delete";
     id: string;
     payload: Record<string, unknown>;
+    onCancel?: () => void;
+  } | null>(null);
+  const [blockDragPreview, setBlockDragPreview] = useState<{
+    id: string;
+    day: number;
+    start: number;
   } | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [aiContextOpen, setAiContextOpen] = useState(false);
@@ -1424,13 +1436,29 @@ export function PlannerApp({
       current.map((block) => (block.id === blockId ? candidate : block)),
     );
     warnIfConflict(candidate, blockId);
-    showToast(liveDataRef.current ? "Updating block length…" : "Block resized · demo mode");
-    if (!liveDataRef.current) return;
 
     const startAt = slotDate(weekStart, previous.day, previous.start);
     const endAt = new Date(startAt.getTime() + duration * 60_000);
+    const payload = { endAt: endAt.toISOString() };
+
+    if (previous.repeatSeriesId) {
+      setSeriesScopePrompt({
+        kind: "session",
+        id: previous.id,
+        payload,
+        onCancel: () => {
+          setBlocks((current) => current.map((block) =>
+            block.id === previous.id ? previous : block,
+          ));
+        },
+      });
+      return;
+    }
+
+    showToast(liveDataRef.current ? "Updating block length…" : "Block resized · demo mode");
+    if (!liveDataRef.current) return;
     try {
-      const saved = await updateTimeBlock(previous.id, { endAt: endAt.toISOString() });
+      const saved = await updateTimeBlock(previous.id, payload);
       const mapped = timeBlockFromApi(saved, weekStart, projects);
       setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
       if (saved.syncStatus === "FAILED") {
@@ -1440,9 +1468,84 @@ export function PlannerApp({
       }
       setEvidenceEpoch((value) => value + 1);
     } catch {
-      setBlocks((current) => current.map((block) => block.id === previous.id ? previous : block));
-      setConnection("error");
+      setBlocks((current) => current.map((block) => (block.id === blockId ? previous : block)));
       showToast("Could not resize block · changes rolled back", "warning");
+    }
+  };
+
+  const commitBlockMove = async (
+    previous: CalendarBlock,
+    day: number,
+    start: number,
+  ) => {
+    const candidate = { ...previous, day, start };
+    setBlocks((current) =>
+      current.map((block) => (block.id === previous.id ? candidate : block)),
+    );
+    warnIfConflict(candidate, previous.id);
+    const startAt = slotDate(weekStart, day, start);
+    const endAt = new Date(startAt.getTime() + previous.duration * 60_000);
+    const sourceWeek = previous.startAt
+      ? startOfProductWeek(new Date(previous.startAt)).getTime()
+      : startOfProductWeek(slotDate(weekStart, previous.day, previous.start)).getTime();
+    const targetWeek = startOfProductWeek(startAt).getTime();
+    const crossWeek = sourceWeek !== targetWeek;
+    const shouldCarryOver = crossWeek
+      && !previous.repeatSeriesId
+      && !isSessionDone(previous.status)
+      && Boolean(previous.taskId);
+
+    if (shouldCarryOver) {
+      if (!liveDataRef.current) {
+        showToast("Session carried over · demo mode");
+        return;
+      }
+      try {
+        await carryOverSession(previous.id, startAt.toISOString());
+        setReloadKey((value) => value + 1);
+        setToast("Session carried over to a new task for that week");
+      } catch {
+        setBlocks((current) => current.map((block) =>
+          block.id === previous.id ? previous : block,
+        ));
+        setToast("Could not carry over session");
+      }
+      return;
+    }
+
+    const payload = {
+      startAt: startAt.toISOString(),
+      endAt: endAt.toISOString(),
+    };
+
+    if (previous.repeatSeriesId) {
+      setSeriesScopePrompt({
+        kind: "session",
+        id: previous.id,
+        payload,
+        onCancel: () => {
+          setBlocks((current) => current.map((block) =>
+            block.id === previous.id ? previous : block,
+          ));
+        },
+      });
+      return;
+    }
+
+    showToast(liveDataRef.current ? "Moving time block…" : "Time block moved · demo mode");
+    if (!liveDataRef.current) return;
+    try {
+      const saved = await updateTimeBlock(previous.id, payload);
+      const mapped = timeBlockFromApi(saved, weekStart, projects);
+      setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
+      setToast(saved.syncStatus === "FAILED"
+        ? "Block saved · Google sync needs attention"
+        : "Time block moved · calendar synced");
+    } catch {
+      setBlocks((current) => current.map((block) =>
+        block.id === previous.id ? previous : block,
+      ));
+      showToast("Could not move block · changes rolled back", "warning");
     }
   };
 
@@ -1467,15 +1570,12 @@ export function PlannerApp({
     };
     warnIfConflict(block);
     const startAt = slotDate(weekStart, day, start);
-    const period = duePeriodForDate(startAt, "day");
     setBlocks((current) => [...current, block]);
     setTasks((current) =>
       current.map((item) => (item.id === task.id ? {
         ...item,
         status: "scheduled",
-        dueAt: period.dueAt,
-        dueHorizon: "day",
-        due: dueLabel(period.dueAt, "day"),
+        // Scheduling must NEVER mutate Task horizon (WEEK/MONTH stay WEEK/MONTH).
       } : item)),
     );
     if (isCurrentWeek && day === nowDay) {
@@ -1495,7 +1595,6 @@ export function PlannerApp({
         endAt: endAt.toISOString(),
         color: priorityColor(task.priority),
       });
-      void updateTask(task.id, { dueAt: period.dueAt, dueHorizon: "DAY" });
       const mapped = timeBlockFromApi(saved, weekStart, projects);
       setBlocks((current) => current.map((item) => item.id === pendingId ? mapped : item));
       showToast(saved.syncStatus === "FAILED"
@@ -1666,48 +1765,7 @@ export function PlannerApp({
     if (payload.kind === "block") {
       const previous = blocks.find((block) => block.id === payload.blockId);
       if (!previous || previous.type === "external") return;
-      const candidate = { ...previous, day, start };
-      setBlocks((current) =>
-        current.map((block) => (block.id === payload.blockId ? candidate : block)),
-      );
-      warnIfConflict(candidate, previous.id);
-      showToast(liveDataRef.current ? "Moving time block…" : "Time block moved · demo mode");
-      if (!liveDataRef.current) return;
-      const startAt = slotDate(weekStart, day, start);
-      const endAt = new Date(startAt.getTime() + previous.duration * 60_000);
-      const sourceWeek = previous.startAt
-        ? startOfProductWeek(new Date(previous.startAt)).getTime()
-        : startOfProductWeek(slotDate(weekStart, previous.day, previous.start)).getTime();
-      const targetWeek = startOfProductWeek(startAt).getTime();
-      const crossWeek = sourceWeek !== targetWeek;
-      const shouldCarryOver = crossWeek
-        && !previous.repeatSeriesId
-        && !isSessionDone(previous.status)
-        && Boolean(previous.taskId);
-      try {
-        if (shouldCarryOver) {
-          const result = await carryOverSession(previous.id, startAt.toISOString());
-          setReloadKey((value) => value + 1);
-          setToast("Session carried over to a new task for that week");
-          void result;
-          return;
-        }
-        const saved = await updateTimeBlock(previous.id, {
-          startAt: startAt.toISOString(),
-          endAt: endAt.toISOString(),
-        });
-        const mapped = timeBlockFromApi(saved, weekStart, projects);
-        setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
-        setToast(saved.syncStatus === "FAILED"
-          ? "Block saved · Google sync needs attention"
-          : "Time block moved · calendar synced");
-      } catch {
-        setBlocks((current) => current.map((block) =>
-          block.id === previous.id ? previous : block,
-        ));
-        setConnection("error");
-        setToast("Could not move block · changes rolled back");
-      }
+      await commitBlockMove(previous, day, start);
       return;
     }
 
@@ -1715,35 +1773,10 @@ export function PlannerApp({
     if (!task || task.status === "done") return;
     const existing = blocks.find((item) => item.type === "task" && item.taskId === task.id);
     if (existing) {
-      const candidate = { ...existing, day, start };
-      setBlocks((current) =>
-        current.map((block) => (block.id === existing.id ? candidate : block)),
-      );
+      await commitBlockMove(existing, day, start);
       if (isCurrentWeek && day === nowDay) {
         setTaskFilter("today");
         setTaskPanelOpen(true);
-      }
-      warnIfConflict(candidate, existing.id);
-      showToast(liveDataRef.current ? "Moving time block…" : "Time block moved · demo mode");
-      if (!liveDataRef.current) return;
-      const movedStart = slotDate(weekStart, day, start);
-      const movedEnd = new Date(movedStart.getTime() + existing.duration * 60_000);
-      try {
-        const saved = await updateTimeBlock(existing.id, {
-          startAt: movedStart.toISOString(),
-          endAt: movedEnd.toISOString(),
-        });
-        const mapped = timeBlockFromApi(saved, weekStart, projects);
-        setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
-        setToast(saved.syncStatus === "FAILED"
-          ? "Block saved · Google sync needs attention"
-          : "Time block moved · calendar synced");
-      } catch {
-        setBlocks((current) => current.map((block) =>
-          block.id === existing.id ? existing : block,
-        ));
-        setConnection("error");
-        setToast("Could not move block · changes rolled back");
       }
       return;
     }
@@ -1763,15 +1796,12 @@ export function PlannerApp({
     };
     warnIfConflict(block);
     const startAt = slotDate(weekStart, day, start);
-    const period = duePeriodForDate(startAt, "day");
     setBlocks((current) => [...current, block]);
     setTasks((current) =>
       current.map((item) => (item.id === task.id ? {
         ...item,
         status: "scheduled",
-        dueAt: period.dueAt,
-        dueHorizon: "day",
-        due: dueLabel(period.dueAt, "day"),
+        // Scheduling must NEVER mutate Task horizon.
       } : item)),
     );
     if (isCurrentWeek && day === nowDay) {
@@ -1791,7 +1821,6 @@ export function PlannerApp({
         endAt: endAt.toISOString(),
         color: priorityColor(task.priority),
       });
-      void updateTask(task.id, { dueAt: period.dueAt, dueHorizon: "DAY" });
       const mapped = timeBlockFromApi(saved, weekStart, projects);
       setBlocks((current) => current.map((item) => item.id === block.id ? mapped : item));
       setToast(saved.syncStatus === "FAILED"
@@ -2373,14 +2402,20 @@ export function PlannerApp({
                 </div>
 
                 {visibleIndexes.map((dayIndex) => {
-                  const dayBlocks = calendarBlocks.filter(
-                    (block) => block.day === dayIndex && !block.allDay,
-                  );
+                  const dayBlocks = calendarBlocks
+                    .map((block) => {
+                      if (blockDragPreview?.id === block.id) {
+                        return { ...block, day: blockDragPreview.day, start: blockDragPreview.start };
+                      }
+                      return block;
+                    })
+                    .filter((block) => block.day === dayIndex && !block.allDay);
                   const laidOut = resolveOverlapLayout(dayBlocks);
                   return (
                   <div
                     className={`day-track${isCurrentWeek && dayIndex === nowDay ? " today" : ""}`}
                     key={dayIndex}
+                    data-day-index={dayIndex}
                     role="presentation"
                     onMouseDown={(event) => {
                       if ((event.target as HTMLElement).closest(".calendar-event")) return;
@@ -2412,9 +2447,14 @@ export function PlannerApp({
                           done={sessionDone || taskDone}
                           layout={geometry}
                           selected={blockPopover?.blockId === block.id}
-                          onDragStart={onDragStart}
                           onOpenTask={setEditingTaskId}
                           onResize={onResizeBlock}
+                          onMovePreview={setBlockDragPreview}
+                          onMoveCommit={(blockId, day, start) => {
+                            const previous = blocks.find((item) => item.id === blockId);
+                            if (!previous || previous.type === "external") return;
+                            void commitBlockMove(previous, day, start);
+                          }}
                           onSelect={(rect) => {
                             setPasteFocus({ day: block.day, start: block.start });
                             setBlockPopover({ blockId: block.id, rect });
@@ -2680,6 +2720,15 @@ export function PlannerApp({
               if (popBlock.taskId) setEditingTaskId(popBlock.taskId);
             }}
             onUnschedule={() => {
+              if (popBlock.repeatSeriesId) {
+                setSeriesScopePrompt({
+                  kind: "session-delete",
+                  id: popBlock.id,
+                  payload: {},
+                });
+                setBlockPopover(null);
+                return;
+              }
               void unscheduleBlock(popBlock.id);
             }}
             onRetrySync={
@@ -2694,7 +2743,10 @@ export function PlannerApp({
       {seriesScopePrompt && (
         <SeriesScopeModal
           entityLabel={seriesScopePrompt.kind === "task" ? "task" : "session"}
-          onClose={() => setSeriesScopePrompt(null)}
+          onClose={() => {
+            seriesScopePrompt.onCancel?.();
+            setSeriesScopePrompt(null);
+          }}
           onChoose={(scope: ApiSeriesScope) => {
             const prompt = seriesScopePrompt;
             setSeriesScopePrompt(null);
@@ -2706,12 +2758,15 @@ export function PlannerApp({
               try {
                 if (prompt.kind === "task") {
                   await updateTask(prompt.id, { ...prompt.payload, seriesScope: scope });
+                } else if (prompt.kind === "session-delete") {
+                  await deleteTimeBlock(prompt.id, { seriesScope: scope });
                 } else {
                   await updateTimeBlock(prompt.id, { ...prompt.payload, seriesScope: scope });
                 }
                 setReloadKey((value) => value + 1);
                 showToast(scope === "THIS_AND_FUTURE" ? "Updated this and future" : "Updated this instance only");
               } catch {
+                prompt.onCancel?.();
                 showToast("Could not apply series edit", "warning");
               }
             })();
@@ -2738,23 +2793,36 @@ function CalendarEvent({
   done,
   layout,
   selected = false,
-  onDragStart,
   onOpenTask,
   onResize,
   onSelect,
+  onMoveCommit,
+  onMovePreview,
 }: {
   block: CalendarBlock;
   done: boolean;
   layout: { left: string; right: string };
   selected?: boolean;
-  onDragStart: (event: React.DragEvent, payload: DragPayload) => void;
   onOpenTask: (taskId: string) => void;
   onResize: (blockId: string, duration: number) => void;
   onSelect: (rect: DOMRect) => void;
+  onMoveCommit: (blockId: string, day: number, start: number) => void;
+  onMovePreview: (preview: { id: string; day: number; start: number } | null) => void;
 }) {
   const resizeStartRef = useRef<{ y: number; duration: number } | null>(null);
   const previewRef = useRef<number | null>(null);
   const [previewDuration, setPreviewDuration] = useState<number | null>(null);
+  const moveRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originDay: number;
+    originStart: number;
+    duration: number;
+    dragging: boolean;
+    day: number;
+    start: number;
+  } | null>(null);
   const displayDuration = previewDuration ?? block.duration;
   const isExternal = block.type === "external";
   const isFailed = block.syncStatus === "FAILED";
@@ -2763,6 +2831,22 @@ function CalendarEvent({
   const isCompact = displayDuration <= 35;
   const showTime = displayDuration >= 25;
   const showMeta = displayDuration >= 45;
+
+  const snapStart = (raw: number) => {
+    const snapped = Math.round(raw / SNAP_MINUTES) * SNAP_MINUTES;
+    return Math.max(
+      START_HOUR * 60,
+      Math.min(END_HOUR * 60 - SNAP_MINUTES, snapped),
+    );
+  };
+
+  const dayFromPoint = (clientX: number, clientY: number) => {
+    const el = document.elementFromPoint(clientX, clientY);
+    const track = el?.closest?.("[data-day-index]") as HTMLElement | null;
+    if (!track) return null;
+    const day = Number(track.dataset.dayIndex);
+    return Number.isFinite(day) ? day : null;
+  };
 
   const onResizePointerDown = (event: React.PointerEvent) => {
     if (block.type !== "task") return;
@@ -2773,7 +2857,7 @@ function CalendarEvent({
     const onMove = (moveEvent: PointerEvent) => {
       if (!resizeStartRef.current) return;
       const delta = moveEvent.clientY - resizeStartRef.current.y;
-      const deltaMinutes = Math.round((delta / 900) * MINUTES_VISIBLE / SNAP_MINUTES) * SNAP_MINUTES;
+      const deltaMinutes = Math.round((delta / 60) / SNAP_MINUTES) * SNAP_MINUTES;
       const nextDuration = Math.max(
         SNAP_MINUTES,
         Math.min(MINUTES_VISIBLE, resizeStartRef.current.duration + deltaMinutes),
@@ -2793,6 +2877,74 @@ function CalendarEvent({
       }
       setPreviewDuration(null);
     };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const onMovePointerDown = (event: React.PointerEvent) => {
+    if (block.type !== "task" || done || event.button !== 0) return;
+    if ((event.target as HTMLElement).closest(".event-resize-handle")) return;
+    event.stopPropagation();
+    moveRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originDay: block.day,
+      originStart: block.start,
+      duration: block.duration,
+      dragging: false,
+      day: block.day,
+      start: block.start,
+    };
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const state = moveRef.current;
+      if (!state || moveEvent.pointerId !== state.pointerId) return;
+      const dx = moveEvent.clientX - state.startX;
+      const dy = moveEvent.clientY - state.startY;
+      if (!state.dragging) {
+        if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+        state.dragging = true;
+      }
+      moveEvent.preventDefault();
+      const day = dayFromPoint(moveEvent.clientX, moveEvent.clientY) ?? state.day;
+      const track = document.querySelector(`[data-day-index="${day}"]`) as HTMLElement | null;
+      const rect = track?.getBoundingClientRect();
+      let nextStart = state.originStart;
+      if (rect && rect.height > 0) {
+        // Pointer-delta from original block top, not absolute cell Y under cursor.
+        const originTopPx = ((state.originStart - START_HOUR * 60) / MINUTES_VISIBLE) * rect.height;
+        const newTopPx = originTopPx + dy;
+        const rawMinutes = START_HOUR * 60 + (newTopPx / rect.height) * MINUTES_VISIBLE;
+        nextStart = snapStart(rawMinutes);
+        // Keep end within day.
+        nextStart = Math.min(nextStart, END_HOUR * 60 - state.duration);
+        nextStart = Math.max(START_HOUR * 60, nextStart);
+        nextStart = snapStart(nextStart);
+      }
+      state.day = day;
+      state.start = nextStart;
+      onMovePreview({ id: block.id, day, start: nextStart });
+    };
+
+    const onUp = (upEvent: PointerEvent) => {
+      const state = moveRef.current;
+      if (!state || upEvent.pointerId !== state.pointerId) return;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      moveRef.current = null;
+      onMovePreview(null);
+      if (!state.dragging) {
+        const target = upEvent.target as HTMLElement | null;
+        const article = target?.closest?.("article.calendar-event") as HTMLElement | null;
+        if (article) onSelect(article.getBoundingClientRect());
+        return;
+      }
+      if (state.day !== state.originDay || state.start !== state.originStart) {
+        onMoveCommit(block.id, state.day, state.start);
+      }
+    };
+
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   };
@@ -2831,13 +2983,9 @@ function CalendarEvent({
         left: layout.left,
         right: layout.right,
         "--event-color": block.color,
+        touchAction: "none",
       } as React.CSSProperties}
-      draggable={block.type === "task" && !done}
-      onDragStart={(event) => onDragStart(event, { kind: "block", blockId: block.id })}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelect(event.currentTarget.getBoundingClientRect());
-      }}
+      onPointerDown={onMovePointerDown}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
@@ -3608,6 +3756,10 @@ function TaskEditor({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [repeatWeeks, setRepeatWeeks] = useState("8");
   const [pendingSeriesSave, setPendingSeriesSave] = useState<{ schedule: boolean } | null>(null);
+  const [repeatSummary, setRepeatSummary] = useState<ApiTaskRepeatSummary | null>(null);
+  const [editRepeatOpen, setEditRepeatOpen] = useState(false);
+  const [editRepeatSaving, setEditRepeatSaving] = useState(false);
+  const [editRepeatError, setEditRepeatError] = useState<string | null>(null);
   const scheduledBlock = taskBlocks[0];
   const sessionProgress = deriveTaskProgressFromSessions(
     taskBlocks.map((block) => ({ id: block.id, status: block.status ?? "PLANNED" })),
@@ -3655,6 +3807,22 @@ function TaskEditor({
     return () => controller.abort();
   }, [live, task.id]);
 
+  useEffect(() => {
+    if (!live || !task.repeatSeriesId) {
+      setRepeatSummary(null);
+      return;
+    }
+    let cancelled = false;
+    fetchTaskRepeatSummary(task.id)
+      .then((summary) => {
+        if (!cancelled) setRepeatSummary(summary);
+      })
+      .catch(() => {
+        if (!cancelled) setRepeatSummary(null);
+      });
+    return () => { cancelled = true; };
+  }, [live, task.id, task.repeatSeriesId]);
+
   const duePayload = (pinDate?: Date) => {
     if (pinDate) {
       const period = duePeriodForDate(pinDate, "day");
@@ -3694,7 +3862,15 @@ function TaskEditor({
       await updateTask(task.id, payload);
       if (startAt) {
         const endAt = new Date(startAt.getTime() + sessionDuration * 60_000);
-        await createPlannerTimeBlock({ taskId: task.id, projectId, title: title.trim(), color: priorityColor(priority), startAt: startAt.toISOString(), endAt: endAt.toISOString() });
+        await createPlannerTimeBlock({
+          taskId: task.id,
+          projectId,
+          title: title.trim(),
+          color: priorityColor(priority),
+          startAt: startAt.toISOString(),
+          endAt: endAt.toISOString(),
+          ...(seriesScope ? { seriesScope } : {}),
+        });
       }
       onChanged(schedule
         ? "Task saved and synced to Google Calendar"
@@ -3714,7 +3890,7 @@ function TaskEditor({
       setError("Choose a date and time before scheduling.");
       return;
     }
-    if (task.repeatSeriesId && !schedule) {
+    if (task.repeatSeriesId) {
       setPendingSeriesSave({ schedule });
       return;
     }
@@ -3814,6 +3990,16 @@ function TaskEditor({
       repeatWeeks={repeatWeeks}
       onRepeatWeeksChange={setRepeatWeeks}
       onRepeatTask={() => { void runRepeatTask(); }}
+      repeatSummaryLabel={repeatSummary
+        ? `Weekly · ${repeatSummary.weekCount} weeks${
+          repeatSummary.startsAt && repeatSummary.endsAt
+            ? ` · ${new Date(repeatSummary.startsAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(repeatSummary.endsAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+            : ""
+        }`
+        : task.repeatSeriesId
+          ? "Weekly series"
+          : null}
+      onEditRepeat={task.repeatSeriesId ? () => setEditRepeatOpen(true) : undefined}
       projectId={projectId}
       onProjectChange={(nextProjectId) => {
         const nextProject = projects.find((project) => project.id === nextProjectId);
@@ -3879,6 +4065,58 @@ function TaskEditor({
           const pending = pendingSeriesSave;
           setPendingSeriesSave(null);
           void persistTask(pending.schedule, scope);
+        }}
+      />
+    )}
+    {editRepeatOpen && (
+      <EditRepeatModal
+        weekCount={repeatSummary?.weekCount ?? (Number(repeatWeeks) || 8)}
+        rangeLabel={
+          repeatSummary?.startsAt && repeatSummary?.endsAt
+            ? `${new Date(repeatSummary.startsAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(repeatSummary.endsAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+            : "Current series"
+        }
+        saving={editRepeatSaving}
+        error={editRepeatError}
+        onClose={() => { if (!editRepeatSaving) setEditRepeatOpen(false); }}
+        onSave={async (weeks) => {
+          setEditRepeatSaving(true);
+          setEditRepeatError(null);
+          try {
+            if (!live) {
+              onChanged(`Repeat updated · ${weeks} weeks · demo mode`);
+              setEditRepeatOpen(false);
+              return;
+            }
+            await updateTaskRepeat(task.id, { weeks });
+            const summary = await fetchTaskRepeatSummary(task.id);
+            setRepeatSummary(summary);
+            setEditRepeatOpen(false);
+            onChanged("Repeat series updated");
+          } catch {
+            setEditRepeatError("Could not update this repeat series.");
+          } finally {
+            setEditRepeatSaving(false);
+          }
+        }}
+        onStopAfterThis={async () => {
+          setEditRepeatSaving(true);
+          setEditRepeatError(null);
+          try {
+            if (!live) {
+              onChanged("Stopped repeating after this instance · demo mode");
+              setEditRepeatOpen(false);
+              return;
+            }
+            await updateTaskRepeat(task.id, { stopAfterThis: true });
+            setRepeatSummary(null);
+            setEditRepeatOpen(false);
+            onChanged("Stopped repeating after this instance");
+          } catch {
+            setEditRepeatError("Could not stop this repeat series.");
+          } finally {
+            setEditRepeatSaving(false);
+          }
         }}
       />
     )}
