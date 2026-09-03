@@ -98,7 +98,7 @@ export function QuickAddView({
 
         <div className="pos-qa-fields">
           <label className="pos-qa-field">
-            <span>Project</span>
+            <span>Belongs to</span>
             <select
               value={projectId ?? ""}
               onChange={(event) => onProjectChange(event.target.value || null)}
@@ -110,6 +110,7 @@ export function QuickAddView({
                 </option>
               ))}
             </select>
+            <p className="pos-qa-for-hint">Selecting a Project also links its Goal when one is configured.</p>
           </label>
 
           <div className="pos-qa-field">
@@ -138,7 +139,7 @@ export function QuickAddView({
           </div>
 
           <label className="pos-qa-field">
-            <span>Duration</span>
+            <span>Estimated effort</span>
             <select
               value={duration}
               onChange={(event) => onDurationChange(Number(event.target.value))}

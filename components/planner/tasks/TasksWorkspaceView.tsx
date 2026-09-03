@@ -58,7 +58,7 @@ function groupTasks(
     if (horizon === "day") {
       if (taskHorizon === "day") {
         ensure("day-due").push(task);
-      } else if (block || task.status === "scheduled") {
+      } else if (block) {
         ensure("scheduled").push(task);
       } else {
         ensure("scheduled").push(task);
@@ -67,7 +67,7 @@ function groupTasks(
     }
 
     if (horizon === "week") {
-      if (block || task.status === "scheduled") {
+      if (block) {
         ensure("scheduled").push(task);
       } else if (task.status === "inbox" && taskHorizon === "week") {
         ensure("week-open").push(task);

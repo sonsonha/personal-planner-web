@@ -862,11 +862,29 @@ function GoalDetailPage({
               <button type="button" className="ghost-button" onClick={addSystem}>Add system</button>
             </div>
             {(goal.systems ?? []).map((system) => (
-              <div key={system.id} className="gp-process-form" style={{ marginTop: 8 }}>
-                <strong>{system.title}</strong>
+              <form key={system.id} className="gp-process-form" style={{ marginTop: 8 }} onSubmit={async (event) => {
+                event.preventDefault();
+                if (!live) return;
+                const data = new FormData(event.currentTarget);
+                const next = (goal.systems ?? []).map((item) => item.id === system.id ? {
+                  ...item,
+                  title: String(data.get("title") ?? item.title).trim() || item.title,
+                  targetValue: Number(data.get("targetValue")) || item.targetValue,
+                  unit: String(data.get("unit") ?? item.unit ?? "").trim() || null,
+                  durationWeeks: Math.max(1, Number(data.get("durationWeeks")) || item.durationWeeks || 1),
+                } : item);
+                await updateGoal(goal.id, { systems: next });
+                onChanged("System updated");
+              }}>
+                <input name="title" defaultValue={system.title} aria-label="System title" />
+                <input name="targetValue" type="number" min="0" defaultValue={system.targetValue ?? 1} aria-label="Weekly target" />
+                <input name="unit" defaultValue={system.unit ?? (system.targetType === "DURATION" ? "min" : "sessions")} aria-label="System unit" />
+                <input name="durationWeeks" type="number" min="1" defaultValue={system.durationWeeks ?? 1} aria-label="Duration weeks" />
+                <button type="submit" className="ghost-button">Save</button>
                 <button type="button" className="ghost-button" onClick={async () => { if (live) { await updateGoal(goal.id, { systems: (goal.systems ?? []).map((item) => item.id === system.id ? { ...item, status: item.status === "PAUSED" ? "ACTIVE" as const : "PAUSED" as const } : item) }); onChanged("System status updated"); } }}>{system.status === "PAUSED" ? "Resume" : "Pause"}</button>
+                <button type="button" className="ghost-button" onClick={async () => { if (live) { await updateGoal(goal.id, { systems: (goal.systems ?? []).map((item) => item.id === system.id ? { ...item, status: "COMPLETED" as const } : item) }); onChanged("System completed"); } }}>Complete</button>
                 <button type="button" className="ghost-button" onClick={async () => { if (live) { await updateGoal(goal.id, { systems: (goal.systems ?? []).filter((item) => item.id !== system.id) }); onChanged("System removed"); } }}>Remove</button>
-              </div>
+              </form>
             ))}
             <div className="gp-process-form">
               <input value={processDraftName} onChange={(e) => setProcessDraftName(e.target.value)} placeholder="Applications" />

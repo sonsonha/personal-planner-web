@@ -35,7 +35,7 @@ export function TaskRow({
 }: TaskRowProps) {
   const priority = priorityMeta(task.priority);
   const done = task.status === "done";
-  const showUnscheduledBadge = task.status === "inbox" && Boolean(task.dueHorizon);
+  const showUnscheduledBadge = !block && Boolean(task.dueHorizon);
 
   return (
     <article
@@ -82,7 +82,7 @@ export function TaskRow({
       <div className="pos-task-calendar">
         {showUnscheduledBadge ? (
           <UnscheduledBadge />
-        ) : block || task.status === "scheduled" ? (
+        ) : block ? (
           <ScheduledBadge label={scheduleLabel} />
         ) : (
           <span className="pos-task-calendar-muted">{scheduleLabel}</span>

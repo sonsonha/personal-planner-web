@@ -29,6 +29,7 @@ export type TaskEditorViewProps = {
   status: TaskStatus;
   scheduled: boolean;
   scheduleDisplay?: string | null;
+  workSessions?: Array<{ id: string; startAt: string; endAt: string }>;
   projectId: string | null;
   onProjectChange: (projectId: string | null) => void;
   projects: TasksProjectOption[];
@@ -49,6 +50,8 @@ export type TaskEditorViewProps = {
   onPriorityChange: (priority: TaskPriority) => void;
   duration: number;
   onDurationChange: (minutes: number) => void;
+  sessionDuration: number;
+  onSessionDurationChange: (minutes: number) => void;
   scheduleDate: string;
   onScheduleDateChange: (value: string) => void;
   scheduleTime: string;
@@ -76,6 +79,7 @@ export function TaskEditorView({
   status,
   scheduled,
   scheduleDisplay,
+  workSessions = [],
   projectId,
   onProjectChange,
   projects,
@@ -95,6 +99,8 @@ export function TaskEditorView({
   onPriorityChange,
   duration,
   onDurationChange,
+  sessionDuration,
+  onSessionDurationChange,
   scheduleDate,
   onScheduleDateChange,
   scheduleTime,
@@ -289,18 +295,20 @@ export function TaskEditorView({
 
           <section className="pos-te-section" aria-labelledby="pos-te-calendar">
             <h3 id="pos-te-calendar" className="pos-te-section-title">
-              Calendar
+              Work sessions
             </h3>
             {loadingSchedule ? (
               <p className="pos-te-help">Checking schedule…</p>
-            ) : scheduled && scheduleDisplay ? (
+            ) : workSessions.length ? (
               <div className="pos-te-schedule-display">
-                <p className="pos-mono">{scheduleDisplay}</p>
-                <p className="pos-te-help">
-                  Completing keeps this block on the calendar with completed styling.
-                </p>
+                {workSessions.map((session) => {
+                  const start = new Date(session.startAt);
+                  const end = new Date(session.endAt);
+                  return <p key={session.id} className="pos-mono">{start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}–{end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</p>;
+                })}
+                <p className="pos-te-help">These are calendar sessions for working on this Task. They do not determine whether the Task is complete.</p>
               </div>
-            ) : null}
+            ) : <p className="pos-te-help">No work sessions scheduled.</p>}
             <div className="pos-te-schedule-fields">
               <label>
                 <span>Date</span>
@@ -321,8 +329,10 @@ export function TaskEditorView({
                 />
               </label>
               <div>
-                <span>Length</span>
-                <strong className="pos-mono">{formatTaskDuration(duration)}</strong>
+                <span>Session length</span>
+                <select value={sessionDuration} onChange={(event) => onSessionDurationChange(Number(event.target.value))} disabled={saving}>
+                  {DURATION_OPTIONS.map((mins) => <option key={mins} value={mins}>{formatTaskDuration(mins)}</option>)}
+                </select>
               </div>
             </div>
             {scheduled && onUnschedule && (
@@ -370,7 +380,7 @@ export function TaskEditorView({
                 </div>
               </div>
               <label>
-                <span>Duration</span>
+                <span>Estimated effort</span>
                 <select
                   value={duration}
                   onChange={(event) => onDurationChange(Number(event.target.value))}
@@ -440,7 +450,7 @@ export function TaskEditorView({
               onClick={onSchedule}
               disabled={saving || loadingSchedule}
             >
-              {saving ? "Saving…" : scheduled ? "Save & sync" : "Schedule"}
+              {saving ? "Saving…" : scheduled ? "Schedule another session" : "Schedule session"}
             </button>
           </div>
         </div>

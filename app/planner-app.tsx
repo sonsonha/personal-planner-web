@@ -69,6 +69,7 @@ import {
 } from "@/lib/planner-api";
 import { GoalsWorkspace, ProgressWorkspace, ProjectsWorkspace, type HorizonScope } from "./planner-workspaces";
 import { parsePlannerPath, plannerPath, type PlannerSection } from "./planner-routes";
+import { aggregateTaskSchedule, formatScheduledMinutes } from "@/lib/task-schedule";
 
 type TaskStatus = "inbox" | "scheduled" | "done";
 type TaskPriority = "p1" | "p2" | "p3" | "p4";
@@ -675,7 +676,9 @@ function taskBelongsToHorizon(
     && block.taskId === task.id
     && dateInHorizon(blockInstant(block, weekStart), horizon, anchor),
   );
-  if (hasBlockHere) return true;
+  // Only Day may surface execution scheduled for that day. Week/Month are
+  // commitment views: TimeBlocks must not change a Task's planning horizon.
+  if (horizon === "day" && hasBlockHere) return true;
 
   const due = parseDateValue(task.dueAt);
   const dueHorizon = taskDueHorizon(task);
@@ -935,11 +938,25 @@ export function PlannerApp({
     const needsWideRange = activeSection === "tasks"
       || activeSection === "goals"
       || activeSection === "progress";
-    const rangeStart = needsWideRange
-      ? startOfWeek(addDays(now, -7))
+    const taskRangeStart = taskHorizon === "month"
+      ? startOfMonth(taskAnchor)
+      : taskHorizon === "day"
+        ? startOfDay(taskAnchor)
+        : startOfWeek(taskAnchor);
+    const taskRangeEnd = taskHorizon === "month"
+      ? addDays(taskRangeStart, daysInMonth(taskRangeStart))
+      : taskHorizon === "day"
+        ? addDays(taskRangeStart, 1)
+        : addDays(taskRangeStart, 7);
+    const rangeStart = activeSection === "tasks"
+      ? taskRangeStart
+      : needsWideRange
+        ? startOfWeek(addDays(now, -7))
       : view === "month" ? startOfMonth(monthAnchor) : weekStart;
-    const rangeEnd = needsWideRange
-      ? addDays(startOfMonth(now), daysInMonth(now))
+    const rangeEnd = activeSection === "tasks"
+      ? taskRangeEnd
+      : needsWideRange
+        ? addDays(startOfMonth(now), daysInMonth(now))
       : view === "month"
         ? addDays(startOfMonth(monthAnchor), daysInMonth(monthAnchor))
         : addDays(weekStart, 7);
@@ -978,7 +995,7 @@ export function PlannerApp({
       });
 
     return () => controller.abort();
-  }, [reloadKey, weekStart, view, monthAnchor, activeSection, now]);
+  }, [reloadKey, weekStart, view, monthAnchor, activeSection, now, taskAnchor, taskHorizon]);
 
   const showToast = useCallback((message: string, kind: ToastKind = "info") => {
     setToastKind(kind);
@@ -2721,7 +2738,7 @@ function SlotScheduleModal({
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Task title" />
             <div className="slot-create-fields">
               <label>
-                <span>Duration</span>
+                <span>Session duration</span>
                 <select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>
                   <option value={15}>15 minutes</option>
                   <option value={30}>30 minutes</option>
@@ -2881,7 +2898,7 @@ function TaskPanel({
               </button>
               <div className="task-meta">
                 <span className="task-project"><i style={{ background: task.color }} />{task.project}</span>
-                <span className="pos-mono">{durationLabel(task.duration)}</span>
+                <span className="pos-mono">Est. effort {durationLabel(task.duration)}</span>
               </div>
             </div>
             {task.status !== "done" && <GripVertical className="drag-handle" size={15} />}
@@ -3166,13 +3183,9 @@ function TasksWorkspace({
     if (task.status === "done") {
       return block ? scheduleLabel(block) : "Done";
     }
-    const taskBlocks = blocks.filter((candidate) => candidate.type === "task" && candidate.taskId === task.id);
-    if ((horizon === "week" || horizon === "month") && taskBlocks.length > 0) {
-      const minutes = taskBlocks.reduce((sum, candidate) => sum + Math.max(0, candidate.duration), 0);
-      const hours = Math.floor(minutes / 60);
-      const rest = Math.round(minutes % 60);
-      const duration = hours ? `${hours}h${rest ? ` ${rest}m` : ""}` : `${rest}m`;
-      return `${taskBlocks.length} session${taskBlocks.length === 1 ? "" : "s"} · ${duration} scheduled`;
+    const aggregate = aggregateTaskSchedule(task.id, blocks.filter((candidate) => candidate.type === "task"));
+    if ((horizon === "week" || horizon === "month") && aggregate.sessionCount > 0) {
+      return `${aggregate.sessionCount} session${aggregate.sessionCount === 1 ? "" : "s"} · ${formatScheduledMinutes(aggregate.totalScheduledMinutes)} scheduled`;
     }
     if (block) return scheduleLabel(block);
     if (task.status === "scheduled") return "Scheduled";
@@ -3302,6 +3315,7 @@ function TaskEditor({
   const [dueDate, setDueDate] = useState(dateInputValue(task.dueAt));
   const [dueScope, setDueScope] = useState<"none" | "day" | "week" | "month">(task.dueHorizon ?? "none");
   const [duration, setDuration] = useState(task.duration);
+  const [sessionDuration, setSessionDuration] = useState(30);
   const [priority, setPriority] = useState<TaskPriority>(task.priority);
   const [taskBlocks, setTaskBlocks] = useState<ApiTimeBlock[]>([]);
   const [scheduleDate, setScheduleDate] = useState(dateInputValue(suggestedStart.toISOString()));
@@ -3334,6 +3348,7 @@ function TaskEditor({
         if (items[0]) {
           setScheduleDate(dateInputValue(items[0].startAt));
           setScheduleTime(timeInputValue(items[0].startAt));
+          setSessionDuration(Math.max(5, Math.round((new Date(items[0].endAt).getTime() - new Date(items[0].startAt).getTime()) / 60_000)));
         }
       })
       .catch(() => {
@@ -3373,7 +3388,7 @@ function TaskEditor({
       setError("Task title cannot be empty.");
       return;
     }
-    if ((schedule || scheduledBlock) && (!scheduleDate || !scheduleTime)) {
+    if (schedule && (!scheduleDate || !scheduleTime)) {
       setError("Choose a date and time before scheduling.");
       return;
     }
@@ -3384,34 +3399,15 @@ function TaskEditor({
       return;
     }
     try {
-      const startAt = (schedule || scheduledBlock) ? scheduleStart(scheduleDate, scheduleTime) : undefined;
-      await updateTask(task.id, taskPayload(startAt));
+      const startAt = schedule ? scheduleStart(scheduleDate, scheduleTime) : undefined;
+      await updateTask(task.id, taskPayload());
       if (startAt) {
-        const endAt = new Date(startAt.getTime() + duration * 60_000);
-        if (scheduledBlock) {
-          await updateTimeBlock(scheduledBlock.id, {
-            title: title.trim(),
-            projectId,
-            color: priorityColor(priority),
-            startAt: startAt.toISOString(),
-            endAt: endAt.toISOString(),
-          });
-        } else {
-          await createPlannerTimeBlock({
-            taskId: task.id,
-            projectId,
-            title: title.trim(),
-            color: priorityColor(priority),
-            startAt: startAt.toISOString(),
-            endAt: endAt.toISOString(),
-          });
-        }
+        const endAt = new Date(startAt.getTime() + sessionDuration * 60_000);
+        await createPlannerTimeBlock({ taskId: task.id, projectId, title: title.trim(), color: priorityColor(priority), startAt: startAt.toISOString(), endAt: endAt.toISOString() });
       }
       onChanged(schedule
         ? "Task saved and synced to Google Calendar"
-        : scheduledBlock
-          ? "Task and calendar block updated"
-          : "Task details updated");
+        : "Task details updated");
     } catch {
       setSaving(false);
       setError("Could not save these changes. Please try again.");
@@ -3484,8 +3480,9 @@ function TaskEditor({
       notes={notes}
       onNotesChange={setNotes}
       status={task.status}
-      scheduled={Boolean(scheduledBlock) || task.status === "scheduled"}
+      scheduled={taskBlocks.length > 0}
       scheduleDisplay={scheduleDisplay}
+      workSessions={taskBlocks}
       projectId={projectId}
       onProjectChange={(nextProjectId) => {
         const nextProject = projects.find((project) => project.id === nextProjectId);
@@ -3516,6 +3513,8 @@ function TaskEditor({
       onPriorityChange={setPriority}
       duration={duration}
       onDurationChange={setDuration}
+      sessionDuration={sessionDuration}
+      onSessionDurationChange={setSessionDuration}
       scheduleDate={scheduleDate}
       onScheduleDateChange={setScheduleDate}
       scheduleTime={scheduleTime}
