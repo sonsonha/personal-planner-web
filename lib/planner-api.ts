@@ -357,9 +357,17 @@ export function fetchTaskTimeBlocks(id: string, signal?: AbortSignal) {
   );
 }
 
-export function deleteTask(id: string) {
-  return requestJson<{ id: string; deleted: true; removedTimeBlocks: number }>(
-    `/api/tasks/${encodeURIComponent(id)}`,
+export function deleteTask(id: string, opts?: { seriesScope?: ApiSeriesScope }) {
+  const query = opts?.seriesScope
+    ? `?seriesScope=${encodeURIComponent(opts.seriesScope)}`
+    : "";
+  return requestJson<{
+    id: string;
+    deleted: true;
+    removedTimeBlocks: number;
+    removedTaskCount?: number;
+  }>(
+    `/api/tasks/${encodeURIComponent(id)}${query}`,
     { method: "DELETE" },
   );
 }

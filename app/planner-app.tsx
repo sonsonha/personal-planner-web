@@ -24,7 +24,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { PlannerSidebar, type SidebarGoogleState } from "@/components/planner/PlannerSidebar";
 import {
@@ -75,6 +75,8 @@ import {
   type ApiTimeBlock,
 } from "@/lib/planner-api";
 import { SeriesScopeModal } from "@/components/planner/SeriesScopeModal";
+import { DestructiveConfirmModal } from "@/components/planner/DestructiveConfirmModal";
+import { CalendarQuickCreatePopover } from "@/components/planner/CalendarQuickCreatePopover";
 import { EditRepeatModal } from "@/components/planner/EditRepeatModal";
 import {
   deriveTaskProgressFromSessions,
@@ -157,7 +159,7 @@ type GoogleConnectionState =
 type ActiveSection = PlannerSection;
 type CalendarView = "week" | "day" | "month";
 type ToastKind = "info" | "warning";
-type SlotPicker = { day: number; start: number };
+type SlotPicker = { day: number; start: number; duration: number; anchor: DOMRect };
 
 type DragPayload =
   | { kind: "task"; taskId: string }
@@ -875,10 +877,15 @@ export function PlannerApp({
   const [blockClipboard, setBlockClipboard] = useState<BlockClipboard | null>(null);
   const [pasteFocus, setPasteFocus] = useState<{ day: number; start: number } | null>(null);
   const [seriesScopePrompt, setSeriesScopePrompt] = useState<{
-    kind: "task" | "session" | "session-delete";
+    kind: "task" | "session";
     id: string;
     payload: Record<string, unknown>;
     onCancel?: () => void;
+  } | null>(null);
+  const [sessionDeleteConfirm, setSessionDeleteConfirm] = useState<{
+    blockId: string;
+    title: string;
+    repeated: boolean;
   } | null>(null);
   const [blockDragPreview, setBlockDragPreview] = useState<{
     id: string;
@@ -1230,6 +1237,8 @@ export function PlannerApp({
           ?? (view === "day" ? activeDay : (isCurrentWeek ? nowDay : 0));
         const start = pasteFocus?.start
           ?? Math.max(START_HOUR * 60, Math.min(END_HOUR * 60 - blockClipboard.duration, nowMinute));
+        // Replace empty quick-create draft with an immediate Session paste.
+        setSlotPicker(null);
         const pendingId = `pending-${crypto.randomUUID()}`;
         const block: CalendarBlock = {
           id: pendingId,
@@ -1554,19 +1563,24 @@ export function PlannerApp({
     day: number,
     start: number,
     pendingId: string,
+    opts?: { duration?: number; notes?: string },
   ) => {
+    const duration = Math.max(SNAP_MINUTES, opts?.duration ?? task.duration);
+    const notes = opts?.notes?.trim() || undefined;
     const block: CalendarBlock = {
       id: pendingId,
       title: task.title,
       day,
       start,
-      duration: task.duration,
+      duration,
       color: priorityColor(task.priority),
       type: "task",
       taskId: task.id,
       projectId: task.projectId,
       meta: task.project,
       syncStatus: "PENDING",
+      notes: notes ?? "",
+      status: "PLANNED",
     };
     warnIfConflict(block);
     const startAt = slotDate(weekStart, day, start);
@@ -1582,10 +1596,10 @@ export function PlannerApp({
       setTaskFilter("today");
       setTaskPanelOpen(true);
     }
-    showToast(liveDataRef.current ? "Scheduling task…" : "Task scheduled · demo mode");
+    showToast(liveDataRef.current ? "Scheduling session…" : "Session scheduled · demo mode");
     if (!liveDataRef.current) return;
 
-    const endAt = new Date(startAt.getTime() + task.duration * 60_000);
+    const endAt = new Date(startAt.getTime() + duration * 60_000);
     try {
       const saved = await createPlannerTimeBlock({
         taskId: task.id,
@@ -1594,19 +1608,42 @@ export function PlannerApp({
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
         color: priorityColor(task.priority),
+        notes,
       });
       const mapped = timeBlockFromApi(saved, weekStart, projects);
       setBlocks((current) => current.map((item) => item.id === pendingId ? mapped : item));
       showToast(saved.syncStatus === "FAILED"
-        ? "Task scheduled · Google sync needs attention"
-        : "Task scheduled · calendar synced");
+        ? "Session scheduled · Google sync needs attention"
+        : "Session scheduled · calendar synced");
     } catch {
       setBlocks((current) => current.filter((item) => item.id !== pendingId));
       setTasks((current) => current.map((item) =>
         item.id === task.id ? { ...item, status: "inbox" } : item,
       ));
       setConnection("error");
-      showToast("Could not schedule task · changes rolled back", "warning");
+      showToast("Could not schedule session · changes rolled back", "warning");
+    }
+  };
+
+  const toggleSessionDone = async (blockId: string, done: boolean) => {
+    if (!liveDataRef.current) {
+      setBlocks((current) => current.map((block) =>
+        block.id === blockId
+          ? { ...block, status: done ? "DONE" : "PLANNED", completedAt: done ? new Date().toISOString() : null }
+          : block,
+      ));
+      showToast(done ? "Session marked done · demo mode" : "Session reopened · demo mode");
+      return;
+    }
+    try {
+      const saved = await completeSession(blockId, done);
+      const mapped = timeBlockFromApi(saved, weekStart, projects);
+      setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
+      setEvidenceEpoch((value) => value + 1);
+      setReloadKey((value) => value + 1);
+      showToast(done ? "Session marked done" : "Session marked incomplete");
+    } catch {
+      showToast("Could not update session", "warning");
     }
   };
 
@@ -2422,8 +2459,16 @@ export function PlannerApp({
                       if (event.button !== 0) return;
                       const rect = event.currentTarget.getBoundingClientRect();
                       const start = slotMinutesFromClick(event.clientY, rect);
+                      const slotTop =
+                        ((start - START_HOUR * 60) / MINUTES_VISIBLE) * rect.height;
+                      const anchor = new DOMRect(
+                        rect.left + Math.min(rect.width * 0.35, 80),
+                        rect.top + slotTop,
+                        Math.max(40, rect.width * 0.45),
+                        30,
+                      );
                       setPasteFocus({ day: dayIndex, start });
-                      setSlotPicker({ day: dayIndex, start });
+                      setSlotPicker({ day: dayIndex, start, duration: 30, anchor });
                     }}
                     onDragOver={(event) => {
                       event.preventDefault();
@@ -2445,6 +2490,7 @@ export function PlannerApp({
                           key={block.id}
                           block={block}
                           done={sessionDone || taskDone}
+                          sessionDone={sessionDone}
                           layout={geometry}
                           selected={blockPopover?.blockId === block.id}
                           onOpenTask={setEditingTaskId}
@@ -2458,6 +2504,9 @@ export function PlannerApp({
                           onSelect={(rect) => {
                             setPasteFocus({ day: block.day, start: block.start });
                             setBlockPopover({ blockId: block.id, rect });
+                          }}
+                          onToggleSessionDone={(done) => {
+                            void toggleSessionDone(block.id, done);
                           }}
                         />
                       );
@@ -2610,29 +2659,119 @@ export function PlannerApp({
         />
       )}
 
-      {slotPicker && (
-        <SlotScheduleModal
-          slot={slotPicker}
-          tasks={tasks.filter((task) => task.status !== "done")}
-          projects={projects}
-          live={connection === "live"}
-          weekStart={weekStart}
-          onClose={() => setSlotPicker(null)}
-          onPickTask={(task) => {
-            const pendingId = `pending-${crypto.randomUUID()}`;
-            setSlotPicker(null);
-            void scheduleTaskAtSlot(task, slotPicker.day, slotPicker.start, pendingId);
-          }}
-          onCreateTask={async (title, duration, projectId) => {
-            const created = await addTask(title, duration, projectId);
-            const pendingId = `pending-${crypto.randomUUID()}`;
-            setSlotPicker(null);
-            if (created) {
-              void scheduleTaskAtSlot(created, slotPicker.day, slotPicker.start, pendingId);
-            }
-          }}
-        />
-      )}
+      {slotPicker && (() => {
+        const slotDateValue = slotDate(weekStart, slotPicker.day, slotPicker.start);
+        const end = slotPicker.start + slotPicker.duration;
+        const slotLabel = `${slotDateValue.toLocaleDateString("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        })} · ${minutesToTime(slotPicker.start)}–${minutesToTime(end)}`;
+        return (
+          <CalendarQuickCreatePopover
+            day={slotPicker.day}
+            start={slotPicker.start}
+            duration={slotPicker.duration}
+            slotLabel={slotLabel}
+            anchor={slotPicker.anchor}
+            live={connection === "live"}
+            tasks={tasks.map((task) => ({
+              id: task.id,
+              title: task.title,
+              projectId: task.projectId,
+              project: task.project,
+              color: task.color,
+              duration: task.duration,
+              status: task.status,
+              dueHorizon: task.dueHorizon,
+            }))}
+            projects={projects.map((project) => ({ id: project.id, title: project.title }))}
+            onClose={() => setSlotPicker(null)}
+            onPasteSession={async () => {
+              if (!blockClipboard) {
+                showToast("Nothing copied yet", "warning");
+                return;
+              }
+              const day = slotPicker.day;
+              const start = slotPicker.start;
+              setSlotPicker(null);
+              const task = tasks.find((item) => item.id === blockClipboard.taskId);
+              if (!task || task.status === "done") {
+                showToast("Copied task is missing or already done", "warning");
+                return;
+              }
+              const pendingId = `pending-${crypto.randomUUID()}`;
+              const block: CalendarBlock = {
+                id: pendingId,
+                title: blockClipboard.title || task.title,
+                day,
+                start,
+                duration: blockClipboard.duration,
+                color: priorityColor(task.priority),
+                type: "task",
+                taskId: task.id,
+                projectId: task.projectId,
+                meta: task.project,
+                syncStatus: "PENDING",
+                notes: blockClipboard.notes,
+                status: "PLANNED",
+              };
+              setBlocks((current) => [...current, block]);
+              setTasks((current) => current.map((item) =>
+                item.id === task.id && item.status === "inbox"
+                  ? { ...item, status: "scheduled" }
+                  : item,
+              ));
+              showToast(liveDataRef.current ? "Pasting session…" : "Session pasted · demo mode");
+              if (!liveDataRef.current) return;
+              const startAt = slotDate(weekStart, day, start);
+              const endAt = new Date(startAt.getTime() + blockClipboard.duration * 60_000);
+              try {
+                const saved = await createPlannerTimeBlock({
+                  taskId: task.id,
+                  projectId: task.projectId,
+                  title: blockClipboard.title || task.title,
+                  startAt: startAt.toISOString(),
+                  endAt: endAt.toISOString(),
+                  color: priorityColor(task.priority),
+                  notes: blockClipboard.notes || undefined,
+                });
+                const mapped = timeBlockFromApi(saved, weekStart, projects);
+                setBlocks((current) => current.map((item) => item.id === pendingId ? mapped : item));
+                showToast("Session pasted for the same task");
+              } catch {
+                setBlocks((current) => current.filter((item) => item.id !== pendingId));
+                showToast("Could not paste session", "warning");
+              }
+            }}
+            onSaveExisting={async (taskId, note, duration) => {
+              const task = tasks.find((item) => item.id === taskId);
+              if (!task) return;
+              const pendingId = `pending-${crypto.randomUUID()}`;
+              const day = slotPicker.day;
+              const start = slotPicker.start;
+              setSlotPicker(null);
+              await scheduleTaskAtSlot(task, day, start, pendingId, {
+                duration,
+                notes: note,
+              });
+            }}
+            onSaveNew={async ({ title, projectId, duration, note }) => {
+              const day = slotPicker.day;
+              const start = slotPicker.start;
+              const created = await addTask(title, duration, projectId);
+              const pendingId = `pending-${crypto.randomUUID()}`;
+              setSlotPicker(null);
+              if (created) {
+                await scheduleTaskAtSlot(created, day, start, pendingId, {
+                  duration,
+                  notes: note,
+                });
+              }
+            }}
+          />
+        );
+      })()}
 
       {blockPopover && (() => {
         const popBlock = blocks.find((block) => block.id === blockPopover.blockId);
@@ -2656,27 +2795,7 @@ export function PlannerApp({
             anchor={blockPopover.rect}
             onClose={() => setBlockPopover(null)}
             onToggleSessionDone={(done) => {
-              void (async () => {
-                if (!liveDataRef.current) {
-                  setBlocks((current) => current.map((block) =>
-                    block.id === popBlock.id
-                      ? { ...block, status: done ? "DONE" : "PLANNED", completedAt: done ? new Date().toISOString() : null }
-                      : block,
-                  ));
-                  showToast(done ? "Session marked done · demo mode" : "Session reopened · demo mode");
-                  return;
-                }
-                try {
-                  const saved = await completeSession(popBlock.id, done);
-                  const mapped = timeBlockFromApi(saved, weekStart, projects);
-                  setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
-                  setEvidenceEpoch((value) => value + 1);
-                  setReloadKey((value) => value + 1);
-                  showToast(done ? "Session marked done" : "Session marked incomplete");
-                } catch {
-                  showToast("Could not update session", "warning");
-                }
-              })();
+              void toggleSessionDone(popBlock.id, done);
             }}
             onSaveNotes={(notes) => {
               void (async () => {
@@ -2721,15 +2840,16 @@ export function PlannerApp({
             }}
             onUnschedule={() => {
               if (popBlock.repeatSeriesId) {
-                setSeriesScopePrompt({
-                  kind: "session-delete",
-                  id: popBlock.id,
-                  payload: {},
+                setSessionDeleteConfirm({
+                  blockId: popBlock.id,
+                  title: popBlock.title,
+                  repeated: true,
                 });
                 setBlockPopover(null);
                 return;
               }
               void unscheduleBlock(popBlock.id);
+              setBlockPopover(null);
             }}
             onRetrySync={
               popBlock.syncStatus === "FAILED"
@@ -2739,6 +2859,44 @@ export function PlannerApp({
           />
         );
       })()}
+
+      {sessionDeleteConfirm && (
+        <DestructiveConfirmModal
+          title={sessionDeleteConfirm.repeated ? "Remove repeated session" : "Remove session"}
+          body={
+            sessionDeleteConfirm.repeated
+              ? `Remove “${sessionDeleteConfirm.title}” from the calendar.`
+              : `Remove “${sessionDeleteConfirm.title}”?`
+          }
+          confirmLabel="Remove"
+          showSeriesScope={sessionDeleteConfirm.repeated}
+          onClose={() => setSessionDeleteConfirm(null)}
+          onConfirm={async (scope) => {
+            const target = sessionDeleteConfirm;
+            setSessionDeleteConfirm(null);
+            if (!liveDataRef.current) {
+              setBlocks((current) => current.filter((block) => block.id !== target.blockId));
+              showToast("Session removed · demo mode");
+              return;
+            }
+            try {
+              if (target.repeated && scope) {
+                await deleteTimeBlock(target.blockId, { seriesScope: scope });
+                setReloadKey((value) => value + 1);
+                showToast(
+                  scope === "THIS_AND_FUTURE"
+                    ? "Removed this and future sessions"
+                    : "Removed this session only",
+                );
+              } else {
+                await unscheduleBlock(target.blockId);
+              }
+            } catch {
+              showToast("Could not remove session", "warning");
+            }
+          }}
+        />
+      )}
 
       {seriesScopePrompt && (
         <SeriesScopeModal
@@ -2758,8 +2916,6 @@ export function PlannerApp({
               try {
                 if (prompt.kind === "task") {
                   await updateTask(prompt.id, { ...prompt.payload, seriesScope: scope });
-                } else if (prompt.kind === "session-delete") {
-                  await deleteTimeBlock(prompt.id, { seriesScope: scope });
                 } else {
                   await updateTimeBlock(prompt.id, { ...prompt.payload, seriesScope: scope });
                 }
@@ -2791,6 +2947,7 @@ export function PlannerApp({
 function CalendarEvent({
   block,
   done,
+  sessionDone,
   layout,
   selected = false,
   onOpenTask,
@@ -2798,9 +2955,11 @@ function CalendarEvent({
   onSelect,
   onMoveCommit,
   onMovePreview,
+  onToggleSessionDone,
 }: {
   block: CalendarBlock;
   done: boolean;
+  sessionDone: boolean;
   layout: { left: string; right: string };
   selected?: boolean;
   onOpenTask: (taskId: string) => void;
@@ -2808,6 +2967,7 @@ function CalendarEvent({
   onSelect: (rect: DOMRect) => void;
   onMoveCommit: (blockId: string, day: number, start: number) => void;
   onMovePreview: (preview: { id: string; day: number; start: number } | null) => void;
+  onToggleSessionDone?: (done: boolean) => void;
 }) {
   const resizeStartRef = useRef<{ y: number; duration: number } | null>(null);
   const previewRef = useRef<number | null>(null);
@@ -2882,8 +3042,10 @@ function CalendarEvent({
   };
 
   const onMovePointerDown = (event: React.PointerEvent) => {
-    if (block.type !== "task" || done || event.button !== 0) return;
-    if ((event.target as HTMLElement).closest(".event-resize-handle")) return;
+    if (block.type !== "task" || event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest(".event-complete")) return;
+    if (target.closest(".event-resize-handle")) return;
     event.stopPropagation();
     moveRef.current = {
       pointerId: event.pointerId,
@@ -2900,6 +3062,8 @@ function CalendarEvent({
     const onMove = (moveEvent: PointerEvent) => {
       const state = moveRef.current;
       if (!state || moveEvent.pointerId !== state.pointerId) return;
+      // Completed sessions stay selectable but are not draggable.
+      if (done) return;
       const dx = moveEvent.clientX - state.startX;
       const dy = moveEvent.clientY - state.startY;
       if (!state.dragging) {
@@ -2935,8 +3099,9 @@ function CalendarEvent({
       moveRef.current = null;
       onMovePreview(null);
       if (!state.dragging) {
-        const target = upEvent.target as HTMLElement | null;
-        const article = target?.closest?.("article.calendar-event") as HTMLElement | null;
+        const upTarget = upEvent.target as HTMLElement | null;
+        if (upTarget?.closest?.(".event-complete")) return;
+        const article = upTarget?.closest?.("article.calendar-event") as HTMLElement | null;
         if (article) onSelect(article.getBoundingClientRect());
         return;
       }
@@ -2998,8 +3163,25 @@ function CalendarEvent({
       }}
     >
       <div className={`event-title-row${isTiny ? " inline" : ""}`}>
+        {!isExternal && onToggleSessionDone && (
+          <button
+            type="button"
+            className={`event-complete${sessionDone ? " checked" : ""}`}
+            aria-label={sessionDone ? `Mark ${block.title} incomplete` : `Mark ${block.title} done`}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              event.preventDefault();
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              event.preventDefault();
+              onToggleSessionDone(!sessionDone);
+            }}
+          >
+            {sessionDone ? <CheckCircle2 size={10} aria-hidden="true" /> : null}
+          </button>
+        )}
         {isExternal && <LockKeyhole size={10} aria-hidden="true" />}
-        {done && !isExternal && <CheckCircle2 size={10} aria-hidden="true" />}
         {isFailed && <em className="sync-warning" aria-label="Sync failed">!</em>}
         <strong>{block.title}</strong>
       </div>
@@ -3092,97 +3274,6 @@ function MonthCalendar({
         <span><i className="os" /> Personal OS</span>
         <span><i className="gcal" /> Google Calendar</span>
         <em>Click a day to open Day view</em>
-      </div>
-    </div>
-  );
-}
-
-function SlotScheduleModal({
-  slot,
-  tasks,
-  projects,
-  live,
-  weekStart,
-  onClose,
-  onPickTask,
-  onCreateTask,
-}: {
-  slot: SlotPicker;
-  tasks: PlannerTask[];
-  projects: ProjectOption[];
-  live: boolean;
-  weekStart: Date;
-  onClose: () => void;
-  onPickTask: (task: PlannerTask) => void;
-  onCreateTask: (title: string, duration: number, projectId: string | null) => Promise<void>;
-}) {
-  const [mode, setMode] = useState<"pick" | "create">("pick");
-  const [title, setTitle] = useState("");
-  const [duration, setDuration] = useState(30);
-  const [projectId, setProjectId] = useState<string | null>(projects[0]?.id ?? null);
-  const slotDateValue = slotDate(weekStart, slot.day, slot.start);
-
-  const submitCreate = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!title.trim()) return;
-    await onCreateTask(title.trim(), duration, projectId);
-  };
-
-  return (
-    <div className="modal-backdrop">
-      <button className="modal-dismiss" type="button" aria-label="Close slot scheduler" onClick={onClose} />
-      <div className="slot-schedule-modal pos-cal-slot" role="dialog" aria-modal="true" aria-label="Schedule time block">
-        <div className="slot-schedule-header">
-          <div>
-            <div className="eyebrow">Schedule work</div>
-            <strong>{slotDateValue.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · {minutesToTime(slot.start)}</strong>
-          </div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
-        </div>
-        <div className="slot-schedule-tabs">
-          <button className={mode === "pick" ? "active" : ""} onClick={() => setMode("pick")}>Existing task</button>
-          <button className={mode === "create" ? "active" : ""} onClick={() => setMode("create")}>Quick create</button>
-        </div>
-        {mode === "pick" ? (
-          <div className="slot-task-list">
-            {tasks.filter((task) => task.status !== "scheduled").map((task) => (
-              <button key={task.id} type="button" className="slot-task-row" onClick={() => onPickTask(task)}>
-                <i style={{ background: task.color }} />
-                <span>{task.title}</span>
-                <small>{durationLabel(task.duration)}</small>
-              </button>
-            ))}
-            {tasks.filter((task) => task.status !== "scheduled").length === 0 && (
-              <p className="slot-empty">No inbox tasks · quick create one instead.</p>
-            )}
-          </div>
-        ) : (
-          <form className="slot-create-form" onSubmit={submitCreate}>
-            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Task title" />
-            <div className="slot-create-fields">
-              <label>
-                <span>Session duration</span>
-                <select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>
-                  <option value={15}>15 minutes</option>
-                  <option value={30}>30 minutes</option>
-                  <option value={45}>45 minutes</option>
-                  <option value={60}>1 hour</option>
-                </select>
-              </label>
-              <label>
-                <span>Project</span>
-                <select value={projectId ?? ""} onChange={(event) => setProjectId(event.target.value || null)}>
-                  {projects.map((project) => (
-                    <option key={project.id ?? "inbox"} value={project.id ?? ""}>{project.title}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <button type="submit" className="primary-button" disabled={!title.trim()}>
-              {live ? "Create & schedule" : "Create & schedule · demo"}
-            </button>
-          </form>
-        )}
       </div>
     </div>
   );
@@ -3753,7 +3844,8 @@ function TaskEditor({
   const [loadingSchedule, setLoadingSchedule] = useState(live);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteSaving, setDeleteSaving] = useState(false);
   const [repeatWeeks, setRepeatWeeks] = useState("8");
   const [pendingSeriesSave, setPendingSeriesSave] = useState<{ schedule: boolean } | null>(null);
   const [repeatSummary, setRepeatSummary] = useState<ApiTaskRepeatSummary | null>(null);
@@ -3931,22 +4023,27 @@ function TaskEditor({
     }
   };
 
-  const removeTask = async () => {
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      return;
-    }
-    setSaving(true);
+  const removeTask = async (scope: ApiSeriesScope | null) => {
+    setDeleteSaving(true);
     setError(null);
     if (!live) {
+      setConfirmDeleteOpen(false);
       onChanged("Task deleted · demo mode");
       return;
     }
     try {
-      await deletePlannerTask(task.id);
-      onChanged("Task and its calendar blocks deleted");
+      await deletePlannerTask(
+        task.id,
+        scope ? { seriesScope: scope } : undefined,
+      );
+      setConfirmDeleteOpen(false);
+      onChanged(
+        scope === "THIS_AND_FUTURE"
+          ? "This and future tasks deleted"
+          : "Task and its calendar blocks deleted",
+      );
     } catch {
-      setSaving(false);
+      setDeleteSaving(false);
       setError("Could not delete this task. Please try again.");
     }
   };
@@ -4047,15 +4144,33 @@ function TaskEditor({
       loadingSchedule={loadingSchedule}
       saving={saving}
       error={error}
-      confirmDelete={confirmDelete}
       onComplete={completePolicy === "allow" ? onComplete : undefined}
       onRestore={onRestore}
       onUnschedule={scheduledBlock ? unscheduleTask : undefined}
-      onDelete={removeTask}
+      onDelete={() => setConfirmDeleteOpen(true)}
       onSaveDetails={() => saveTask(false)}
       onSchedule={() => saveTask(true)}
       onClose={onClose}
     />
+    {confirmDeleteOpen && (
+      <DestructiveConfirmModal
+        title={task.repeatSeriesId ? "Delete repeated task" : "Delete task"}
+        body={
+          task.repeatSeriesId
+            ? `Delete “${title.trim() || task.title}” from this series.`
+            : `Delete “${title.trim() || task.title}”?`
+        }
+        confirmLabel="Delete"
+        showSeriesScope={Boolean(task.repeatSeriesId)}
+        saving={deleteSaving}
+        onClose={() => {
+          if (!deleteSaving) setConfirmDeleteOpen(false);
+        }}
+        onConfirm={(scope) => {
+          void removeTask(scope);
+        }}
+      />
+    )}
     {pendingSeriesSave && (
       <SeriesScopeModal
         entityLabel="task"

@@ -76,7 +76,6 @@ export type TaskEditorViewProps = {
   loadingSchedule?: boolean;
   saving?: boolean;
   error?: string | null;
-  confirmDelete?: boolean;
   onComplete?: () => void;
   onRestore?: () => void;
   onUnschedule?: () => void;
@@ -133,7 +132,6 @@ export function TaskEditorView({
   loadingSchedule = false,
   saving = false,
   error,
-  confirmDelete = false,
   onComplete,
   onRestore,
   onUnschedule,
@@ -519,11 +517,11 @@ export function TaskEditorView({
         <div className="pos-te-footer">
           <button
             type="button"
-            className={cn("pos-te-delete", confirmDelete && "confirm")}
+            className="pos-te-delete"
             onClick={onDelete}
             disabled={saving}
           >
-            {confirmDelete ? "Click again to delete" : "Delete"}
+            Delete
           </button>
           <div className="pos-te-footer-actions">
             <button

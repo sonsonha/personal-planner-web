@@ -155,7 +155,10 @@ test("ships the core planning interactions", async () => {
   assert.match(source, /function TaskEditor/);
   assert.match(source, /Unschedule/);
   assert.match(source, /blocksOverlap/);
-  assert.match(source, /SlotScheduleModal/);
+  assert.match(source, /CalendarQuickCreatePopover/);
+  assert.doesNotMatch(source, /function SlotScheduleModal/);
+  assert.match(source, /event-complete/);
+  assert.match(source, /DestructiveConfirmModal/);
   assert.match(source, /function MonthCalendar/);
   assert.match(source, /event-resize-handle/);
   assert.match(source, /resolveOverlapLayout/);
