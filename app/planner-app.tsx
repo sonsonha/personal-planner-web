@@ -179,6 +179,9 @@ function calendarSyncMessage(summary: CalendarSyncSummary): string {
   if (summary.retry.failed > 0) {
     return `Calendar checked · ${summary.retry.failed} block${summary.retry.failed === 1 ? "" : "s"} still need attention`;
   }
+  if (summary.retry.synced > 0) {
+    return `Calendar synced · refreshed ${summary.retry.synced} Google event color${summary.retry.synced === 1 ? "" : "s"}`;
+  }
   if (summary.ownedRemoved > 0) {
     return `Calendar synced · ${summary.ownedRemoved} deleted Google event${summary.ownedRemoved === 1 ? "" : "s"} removed`;
   }
