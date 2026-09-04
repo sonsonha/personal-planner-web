@@ -3633,9 +3633,7 @@
 .pos-task-period-nav input[type="date"],
 .pos-task-period-nav input[type="month"],
 .pos-qa-field input[type="date"],
-.pos-qa-field input[type="month"],
-.pos-qa-field .week-range-field,
-.pos-task-period-nav .week-range-field {
+.pos-qa-field input[type="month"] {
   height: 34px;
   padding: 0 10px;
   border: 1px solid var(--pos-border);
@@ -3643,6 +3641,196 @@
   background: var(--pos-card);
   color: var(--pos-ink);
   font-size: 13px;
+}
+
+.pos-qa-field .week-range-field,
+.pos-task-period-nav .week-range-field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.week-range-control {
+  display: inline-flex;
+  align-items: center;
+  min-width: 148px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--pos-border);
+  border-radius: 10px;
+  background: var(--pos-card);
+  color: var(--pos-ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.week-range-control:hover,
+.week-range-control.open {
+  border-color: var(--pos-primary-ring);
+  background: var(--pos-primary-soft);
+}
+
+.week-range-control:focus-visible {
+  outline: 2px solid var(--pos-primary-ring);
+  outline-offset: 1px;
+}
+
+.week-range-display {
+  white-space: nowrap;
+}
+
+/* Floating week picker — must be position:fixed or the grid collapses inline */
+.week-picker {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 252px;
+  padding: 12px;
+  border: 1px solid var(--pos-border);
+  border-radius: 14px;
+  background: var(--pos-card);
+  color: var(--pos-ink);
+  box-shadow: var(--pos-shadow-lg);
+}
+
+.week-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.week-picker-header strong {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.week-picker-header .pager {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--pos-border);
+  border-radius: 8px;
+}
+
+.week-picker-header .pager button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  background: var(--pos-card);
+  color: var(--pos-ink-secondary);
+  cursor: pointer;
+}
+
+.week-picker-header .pager button + button {
+  border-left: 1px solid var(--pos-border);
+}
+
+.week-picker-header .pager button:hover {
+  background: var(--pos-surface-alt);
+  color: var(--pos-ink);
+}
+
+.week-picker-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  padding: 0 2px;
+}
+
+.week-picker-weekdays span {
+  display: grid;
+  place-items: center;
+  color: var(--pos-ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.week-picker-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.week-picker-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  width: 100%;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.week-picker-row:hover {
+  background: var(--pos-surface-alt);
+}
+
+.week-picker-row.selected {
+  border-color: var(--pos-primary-ring);
+  background: var(--pos-primary-soft);
+}
+
+.week-picker-row.current:not(.selected) {
+  border-color: var(--pos-border);
+}
+
+.week-picker-day {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--pos-ink);
+}
+
+.week-picker-day.muted {
+  color: var(--pos-ink-muted);
+  font-weight: 500;
+}
+
+.week-picker-day.today {
+  background: var(--pos-primary);
+  color: #fff;
+  font-weight: 700;
+}
+
+.week-picker-row.selected .week-picker-day.today {
+  box-shadow: 0 0 0 1px var(--pos-card);
+}
+
+.week-picker-this {
+  margin-top: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--pos-border);
+  border-radius: 10px;
+  background: var(--pos-surface-alt);
+  color: var(--pos-ink);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.week-picker-this:hover {
+  border-color: var(--pos-primary-ring);
+  background: var(--pos-primary-soft);
+  color: var(--pos-primary);
 }
 
 .pos-task-pager {

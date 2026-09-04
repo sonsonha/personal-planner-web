@@ -4087,7 +4087,13 @@ function TasksWorkspace({
     <div className="tasks-workspace" data-task-project-filter="task-project-filter">
       <TasksWorkspaceView
         horizon={horizon}
-        periodCaption={horizon === "all" ? "All tasks" : horizonCaption(horizon, anchor)}
+        periodCaption={
+          horizon === "all"
+            ? "All tasks"
+            : horizon === "week"
+              ? anchor.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+              : horizonCaption(horizon, anchor)
+        }
         onHorizonChange={onHorizonChange}
         tasks={visible}
         blocks={blocks}
