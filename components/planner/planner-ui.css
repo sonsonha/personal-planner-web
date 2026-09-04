@@ -969,7 +969,7 @@
 .pos-btn-secondary {
   border: 1px solid var(--pos-border);
   background: var(--pos-card);
-  color: #4b5563;
+  color: var(--pos-ink);
 }
 
 .pos-btn-secondary.indigo {
@@ -980,8 +980,18 @@
 
 .pos-btn-secondary:hover:not(:disabled),
 .pos-btn-secondary:focus-visible {
-  background: #f9fafb;
+  background: color-mix(in srgb, var(--pos-ink) 4%, var(--pos-card));
   outline: none;
+}
+
+.pos-goal-detail-topbar .pos-btn-secondary {
+  font-weight: 600;
+}
+
+[data-theme="dark"] .pos-btn-secondary.indigo {
+  border-color: rgba(99, 102, 241, 0.45);
+  background: rgba(99, 102, 241, 0.18);
+  color: #c7d2fe;
 }
 
 .pos-btn-secondary:disabled {

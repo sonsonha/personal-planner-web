@@ -3612,9 +3612,14 @@ button {
   margin-top: 18px;
 }
 
-.pos-btn-primary,
-.pos-btn-secondary,
-.pos-btn-danger {
+/* Auth/login only — do not override planner `.pos-btn-secondary` (light-on-dark ghosts
+   wash out View Progress / Copy context / Review on Goal Detail topbar). */
+.pos-login-panel .pos-btn-primary,
+.pos-login-panel .pos-btn-secondary,
+.pos-login-panel .pos-btn-danger,
+.pos-login-actions .pos-btn-primary,
+.pos-login-actions .pos-btn-secondary,
+.pos-login-actions .pos-btn-danger {
   border: 0;
   border-radius: 10px;
   padding: 10px 14px;
@@ -3624,32 +3629,52 @@ button {
   cursor: pointer;
 }
 
-.pos-btn-primary {
+.pos-login-panel .pos-btn-primary,
+.pos-login-actions .pos-btn-primary {
   background: #6366f1;
   color: #f8fafc;
 }
 
-.pos-btn-primary:hover:not(:disabled) {
+.pos-login-panel .pos-btn-primary:hover:not(:disabled),
+.pos-login-actions .pos-btn-primary:hover:not(:disabled) {
   background: #4f46e5;
 }
 
-.pos-btn-primary:disabled,
-.pos-btn-secondary:disabled {
+.pos-login-panel .pos-btn-primary:disabled,
+.pos-login-panel .pos-btn-secondary:disabled,
+.pos-login-actions .pos-btn-primary:disabled,
+.pos-login-actions .pos-btn-secondary:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
 
-.pos-btn-secondary {
+.pos-login-panel .pos-btn-secondary,
+.pos-login-actions .pos-btn-secondary {
   background: rgba(248, 250, 252, 0.08);
   color: #e2e8f0;
   border: 1px solid rgba(248, 250, 252, 0.16);
 }
 
-.pos-btn-secondary:hover:not(:disabled) {
+.pos-login-panel .pos-btn-secondary:hover:not(:disabled),
+.pos-login-actions .pos-btn-secondary:hover:not(:disabled) {
   background: rgba(248, 250, 252, 0.14);
 }
 
+.pos-login-panel .pos-btn-danger,
+.pos-login-actions .pos-btn-danger {
+  background: #be123c;
+  color: #fff;
+}
+
+/* Shared destructive action (e.g. GCal disconnect) — not auth-scoped. */
 .pos-btn-danger {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
   background: #be123c;
   color: #fff;
 }
