@@ -214,7 +214,7 @@ const PRIORITY_LEVELS = [
   { id: "p1" as const, label: "Do now", hint: "Urgent · important", color: "#dc2626", api: "HIGH" as const },
   { id: "p2" as const, label: "Important", hint: "Worth protecting time for", color: "#2563eb", api: "NORMAL" as const },
   { id: "p3" as const, label: "Delegate", hint: "Urgent", color: "#16a34a", api: "LOW" as const },
-  { id: "p4" as const, label: "Drop", hint: "Neither", color: "#ca8a04", api: "DROP" as const },
+  { id: "p4" as const, label: "Drop", hint: "Neither", color: "#64748b", api: "DROP" as const },
 ];
 
 function priorityFromApi(value: string): TaskPriority {

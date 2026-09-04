@@ -118,15 +118,15 @@
   --priority-p3-soft: #f0fdf4;
   --priority-p3-strong: #166534;
 
-  /* Priority — Drop (p4) amber / muted */
-  --priority-p4: #ca8a04;
-  --priority-p4-text: #713f12;
-  --priority-p4-on-fill: #1c1917;
-  --priority-p4-bg: #fef9c3;
-  --priority-p4-fill: #eab308;
-  --priority-p4-border: #ca8a04;
-  --priority-p4-soft: #fefce8;
-  --priority-p4-strong: #a16207;
+  /* Priority — Drop (p4) slate / muted gray */
+  --priority-p4: #64748b;
+  --priority-p4-text: #334155;
+  --priority-p4-on-fill: #ffffff;
+  --priority-p4-bg: #f1f5f9;
+  --priority-p4-fill: #64748b;
+  --priority-p4-border: #64748b;
+  --priority-p4-soft: #f8fafc;
+  --priority-p4-strong: #475569;
 
   /* Alias used by event blocks (overridden per data-priority) */
   --priority-fill: var(--priority-p2-fill);
@@ -268,14 +268,14 @@
   --priority-p3-soft: rgba(22, 163, 74, 0.16);
   --priority-p3-strong: #15803d;
 
-  --priority-p4: #fbbf24;
-  --priority-p4-text: #fde68a;
-  --priority-p4-on-fill: #1c1917;
-  --priority-p4-bg: rgba(202, 138, 4, 0.28);
-  --priority-p4-fill: #ca8a04;
-  --priority-p4-border: #fcd34d;
-  --priority-p4-soft: rgba(202, 138, 4, 0.16);
-  --priority-p4-strong: #a16207;
+  --priority-p4: #94a3b8;
+  --priority-p4-text: #cbd5e1;
+  --priority-p4-on-fill: #ffffff;
+  --priority-p4-bg: rgba(100, 116, 139, 0.28);
+  --priority-p4-fill: #64748b;
+  --priority-p4-border: #94a3b8;
+  --priority-p4-soft: rgba(100, 116, 139, 0.16);
+  --priority-p4-strong: #64748b;
 
   --pos-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --pos-shadow-md: 0 10px 28px rgba(0, 0, 0, 0.45);

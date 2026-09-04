@@ -56,7 +56,7 @@ export const PRIORITY_META: Record<
   p1: { id: "p1", label: "Do now", hint: "Urgent · important", color: "#dc2626" },
   p2: { id: "p2", label: "Important", hint: "Worth protecting time for", color: "#2563eb" },
   p3: { id: "p3", label: "Delegate", hint: "Urgent", color: "#16a34a" },
-  p4: { id: "p4", label: "Drop", hint: "Neither", color: "#ca8a04" },
+  p4: { id: "p4", label: "Drop", hint: "Neither", color: "#64748b" },
 };
 
 export function priorityMeta(priority: TaskPriority) {
