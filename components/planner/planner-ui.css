@@ -5053,9 +5053,36 @@
 
 .pos-milestone-edit-list li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px auto;
+  grid-template-columns: 28px minmax(0, 1fr) 110px auto;
   gap: 8px;
   align-items: center;
+}
+
+.pos-milestone-edit-list li.dragging {
+  opacity: 0.55;
+}
+
+.pos-milestone-drag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pos-muted);
+  cursor: grab;
+}
+
+.pos-milestone-drag:active {
+  cursor: grabbing;
+}
+
+.pos-milestone-drag:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .pos-milestone-edit-list input,

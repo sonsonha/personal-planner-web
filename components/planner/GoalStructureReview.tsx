@@ -278,12 +278,13 @@ export function GoalStructureReview({
                         processes[index] = {
                           ...proc,
                           metricType: e.target.value as "COUNT" | "DURATION",
+                          unit: e.target.value === "DURATION" ? "h" : proc.unit,
                         };
                         update({ processes });
                       }}
                     >
                       <option value="COUNT">Count</option>
-                      <option value="DURATION">Duration (min)</option>
+                      <option value="DURATION">Duration (hours)</option>
                     </select>
                   </label>
                 </div>

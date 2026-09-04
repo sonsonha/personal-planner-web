@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { GoalFocusType, GoalMilestone } from "@/lib/planner-api";
-import { formatProcessValue, formatProcessRatio, type ProcessBucketView } from "@/lib/goal-progress-display";
+import { formatProcessValue, formatProcessRatio, coerceProcessBucketForDisplay, type ProcessBucketView } from "@/lib/goal-progress-display";
 import { cn, processAccent } from "./utils";
 
 export function SectionLabel({
@@ -51,19 +51,20 @@ export function ProcessBar({
   periodSuffix?: string;
   onEdit?: () => void;
 }) {
+  const view = coerceProcessBucketForDisplay(bucket, measurementType);
   const accent = processAccent(accentIndex);
-  const denom = Math.max(bucket.target, 0.0001);
-  const completedPct = Math.min((bucket.completed / denom) * 100, 100);
-  const plannedPct = Math.min((bucket.planned / denom) * 100, 100);
-  const atTarget = bucket.target > 0 && bucket.completed >= bucket.target;
-  const statusLabel = atTarget && bucket.completed >= bucket.planned
+  const denom = Math.max(view.target, 0.0001);
+  const completedPct = Math.min((view.completed / denom) * 100, 100);
+  const plannedPct = Math.min((view.planned / denom) * 100, 100);
+  const atTarget = view.target > 0 && view.completed >= view.target;
+  const statusLabel = atTarget && view.completed >= view.planned
     ? "Done"
     : atTarget
       ? "At target"
-      : bucket.completed > 0
+      : view.completed > 0
         ? "In progress"
         : "Not started";
-  const unit = bucket.unit;
+  const unit = view.unit;
 
   return (
     <article className="pos-process-bar">
@@ -85,16 +86,16 @@ export function ProcessBar({
       </div>
       <div className="pos-process-bar-metrics">
         <span className="pos-mono pos-process-completed" style={{ color: accent.color }}>
-          {formatProcessValue(bucket.completed, unit, measurementType)}
+          {formatProcessValue(view.completed, unit, measurementType)}
         </span>
         <span className="pos-process-target">
-          <span className="pos-mono">/ {formatProcessValue(bucket.target, unit, measurementType)}</span>
+          <span className="pos-mono">/ {formatProcessValue(view.target, unit, measurementType)}</span>
           {" "}target
         </span>
       </div>
-      {bucket.planned > 0 && (
+      {view.planned > 0 && (
         <p className="pos-process-planned">
-          <span className="pos-mono">{formatProcessValue(bucket.planned, unit, measurementType)}</span>
+          <span className="pos-mono">{formatProcessValue(view.planned, unit, measurementType)}</span>
           {" "}planned
         </p>
       )}
@@ -111,7 +112,7 @@ export function ProcessBar({
       <div className="pos-process-legend">
         <span>
           <i style={{ backgroundColor: accent.light, borderColor: accent.color }} />
-          target {formatProcessValue(bucket.target, unit, measurementType)}
+          target {formatProcessValue(view.target, unit, measurementType)}
           {periodSuffix}
         </span>
       </div>
@@ -130,11 +131,12 @@ export function ProcessMini({
   accentIndex?: number;
   measurementType?: string | null;
 }) {
+  const view = coerceProcessBucketForDisplay(bucket, measurementType);
   const accent = processAccent(accentIndex);
-  const denom = Math.max(bucket.target, 0.0001);
-  const completedPct = Math.min((bucket.completed / denom) * 100, 100);
-  const plannedPct = Math.min((bucket.planned / denom) * 100, 100);
-  const atTarget = bucket.target > 0 && bucket.completed >= bucket.target;
+  const denom = Math.max(view.target, 0.0001);
+  const completedPct = Math.min((view.completed / denom) * 100, 100);
+  const plannedPct = Math.min((view.planned / denom) * 100, 100);
+  const atTarget = view.target > 0 && view.completed >= view.target;
 
   return (
     <div className="pos-process-mini">
@@ -147,7 +149,7 @@ export function ProcessMini({
         className="pos-process-mini-values pos-mono"
         style={{ color: atTarget ? accent.color : undefined }}
       >
-        {formatProcessRatio(bucket.completed, bucket.target, bucket.unit, measurementType)}
+        {formatProcessRatio(view.completed, view.target, view.unit, measurementType)}
       </span>
     </div>
   );

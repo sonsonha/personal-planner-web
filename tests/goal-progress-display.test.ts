@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  coerceProcessBucketForDisplay,
   formatObservationEntry,
   formatProcessRatio,
   formatProcessValue,
@@ -54,10 +55,23 @@ test("formatProcessValue always shows duration hours and count sessions", () => 
   assert.equal(formatProcessValue(4.8, "h"), "4.8h");
   assert.equal(formatProcessValue(120, "hours"), "120h");
   assert.equal(formatProcessValue(4.8, undefined, "DURATION"), "4.8h");
+  assert.equal(formatProcessValue(4.8, "min", "DURATION"), "4.8h");
   assert.equal(formatProcessValue(2, undefined, "COUNT"), "2 sessions");
   assert.equal(formatProcessValue(3, "sections"), "3 sections");
   assert.equal(formatProcessRatio(4.8, 120, "h"), "4.8h / 120h");
   assert.equal(normalizeProcessUnit("HR"), "h");
+});
+
+test("coerceProcessBucketForDisplay converts legacy minute targets to hours", () => {
+  const coerced = coerceProcessBucketForDisplay(
+    { completed: 4.8, target: 120, planned: 10.2, unit: "min" },
+    "DURATION",
+  );
+  assert.equal(coerced.unit, "h");
+  assert.equal(coerced.target, 2);
+  assert.equal(coerced.completed, 4.8);
+  assert.equal(formatProcessValue(coerced.completed, coerced.unit, "DURATION"), "4.8h");
+  assert.equal(formatProcessValue(coerced.target, coerced.unit, "DURATION"), "2h");
 });
 
 test("formatObservationEntry prefers readable month labels", () => {

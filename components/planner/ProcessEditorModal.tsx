@@ -12,6 +12,29 @@ export type ProcessEditorModalProps = {
   onDelete?: (process: GoalProcess) => void | Promise<void>;
 };
 
+const MINUTE_UNITS = new Set(["min", "mins", "minute", "minutes", "m"]);
+
+function isMinuteUnit(unit?: string | null) {
+  return Boolean(unit && MINUTE_UNITS.has(unit.trim().toLowerCase()));
+}
+
+/** Editor always works in hours for DURATION; convert legacy minute targets. */
+function initialEditorState(process: GoalProcess | null) {
+  const measurementType = process?.measurementType ?? "COUNT";
+  if (measurementType === "DURATION" && process && isMinuteUnit(process.unit)) {
+    return {
+      measurementType,
+      targetValue: String(Math.round((process.targetValue / 60) * 10) / 10),
+      unit: "h",
+    };
+  }
+  return {
+    measurementType,
+    targetValue: String(process?.targetValue ?? 5),
+    unit: measurementType === "DURATION" ? "h" : (process?.unit ?? ""),
+  };
+}
+
 function uid() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -27,12 +50,13 @@ export function ProcessEditorModal({
   onDelete,
 }: ProcessEditorModalProps) {
   const editing = Boolean(process);
+  const initial = initialEditorState(process);
   const [name, setName] = useState(process?.name ?? "");
   const [measurementType, setMeasurementType] = useState<GoalProcess["measurementType"]>(
-    process?.measurementType ?? "COUNT",
+    initial.measurementType,
   );
-  const [targetValue, setTargetValue] = useState(String(process?.targetValue ?? 5));
-  const [unit, setUnit] = useState(process?.unit ?? "");
+  const [targetValue, setTargetValue] = useState(initial.targetValue);
+  const [unit, setUnit] = useState(initial.unit);
   const [period, setPeriod] = useState<GoalProcess["period"]>(process?.period ?? "WEEK");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -61,8 +85,9 @@ export function ProcessEditorModal({
       name: name.trim(),
       measurementType,
       targetValue: target,
-      unit: unit.trim()
-        || (measurementType === "DURATION" ? "h" : undefined),
+      unit: measurementType === "DURATION"
+        ? "h"
+        : (unit.trim() || undefined),
       period,
       active: process?.active ?? true,
     };
@@ -125,6 +150,7 @@ export function ProcessEditorModal({
                 <input
                   type="number"
                   min="0"
+                  step="0.1"
                   value={targetValue}
                   onChange={(e) => setTargetValue(e.target.value)}
                   disabled={saving}
@@ -135,7 +161,7 @@ export function ProcessEditorModal({
                   onChange={(e) => {
                     const next = e.target.value as GoalProcess["measurementType"];
                     setMeasurementType(next);
-                    if (next === "DURATION") setUnit((current) => current || "h");
+                    if (next === "DURATION") setUnit("h");
                     if (next === "COUNT" && unit === "h") setUnit("");
                   }}
                   disabled={saving}
@@ -180,12 +206,13 @@ export function ProcessEditorModal({
           {measurementType === "DURATION" && (
             <p className="pos-qa-for-hint">
               Hours are measured from calendar sessions on linked tasks (not from estimated effort).
+              Target is in hours (e.g. 2 = 2h/week), not minutes.
             </p>
           )}
 
           <p className="pos-qa-for-hint">
             Example: {targetValue || "5"}{" "}
-            {unit || (measurementType === "DURATION" ? "h" : "sessions")} / {periodLabel.toLowerCase()}
+            {measurementType === "DURATION" ? "h" : (unit || "sessions")} / {periodLabel.toLowerCase()}
           </p>
         </div>
 

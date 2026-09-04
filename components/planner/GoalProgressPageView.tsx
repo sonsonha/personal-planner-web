@@ -5,6 +5,7 @@ import type { ApiGoal, ApiGoalProgress } from "@/lib/planner-api";
 import {
   formatObservationEntry,
   formatProcessValue,
+  coerceProcessBucketForDisplay,
   type ProcessBucketView,
 } from "@/lib/goal-progress-display";
 import {
@@ -53,13 +54,14 @@ function ProcessPeriodCard({
   measurementType?: string | null;
   onEdit?: () => void;
 }) {
+  const view = coerceProcessBucketForDisplay(bucket, measurementType);
   const accent = processAccent(accentIndex);
-  const denom = Math.max(bucket.target, bucket.planned, 0.0001);
-  const completedPct = Math.min((bucket.completed / denom) * 100, 100);
-  const plannedPct = Math.min((bucket.planned / denom) * 100, 100);
-  const atTarget = bucket.target > 0 && bucket.completed >= bucket.target;
+  const denom = Math.max(view.target, view.planned, 0.0001);
+  const completedPct = Math.min((view.completed / denom) * 100, 100);
+  const plannedPct = Math.min((view.planned / denom) * 100, 100);
+  const atTarget = view.target > 0 && view.completed >= view.target;
   const periodSuffix = period === "thisWeek" ? "/wk" : period === "thisMonth" ? "/mo" : "";
-  const unit = bucket.unit;
+  const unit = view.unit;
 
   return (
     <article className="pos-gp-period-card">
@@ -76,16 +78,16 @@ function ProcessPeriodCard({
       </div>
       <div className="pos-gp-period-metrics">
         <span className="pos-mono pos-gp-period-completed" style={{ color: accent.color }}>
-          {formatProcessValue(bucket.completed, unit, measurementType)}
+          {formatProcessValue(view.completed, unit, measurementType)}
         </span>
         <span className="pos-gp-period-planned">
-          <span className="pos-mono">/ {formatProcessValue(bucket.target, unit, measurementType)}</span>
+          <span className="pos-mono">/ {formatProcessValue(view.target, unit, measurementType)}</span>
           {" "}target
         </span>
       </div>
-      {bucket.planned > 0 && (
+      {view.planned > 0 && (
         <p className="pos-gp-period-planned-line">
-          <span className="pos-mono">{formatProcessValue(bucket.planned, unit, measurementType)}</span>
+          <span className="pos-mono">{formatProcessValue(view.planned, unit, measurementType)}</span>
           {" "}planned
         </p>
       )}
@@ -101,10 +103,10 @@ function ProcessPeriodCard({
       </div>
       <div className="pos-gp-period-footer">
         <span className="pos-mono">
-          target {formatProcessValue(bucket.target, unit, measurementType)}{periodSuffix}
+          target {formatProcessValue(view.target, unit, measurementType)}{periodSuffix}
         </span>
         <span className="pos-mono">
-          {formatProcessValue(bucket.completed, unit, measurementType)} completed
+          {formatProcessValue(view.completed, unit, measurementType)} completed
         </span>
       </div>
     </article>
@@ -385,7 +387,7 @@ export function GoalProgressPageView({
                   <ul className="pos-gp-protected-list">
                     {processes.map((proc, index) => {
                       const accent = processAccent(index);
-                      const bucket = proc.thisWeek;
+                      const bucket = coerceProcessBucketForDisplay(proc.thisWeek, proc.measurementType);
                       return (
                         <li key={proc.id}>
                           <i style={{ backgroundColor: accent.color }} />

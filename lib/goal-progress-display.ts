@@ -23,20 +23,45 @@ const PERIOD_LABEL: Record<ProgressViewPeriod, string> = {
 };
 
 const HOUR_UNITS = new Set(["h", "hr", "hrs", "hour", "hours"]);
+const MINUTE_UNITS = new Set(["min", "mins", "minute", "minutes", "m"]);
 
-/** Normalize process units for display. DURATION → h; COUNT/BINARY with no unit → sessions. */
+function isMinuteUnitLabel(unit?: string | null) {
+  return Boolean(unit && MINUTE_UNITS.has(unit.trim().toLowerCase()));
+}
+
+/** Normalize process units for display. DURATION (incl. legacy min labels) → h; COUNT/BINARY with no unit → sessions. */
 export function normalizeProcessUnit(
   unit?: string | null,
   measurementType?: string | null,
 ): string | undefined {
+  if (measurementType === "DURATION") return "h";
   const raw = unit?.trim();
   if (raw) {
     if (HOUR_UNITS.has(raw.toLowerCase())) return "h";
     return raw;
   }
-  if (measurementType === "DURATION") return "h";
   if (measurementType === "COUNT" || measurementType === "BINARY") return "sessions";
   return undefined;
+}
+
+/**
+ * Engine stores DURATION evidence in hours. Legacy processes kept target as minutes
+ * with unit "min" — convert target to hours for display so cards match the editor.
+ */
+export function coerceProcessBucketForDisplay(
+  bucket: ProcessBucketView,
+  measurementType?: string | null,
+): ProcessBucketView {
+  const duration = measurementType === "DURATION" || isMinuteUnitLabel(bucket.unit);
+  if (!duration) return bucket;
+  if (isMinuteUnitLabel(bucket.unit)) {
+    return {
+      ...bucket,
+      target: Math.round((bucket.target / 60) * 10) / 10,
+      unit: "h",
+    };
+  }
+  return { ...bucket, unit: "h" };
 }
 
 export function isHoursProcessUnit(unit?: string | null, measurementType?: string | null) {
@@ -99,10 +124,11 @@ export function processBucketCompact(
   bucket: ProcessBucketView,
   measurementType?: string | null,
 ) {
-  const unit = bucket.unit;
-  const targetLine = `${formatProcessRatio(bucket.completed, bucket.target, unit, measurementType)} target`;
-  const plannedLine = bucket.planned > 0
-    ? `${formatProcessValue(bucket.planned, unit, measurementType)} planned`
+  const view = coerceProcessBucketForDisplay(bucket, measurementType);
+  const unit = view.unit;
+  const targetLine = `${formatProcessRatio(view.completed, view.target, unit, measurementType)} target`;
+  const plannedLine = view.planned > 0
+    ? `${formatProcessValue(view.planned, unit, measurementType)} planned`
     : null;
   return { targetLine, plannedLine };
 }

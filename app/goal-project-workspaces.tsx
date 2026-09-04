@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  GripVertical,
   Trash2,
   X,
 } from "lucide-react";
@@ -1521,6 +1522,7 @@ function MilestoneEditorModal({
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -1553,6 +1555,20 @@ function MilestoneEditorModal({
         return item;
       }),
     );
+  };
+
+  const moveItem = (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    setItems((current) => {
+      const fromIndex = current.findIndex((item) => item.id === fromId);
+      const toIndex = current.findIndex((item) => item.id === toId);
+      if (fromIndex < 0 || toIndex < 0) return current;
+      const next = [...current];
+      const [moved] = next.splice(fromIndex, 1);
+      if (!moved) return current;
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
   };
 
   const submit = async (event: FormEvent) => {
@@ -1608,10 +1624,39 @@ function MilestoneEditorModal({
         <div className="pos-qa-fields">
           <div className="pos-qa-field pos-entity-span-2">
             <span className="pos-qa-field-label">Goal journey</span>
-            <p className="pos-qa-for-hint">Add, rename, mark done, or remove checkpoints. One milestone is current.</p>
+            <p className="pos-qa-for-hint">
+              Drag to reorder. Add, rename, mark done, or remove checkpoints. One milestone is current.
+            </p>
             <ul className="pos-milestone-edit-list">
               {items.map((item) => (
-                <li key={item.id}>
+                <li
+                  key={item.id}
+                  className={dragId === item.id ? "dragging" : undefined}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    if (dragId) moveItem(dragId, item.id);
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setDragId(null);
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="pos-milestone-drag"
+                    draggable={!saving}
+                    aria-label={`Reorder ${item.title || "milestone"}`}
+                    title="Drag to reorder"
+                    onDragStart={(event) => {
+                      setDragId(item.id);
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", item.id);
+                    }}
+                    onDragEnd={() => setDragId(null)}
+                    disabled={saving}
+                  >
+                    <GripVertical size={16} aria-hidden="true" />
+                  </button>
                   <input
                     value={item.title}
                     onChange={(e) => {
