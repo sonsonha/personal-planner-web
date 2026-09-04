@@ -24,7 +24,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { PlannerSidebar, type SidebarGoogleState } from "@/components/planner/PlannerSidebar";
 import {
@@ -890,11 +890,24 @@ export function PlannerApp({
 }) {
   const pathname = usePathname() ?? "/";
   const router = useRouter();
-  const { section: activeSection, entityId } = parsePlannerPath(pathname);
+  const { section: pathSection, entityId } = parsePlannerPath(pathname);
+  const [, startNavTransition] = useTransition();
+  /** Instant sidebar highlight before the App Router finishes the soft nav. */
+  const [navSection, setNavSection] = useState(pathSection);
+  useEffect(() => {
+    setNavSection(pathSection);
+  }, [pathSection]);
+  const activeSection = navSection;
   const goTo = useCallback((section: ActiveSection, id?: string | null) => {
     const href = plannerPath(section, id);
-    if (pathname === href) return;
-    router.push(href);
+    if (pathname === href) {
+      setNavSection(section);
+      return;
+    }
+    setNavSection(section);
+    startNavTransition(() => {
+      router.push(href);
+    });
   }, [pathname, router]);
   const [now] = useState(() => new Date());
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
@@ -1096,9 +1109,8 @@ export function PlannerApp({
 
   useEffect(() => {
     const controller = new AbortController();
-    const needsWideRange = activeSection === "tasks"
-      || activeSection === "goals"
-      || activeSection === "progress";
+    // Union range covers calendar + tasks + goals/progress so switching
+    // sections does not wait on another planner fetch.
     const taskRangeStart = taskHorizon === "month"
       ? startOfMonth(taskAnchor)
       : taskHorizon === "day"
@@ -1109,22 +1121,29 @@ export function PlannerApp({
       : taskHorizon === "day"
         ? addDays(taskRangeStart, 1)
         : addDays(taskRangeStart, 7);
-    const rangeStart = activeSection === "tasks"
-      ? taskRangeStart
-      : needsWideRange
-        ? startOfWeek(addDays(now, -7))
-      : view === "month" ? startOfMonth(monthAnchor) : weekStart;
-    const rangeEnd = activeSection === "tasks"
-      ? taskRangeEnd
-      : needsWideRange
-        ? addDays(startOfMonth(now), daysInMonth(now))
-      : view === "month"
-        ? addDays(startOfMonth(monthAnchor), daysInMonth(monthAnchor))
-        : addDays(weekStart, 7);
+    const calendarStart = view === "month" ? startOfMonth(monthAnchor) : weekStart;
+    const calendarEnd = view === "month"
+      ? addDays(startOfMonth(monthAnchor), daysInMonth(monthAnchor))
+      : addDays(weekStart, 7);
+    const goalsStart = startOfWeek(addDays(now, -7));
+    const goalsEnd = addDays(startOfMonth(now), daysInMonth(now));
+    const rangeStart = new Date(Math.min(
+      taskRangeStart.getTime(),
+      calendarStart.getTime(),
+      goalsStart.getTime(),
+    ));
+    const rangeEnd = new Date(Math.max(
+      taskRangeEnd.getTime(),
+      calendarEnd.getTime(),
+      goalsEnd.getTime(),
+    ));
+    // Keep the current screen painted while refreshing — only show loading on first load.
     queueMicrotask(() => {
-      if (!controller.signal.aborted) {
-        setConnection((current) => current === "live" ? "syncing" : "loading");
-      }
+      if (controller.signal.aborted) return;
+      setConnection((current) => {
+        if (current === "live" || current === "syncing" || current === "demo") return current;
+        return "loading";
+      });
     });
 
     fetchPlanner(rangeStart.toISOString(), rangeEnd.toISOString(), controller.signal)
@@ -1135,12 +1154,10 @@ export function PlannerApp({
         setProjects(nextProjects);
         setTasks(data.tasks.map((task) => taskFromApi(task, nextProjects)));
         const referenceStart = view === "month" ? monthGridDays(monthAnchor)[0]! : weekStart;
-        const maxDay = view === "month" ? 42 : 7;
-        const keepAllBlocks = needsWideRange;
         setBlocks([
           ...data.timeBlocks.map((block) => timeBlockFromApi(block, referenceStart, nextProjects)),
           ...data.externalEvents.map((event) => externalBlockFromApi(event, referenceStart)),
-        ].filter((block) => keepAllBlocks || (block.day >= 0 && block.day < maxDay)));
+        ]);
         liveDataRef.current = true;
         setConnection("live");
       })
@@ -1151,12 +1168,12 @@ export function PlannerApp({
           setConnection("demo");
           return;
         }
-        setConnection("error");
+        setConnection((current) => (current === "live" ? "live" : "error"));
         setToast("Could not refresh planner · keeping the current view");
       });
 
     return () => controller.abort();
-  }, [reloadKey, weekStart, view, monthAnchor, activeSection, now, taskAnchor, taskHorizon]);
+  }, [reloadKey, weekStart, view, monthAnchor, now, taskAnchor, taskHorizon]);
 
   const showToast = useCallback((message: string, kind: ToastKind = "info") => {
     setToastKind(kind);
@@ -2300,6 +2317,9 @@ export function PlannerApp({
             }
             return next;
           });
+        }}
+        onNavigate={(section) => {
+          setNavSection(section);
         }}
         onGoToday={() => {
           goTo("calendar");

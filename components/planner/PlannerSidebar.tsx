@@ -31,6 +31,8 @@ type PlannerSidebarProps = {
   onToggleExternalEvents: () => void;
   onGoToday: () => void;
   onGoogleClick: () => void;
+  /** Optimistic highlight before the route soft-nav completes. */
+  onNavigate?: (section: PlannerSection) => void;
 };
 
 const NAV: Array<{ id: PlannerSection; label: string; icon: typeof CalendarDays }> = [
@@ -54,6 +56,7 @@ export function PlannerSidebar({
   onToggleExternalEvents,
   onGoToday,
   onGoogleClick,
+  onNavigate,
 }: PlannerSidebarProps) {
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -119,9 +122,16 @@ export function PlannerSidebar({
               <Link
                 href={plannerPath(item.id)}
                 scroll={false}
+                prefetch
                 className={cn("pos-sidebar-link", active && "active", collapsed && "icon-only")}
                 title={collapsed ? item.label : undefined}
-                onClick={item.id === "calendar" ? onGoToday : undefined}
+                onClick={(event) => {
+                  onNavigate?.(item.id);
+                  if (item.id === "calendar") {
+                    event.preventDefault();
+                    onGoToday();
+                  }
+                }}
               >
                 <Icon size={16} aria-hidden="true" />
                 {!collapsed && (
