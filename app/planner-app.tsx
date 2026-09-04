@@ -195,8 +195,8 @@ function calendarSyncMessage(summary: CalendarSyncSummary): string {
   return "Google Calendar is up to date";
 }
 
-const START_HOUR = 7;
-const END_HOUR = 22;
+const START_HOUR = 0;
+const END_HOUR = 24;
 const MINUTES_VISIBLE = (END_HOUR - START_HOUR) * 60;
 /** Fine snap for Google Calendar–like precision (visual drag is continuous; time snaps). */
 const SNAP_MINUTES = 5;
