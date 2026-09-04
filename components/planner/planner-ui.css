@@ -3643,9 +3643,7 @@
 }
 
 .pos-task-period-nav input[type="date"],
-.pos-task-period-nav input[type="month"],
-.pos-qa-field input[type="date"],
-.pos-qa-field input[type="month"] {
+.pos-task-period-nav input[type="month"] {
   height: 34px;
   padding: 0 10px;
   border: 1px solid var(--pos-border);
@@ -3655,15 +3653,43 @@
   font-size: 13px;
 }
 
+.pos-qa-field input[type="date"],
+.pos-qa-field input[type="month"] {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--pos-border);
+  border-radius: 10px;
+  background: var(--pos-card);
+  color: var(--pos-ink);
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
 .pos-qa-field .week-range-field,
 .pos-task-period-nav .week-range-field {
   position: relative;
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  width: 100%;
   height: auto;
   padding: 0;
   border: 0;
   background: transparent;
+}
+
+.pos-qa-field .week-range-control {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  justify-content: space-between;
+}
+
+.pos-qa-field > label {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 0;
 }
 
 .week-range-control {
@@ -4358,8 +4384,9 @@
 
 .pos-qa-for-tabs,
 .pos-te-for-tabs {
-  display: inline-flex;
-  flex-wrap: wrap;
+  display: flex;
+  flex-wrap: nowrap;
+  width: 100%;
   gap: 4px;
   padding: 3px;
   border: 1px solid var(--pos-border);
@@ -4369,6 +4396,7 @@
 
 .pos-qa-for-tabs button,
 .pos-te-for-tabs button {
+  flex: 1;
   padding: 5px 10px;
   border: 0;
   border-radius: 7px;

@@ -139,13 +139,6 @@ export function QuickAddView({
                 ))}
               </div>
               {periodControl}
-              {(forHorizon === "week" || forHorizon === "month") && (
-                <p className="pos-qa-for-hint">
-                  {forHorizon === "week"
-                    ? "Somewhere in this week — not a Monday deadline."
-                    : "Somewhere in this month — not a day-1 deadline."}
-                </p>
-              )}
               {forHorizon === "week" && onRepeatWeeklyChange && (
                 <div className="pos-qa-repeat">
                   <label className="pos-qa-repeat-toggle">

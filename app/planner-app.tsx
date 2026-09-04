@@ -4693,7 +4693,7 @@ function QuickAdd({
       onDurationChange={setDuration}
       priority={priority}
       onPriorityChange={setPriority}
-      periodControl={<PeriodFields horizon={horizon} value={when} onChange={setWhen} />}
+      periodControl={<PeriodFields horizon={horizon} value={when} onChange={setWhen} compact />}
       contextHint={captureHint(horizon, when)}
       repeatWeekly={repeatWeekly}
       onRepeatWeeklyChange={setRepeatWeekly}
