@@ -24,7 +24,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { PlannerSidebar, type SidebarGoogleState } from "@/components/planner/PlannerSidebar";
 import {
@@ -1304,15 +1304,28 @@ export function PlannerApp({
     };
   }, [connection, hasGoogleIntegration, googleConnection, runCalendarSync]);
 
-  useEffect(() => {
-    if (!scrollRef.current) return;
-    scrollRef.current.scrollTop = savedScrollRef.current;
-  }, [view, activeDay]);
+  useLayoutEffect(() => {
+    if (activeSection !== "calendar" || view === "month") return;
+    const frame = window.requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const current = new Date();
+      const minuteY = current.getHours() * 60 + current.getMinutes() - START_HOUR * 60;
+      const viewport = el.clientHeight;
+      const maxScroll = Math.max(0, el.scrollHeight - viewport);
+      // Prefer current time near the middle; clamp when near day edges.
+      const target = Math.max(0, Math.min(maxScroll, minuteY - viewport / 2));
+      el.scrollTop = target;
+      savedScrollRef.current = target;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeSection, view, weekStart]);
 
   useEffect(() => {
+    if (activeSection !== "calendar" || view === "month") return;
     if (!scrollRef.current) return;
-    scrollRef.current.scrollTop = Math.max(0, (now.getHours() - START_HOUR - 1) * 60);
-  }, [now]);
+    scrollRef.current.scrollTop = savedScrollRef.current;
+  }, [activeDay]);
 
   useEffect(() => {
     if (!toast) return;
@@ -2574,7 +2587,14 @@ export function PlannerApp({
               })}
             </div>
 
-            <div className="all-day-row" style={{ "--day-count": visibleDays.length } as React.CSSProperties}>
+            <div
+              className={`all-day-row${visibleIndexes.every((dayIndex) =>
+                !calendarBlocks.some(
+                  (block) => block.day === dayIndex && block.allDay && (block.type !== "external" || showExternalEvents),
+                )
+              ) ? " is-empty" : ""}`}
+              style={{ "--day-count": visibleDays.length } as React.CSSProperties}
+            >
               <div className="all-day-label">All day</div>
               {visibleIndexes.map((dayIndex) => {
                 const dayAllDay = calendarBlocks.filter(
@@ -2586,7 +2606,7 @@ export function PlannerApp({
                       <button
                         type="button"
                         key={block.id}
-                        className="all-day-chip"
+                        className={`all-day-chip${block.type === "external" ? " external" : " os"}`}
                         title={block.title}
                         disabled={block.type === "external"}
                       >
