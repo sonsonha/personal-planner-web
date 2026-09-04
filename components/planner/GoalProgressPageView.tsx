@@ -44,12 +44,14 @@ function ProcessPeriodCard({
   period,
   accentIndex,
   measurementType,
+  onEdit,
 }: {
   name: string;
   bucket: ProcessBucketView;
   period: PeriodKey;
   accentIndex: number;
   measurementType?: string | null;
+  onEdit?: () => void;
 }) {
   const accent = processAccent(accentIndex);
   const denom = Math.max(bucket.target, bucket.planned, 0.0001);
@@ -63,7 +65,14 @@ function ProcessPeriodCard({
     <article className="pos-gp-period-card">
       <div className="pos-gp-period-card-top">
         <span className="pos-gp-period-name">{name}</span>
-        {atTarget && <span className="pos-gp-on-track">On track</span>}
+        <div className="pos-gp-period-card-actions">
+          {onEdit && (
+            <button type="button" className="pos-btn-ghost pos-system-edit" onClick={onEdit}>
+              Edit
+            </button>
+          )}
+          {atTarget && <span className="pos-gp-on-track">On track</span>}
+        </div>
       </div>
       <div className="pos-gp-period-metrics">
         <span className="pos-mono pos-gp-period-completed" style={{ color: accent.color }}>
@@ -110,6 +119,8 @@ export type GoalProgressPageViewProps = {
   onBack?: () => void;
   onOpenTask?: (taskId: string) => void;
   onReview?: () => void;
+  onAddProcess?: () => void;
+  onEditProcess?: (processId: string) => void;
 };
 
 export function GoalProgressPageView({
@@ -120,6 +131,8 @@ export function GoalProgressPageView({
   onBack,
   onOpenTask,
   onReview,
+  onAddProcess,
+  onEditProcess,
 }: GoalProgressPageViewProps) {
   const [period, setPeriod] = useState<PeriodKey>("thisWeek");
   const [showAllEvidence, setShowAllEvidence] = useState(false);
@@ -254,21 +267,41 @@ export function GoalProgressPageView({
             <section>
               <div className="pos-gp-section-head">
                 <span className="pos-gp-card-label">Process evidence</span>
-                <div className="pos-gp-period-tabs" role="group" aria-label="Progress period">
-                  {PERIOD_TABS.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      className={cn(period === tab.id && "active")}
-                      onClick={() => setPeriod(tab.id)}
-                    >
-                      {tab.label}
+                <div className="pos-gp-section-head-actions">
+                  {onAddProcess && (
+                    <button type="button" className="pos-btn-ghost" onClick={onAddProcess}>
+                      + Add process
                     </button>
-                  ))}
+                  )}
+                  <div className="pos-gp-period-tabs" role="group" aria-label="Progress period">
+                    {PERIOD_TABS.map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        className={cn(period === tab.id && "active")}
+                        onClick={() => setPeriod(tab.id)}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
+              <p className="pos-gp-process-hint pos-muted">
+                Edit name, target, or count/hours here. Completed and planned update automatically when linked tasks are scheduled or marked done.
+              </p>
               {processes.length === 0 ? (
-                <p className="pos-muted">No recurring process defined.</p>
+                <p className="pos-muted">
+                  No recurring process defined.
+                  {onAddProcess && (
+                    <>
+                      {" "}
+                      <button type="button" className="pos-text-link" onClick={onAddProcess}>
+                        Add a process
+                      </button>
+                    </>
+                  )}
+                </p>
               ) : period === "thisWeek" ? (
                 <div className="pos-process-grid">
                   {processes.map((proc, index) => (
@@ -279,6 +312,7 @@ export function GoalProgressPageView({
                       accentIndex={index}
                       measurementType={proc.measurementType}
                       periodSuffix="/wk"
+                      onEdit={onEditProcess ? () => onEditProcess(proc.id) : undefined}
                     />
                   ))}
                 </div>
@@ -292,6 +326,7 @@ export function GoalProgressPageView({
                       period={period}
                       accentIndex={index}
                       measurementType={proc.measurementType}
+                      onEdit={onEditProcess ? () => onEditProcess(proc.id) : undefined}
                     />
                   ))}
                 </div>

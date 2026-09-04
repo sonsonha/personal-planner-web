@@ -102,7 +102,8 @@ export function ProcessEditorModal({
         </div>
 
         <p className="pos-entity-form-lede">
-          Processes measure repeated Goal progress — a weekly or monthly quota.
+          Change the quota definition (name, count or hours, target). Evidence numbers update
+          automatically from linked tasks that are scheduled or completed — they are not edited here.
         </p>
 
         <div className="pos-qa-fields">
@@ -134,15 +135,18 @@ export function ProcessEditorModal({
                   onChange={(e) => {
                     const next = e.target.value as GoalProcess["measurementType"];
                     setMeasurementType(next);
-                    if (next === "DURATION" && !unit) setUnit("h");
+                    if (next === "DURATION") setUnit((current) => current || "h");
+                    if (next === "COUNT" && unit === "h") setUnit("");
                   }}
                   disabled={saving}
                   aria-label="Measurement type"
                 >
-                  <option value="COUNT">count</option>
-                  <option value="DURATION">hours</option>
-                  <option value="BINARY">binary</option>
-                  <option value="CUSTOM_METRIC">custom</option>
+                  <option value="COUNT">Count</option>
+                  <option value="DURATION">Hours</option>
+                  <optgroup label="Advanced">
+                    <option value="BINARY">Binary</option>
+                    <option value="CUSTOM_METRIC">Custom</option>
+                  </optgroup>
                 </select>
               </div>
             </label>
@@ -161,20 +165,27 @@ export function ProcessEditorModal({
             </label>
           </div>
 
-          {(measurementType === "DURATION" || measurementType === "CUSTOM_METRIC" || unit) && (
+          {(measurementType === "COUNT" || measurementType === "CUSTOM_METRIC" || measurementType === "BINARY") && (
             <label className="pos-qa-field">
               <span className="pos-qa-field-label">Unit label (optional)</span>
               <input
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
-                placeholder={measurementType === "DURATION" ? "h" : "apps"}
+                placeholder="sessions"
                 disabled={saving}
               />
             </label>
           )}
 
+          {measurementType === "DURATION" && (
+            <p className="pos-qa-for-hint">
+              Hours are measured from calendar sessions on linked tasks (not from estimated effort).
+            </p>
+          )}
+
           <p className="pos-qa-for-hint">
-            Example: {targetValue || "5"} {unit || (measurementType === "DURATION" ? "h" : "sessions")} / {periodLabel.toLowerCase()}
+            Example: {targetValue || "5"}{" "}
+            {unit || (measurementType === "DURATION" ? "h" : "sessions")} / {periodLabel.toLowerCase()}
           </p>
         </div>
 

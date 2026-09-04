@@ -41,6 +41,7 @@ export function ProcessBar({
   accentIndex = 0,
   measurementType,
   periodSuffix = "/wk",
+  onEdit,
 }: {
   name: string;
   bucket: ProcessBucketView;
@@ -48,6 +49,7 @@ export function ProcessBar({
   measurementType?: string | null;
   /** Shown after target in the legend, e.g. /wk or /mo. */
   periodSuffix?: string;
+  onEdit?: () => void;
 }) {
   const accent = processAccent(accentIndex);
   const denom = Math.max(bucket.target, 0.0001);
@@ -67,12 +69,19 @@ export function ProcessBar({
     <article className="pos-process-bar">
       <div className="pos-process-bar-top">
         <span className="pos-process-bar-name">{name}</span>
-        <span
-          className={cn("pos-process-bar-status", atTarget && "at-target")}
-          style={atTarget ? { backgroundColor: accent.light, color: accent.color } : undefined}
-        >
-          {statusLabel}
-        </span>
+        <div className="pos-process-bar-top-right">
+          {onEdit && (
+            <button type="button" className="pos-btn-ghost pos-system-edit" onClick={onEdit}>
+              Edit
+            </button>
+          )}
+          <span
+            className={cn("pos-process-bar-status", atTarget && "at-target")}
+            style={atTarget ? { backgroundColor: accent.light, color: accent.color } : undefined}
+          >
+            {statusLabel}
+          </span>
+        </div>
       </div>
       <div className="pos-process-bar-metrics">
         <span className="pos-mono pos-process-completed" style={{ color: accent.color }}>

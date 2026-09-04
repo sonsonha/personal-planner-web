@@ -449,6 +449,17 @@
   gap: 8px;
 }
 
+.pos-process-bar-top-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pos-process-bar-top-right .pos-system-edit {
+  margin-top: 0;
+}
+
 .pos-process-bar-name {
   color: var(--pos-ink);
   font-size: 13px;
@@ -2108,6 +2119,20 @@
   margin-bottom: 14px;
 }
 
+.pos-gp-section-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.pos-gp-process-hint {
+  margin: -6px 0 12px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .pos-gp-period-tabs {
   display: inline-flex;
   gap: 2px;
@@ -2153,6 +2178,17 @@
   display: flex;
   justify-content: space-between;
   gap: 8px;
+}
+
+.pos-gp-period-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pos-gp-period-card-actions .pos-system-edit {
+  margin-top: 0;
 }
 
 .pos-gp-period-name {

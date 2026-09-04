@@ -201,9 +201,13 @@ export function ProgressWorkspace({
             data={focusProgress}
             layout="page"
             protectedMinutes={timeByGoal.get(focusGoal.id) ?? 0}
+            projects={projects}
+            tasks={tasks}
+            live={live}
             onClose={onClearGoal}
             onOpenTask={onOpenTask}
             onReview={() => setReviewing(true)}
+            onChanged={onChanged}
           />
         ) : (
           <p className="gp-muted">{live ? "Loading evidence…" : "Progress is unavailable in demo mode."}</p>

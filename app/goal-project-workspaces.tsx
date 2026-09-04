@@ -13,6 +13,7 @@ import {
   fetchGoalProgress,
   updateGoal,
   updateProject,
+  updateTask,
   PlannerApiError,
   type ApiGoal,
   type ApiGoalProgress,
@@ -112,6 +113,38 @@ export type WorkspaceBlock = {
   duration: number;
   type: "task" | "external";
 };
+
+/** Persist process list; clear project/task links for removed process ids. */
+export async function persistGoalProcesses(opts: {
+  goalId: string;
+  processes: GoalProcess[];
+  previousProcesses: GoalProcess[];
+  projects: ApiProject[];
+  tasks: WorkspaceTask[];
+  live: boolean;
+}) {
+  const { goalId, processes, previousProcesses, projects, tasks, live } = opts;
+  if (!live) return;
+  await updateGoal(goalId, { processes });
+  const nextIds = new Set(processes.map((item) => item.id));
+  const removedIds = previousProcesses
+    .map((item) => item.id)
+    .filter((id) => !nextIds.has(id));
+  if (removedIds.length === 0) return;
+
+  await Promise.all([
+    ...projects
+      .filter((project) =>
+        project.goalId === goalId
+        && project.defaultGoalProcessId
+        && removedIds.includes(project.defaultGoalProcessId),
+      )
+      .map((project) => updateProject(project.id, { defaultGoalProcessId: null })),
+    ...tasks
+      .filter((task) => task.goalProcessId && removedIds.includes(task.goalProcessId))
+      .map((task) => updateTask(task.id, { goalProcessId: null })),
+  ]);
+}
 
 const FOCUS_ORDER: GoalFocusType[] = ["FOCUS", "MAINTAIN", "EXPLORE"];
 export const FOCUS_LABEL: Record<GoalFocusType, string> = {
@@ -788,7 +821,14 @@ function GoalDetailPage({
         setProcessModal(null);
         return;
       }
-      await updateGoal(goal.id, { processes });
+      await persistGoalProcesses({
+        goalId: goal.id,
+        processes,
+        previousProcesses: goal.processes ?? [],
+        projects,
+        tasks,
+        live,
+      });
       onChanged(message);
       setProcessModal(null);
     } catch {
@@ -903,7 +943,16 @@ function GoalDetailPage({
       )}
 
       {showProgress && progress && (
-        <GoalProgressPanel goal={goal} data={progress} onClose={() => setShowProgress(false)} />
+        <GoalProgressPanel
+          goal={goal}
+          data={progress}
+          projects={projects}
+          tasks={tasks}
+          live={live}
+          onClose={() => setShowProgress(false)}
+          onOpenTask={onOpenTask}
+          onChanged={onChanged}
+        />
       )}
 
       {showReview && (
@@ -928,41 +977,146 @@ export function GoalProgressView({
   data,
   layout = "page",
   protectedMinutes = 0,
+  projects = [],
+  tasks = [],
+  live = false,
   onClose,
   onOpenTask,
   onReview,
+  onChanged,
+  onAddProcess,
+  onEditProcess,
 }: {
   goal: ApiGoal;
   data: ApiGoalProgress;
   layout?: "page" | "panel";
   protectedMinutes?: number;
+  projects?: ApiProject[];
+  tasks?: WorkspaceTask[];
+  live?: boolean;
   onClose?: () => void;
   onOpenTask?: (taskId: string) => void;
   onReview?: () => void;
+  onChanged?: (message: string) => void;
+  onAddProcess?: () => void;
+  onEditProcess?: (processId: string) => void;
 }) {
+  const [processModal, setProcessModal] = useState<"create" | GoalProcess | null>(null);
+  const [entitySaving, setEntitySaving] = useState(false);
+  const [entityError, setEntityError] = useState<string | null>(null);
+
+  const openCreate = onAddProcess ?? (() => {
+    setEntityError(null);
+    setProcessModal("create");
+  });
+  const openEdit = onEditProcess ?? ((processId: string) => {
+    const process = (goal.processes ?? []).find((item) => item.id === processId);
+    if (process) {
+      setEntityError(null);
+      setProcessModal(process);
+    }
+  });
+
+  const saveProcesses = async (processes: GoalProcess[], message: string) => {
+    setEntitySaving(true);
+    setEntityError(null);
+    try {
+      if (!live) {
+        onChanged?.(`${message} · demo mode`);
+        setProcessModal(null);
+        return;
+      }
+      await persistGoalProcesses({
+        goalId: goal.id,
+        processes,
+        previousProcesses: goal.processes ?? [],
+        projects,
+        tasks,
+        live,
+      });
+      onChanged?.(message);
+      setProcessModal(null);
+    } catch {
+      setEntityError("Could not save this process.");
+    } finally {
+      setEntitySaving(false);
+    }
+  };
+
   return (
-    <GoalProgressPageView
-      goal={goal}
-      data={data}
-      protectedMinutes={protectedMinutes}
-      layout={layout}
-      onBack={onClose}
-      onOpenTask={onOpenTask}
-      onReview={onReview}
-    />
+    <>
+      <GoalProgressPageView
+        goal={goal}
+        data={data}
+        protectedMinutes={protectedMinutes}
+        layout={layout}
+        onBack={onClose}
+        onOpenTask={onOpenTask}
+        onReview={onReview}
+        onAddProcess={openCreate}
+        onEditProcess={openEdit}
+      />
+      {processModal && (
+        <ProcessEditorModal
+          process={processModal === "create" ? null : processModal}
+          saving={entitySaving}
+          error={entityError}
+          onClose={() => { if (!entitySaving) setProcessModal(null); }}
+          onSave={async (next) => {
+            const existing = goal.processes ?? [];
+            const processes = processModal === "create"
+              ? [...existing, next]
+              : existing.map((item) => (item.id === next.id ? next : item));
+            await saveProcesses(processes, processModal === "create" ? "Process added" : "Process updated");
+          }}
+          onDelete={processModal === "create" ? undefined : async (process) => {
+            const processes = (goal.processes ?? []).filter((item) => item.id !== process.id);
+            await saveProcesses(processes, "Process removed");
+          }}
+        />
+      )}
+    </>
   );
 }
 
 function GoalProgressPanel({
   goal,
   data,
+  projects,
+  tasks,
+  live,
   onClose,
+  onOpenTask,
+  onChanged,
+  onAddProcess,
+  onEditProcess,
 }: {
   goal: ApiGoal;
   data: ApiGoalProgress;
+  projects: ApiProject[];
+  tasks: WorkspaceTask[];
+  live: boolean;
   onClose: () => void;
+  onOpenTask?: (taskId: string) => void;
+  onChanged?: (message: string) => void;
+  onAddProcess?: () => void;
+  onEditProcess?: (processId: string) => void;
 }) {
-  return <GoalProgressView goal={goal} data={data} layout="panel" onClose={onClose} />;
+  return (
+    <GoalProgressView
+      goal={goal}
+      data={data}
+      layout="panel"
+      projects={projects}
+      tasks={tasks}
+      live={live}
+      onClose={onClose}
+      onOpenTask={onOpenTask}
+      onChanged={onChanged}
+      onAddProcess={onAddProcess}
+      onEditProcess={onEditProcess}
+    />
+  );
 }
 
 export function GoalReviewModal({
