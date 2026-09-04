@@ -23,10 +23,19 @@ export function SectionLabel({
 export function GoalBadge({
   focus,
   size = "sm",
+  achieved = false,
 }: {
   focus: GoalFocusType;
   size?: "sm" | "xs";
+  achieved?: boolean;
 }) {
+  if (achieved) {
+    return (
+      <span className={cn("pos-goal-badge", "status-achieved", size === "xs" && "xs")}>
+        Achieved
+      </span>
+    );
+  }
   const label = focus === "FOCUS" ? "Focus" : focus === "MAINTAIN" ? "Maintain" : "Explore";
   return (
     <span className={cn("pos-goal-badge", `focus-${focus.toLowerCase()}`, size === "xs" && "xs")}>

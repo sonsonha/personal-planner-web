@@ -12,7 +12,7 @@ import { cn, formatHoursFromMinutes, processAccent } from "./utils";
 import {
   currentMilestone,
   formatShortDate,
-  outcomeLine,
+  getOutcomeSnapshot,
 } from "@/app/goal-project-workspaces";
 
 export type GlobalProgressGoalCard = {
@@ -98,14 +98,17 @@ function FocusGoalCard({
   const milestone = currentMilestone(goal);
   const processes = (progress?.progress.processes ?? []).slice(0, 4);
   const consistency = progress?.progress.consistency;
-  const outcome = outcomeLine(goal, progress);
+  const outcomeSnapshot = getOutcomeSnapshot(goal, progress);
+  const outcome = outcomeSnapshot.line;
+  const achieved = outcomeSnapshot.achieved;
 
   return (
-    <button type="button" className="pos-pw-focus-card" onClick={onOpen}>
+    <button type="button" className={cn("pos-pw-focus-card", achieved && "is-achieved")} onClick={onOpen}>
       <div className="pos-pw-focus-head">
         <div>
           <div className="pos-pw-card-meta">
             <GoalBadge focus={goal.focusType ?? "FOCUS"} />
+            {achieved && <span className="pos-goal-badge status-achieved">Achieved</span>}
             {goal.targetDate && (
               <span className="pos-mono pos-muted">Target {formatShortDate(goal.targetDate)}</span>
             )}
@@ -115,7 +118,7 @@ function FocusGoalCard({
         <div className="pos-pw-focus-metrics">
           <div>
             <span className="pos-pw-metric-label">Outcome</span>
-            <strong className="pos-mono">{outcome ?? "—"}</strong>
+            <strong className={cn("pos-mono", achieved && "achieved")}>{outcome ?? "—"}</strong>
           </div>
           <div>
             <span className="pos-pw-metric-label">Protected</span>
@@ -166,16 +169,21 @@ function MaintainGoalCard({
   const { goal, progress } = card;
   const milestone = currentMilestone(goal);
   const processes = (progress?.progress.processes ?? []).slice(0, 2);
-  const outcome = outcomeLine(goal, progress);
+  const outcomeSnapshot = getOutcomeSnapshot(goal, progress);
+  const outcome = outcomeSnapshot.line;
+  const achieved = outcomeSnapshot.achieved;
 
   return (
-    <button type="button" className="pos-pw-maintain-card" onClick={onOpen}>
+    <button type="button" className={cn("pos-pw-maintain-card", achieved && "is-achieved")} onClick={onOpen}>
       <div className="pos-pw-maintain-head">
         <div>
-          <GoalBadge focus={(goal.focusType ?? "MAINTAIN") as GoalFocusType} />
+          <div className="pos-pw-card-meta">
+            <GoalBadge focus={(goal.focusType ?? "MAINTAIN") as GoalFocusType} />
+            {achieved && <span className="pos-goal-badge status-achieved xs">Achieved</span>}
+          </div>
           <h3 className="pos-pw-goal-title">{goal.title}</h3>
         </div>
-        <span className="pos-mono pos-muted">{outcome ?? "—"}</span>
+        <span className={cn("pos-mono", achieved ? "achieved" : "pos-muted")}>{outcome ?? "—"}</span>
       </div>
       {milestone && (
         <div className="pos-pw-stage-row maintain">

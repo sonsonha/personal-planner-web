@@ -21,8 +21,7 @@ import { cn, formatHoursFromMinutes, processAccent } from "./utils";
 import {
   currentMilestone,
   formatShortDate,
-  outcomeLine,
-  OUTCOME_STATUS_LABEL,
+  getOutcomeSnapshot,
 } from "@/app/goal-project-workspaces";
 
 type PeriodKey = "thisWeek" | "thisMonth" | "allTime";
@@ -150,8 +149,10 @@ export function GoalProgressPageView({
   const observations = [...(goal.metricObservations ?? [])].sort((a, b) =>
     a.observedAt.localeCompare(b.observedAt),
   );
-  const outcome = outcomeLine(goal, data);
-  const closed = Boolean(goal.outcomeStatus && goal.outcomeStatus !== "ACTIVE");
+  const outcomeSnapshot = getOutcomeSnapshot(goal, data);
+  const outcome = outcomeSnapshot.line;
+  const closed = Boolean(goal.closedAt) || goal.status === "COMPLETED";
+  const achieved = outcomeSnapshot.achieved;
   const evidence = showAllEvidence ? data.progress.activity : data.progress.activity.slice(0, 8);
   const currentIdx = Math.max(0, milestones.findIndex((m) => m.status === "current"));
   const showReviewCta =
@@ -168,15 +169,16 @@ export function GoalProgressPageView({
   })();
 
   const body = (
-    <div className={cn("pos-gp", layout === "panel" && "panel")}>
+    <div className={cn("pos-gp", layout === "panel" && "panel", achieved && "is-achieved")}>
       {layout === "page" && (
         <div className="pos-gp-topbar">
           <BackButton label={goal.title} onClick={() => onBack?.()} />
           <GoalBadge focus={focus} />
+          {achieved && <span className="pos-goal-badge status-achieved">Achieved</span>}
           <div className="pos-gp-topbar-spacer" />
           {onReview && (
-            <button type="button" className="pos-btn-secondary" onClick={onReview}>
-              Review / Close
+            <button type="button" className={cn("pos-btn-secondary", achieved && "achieved")} onClick={onReview}>
+              {achieved && !closed ? "Confirm / Close" : "Review / Close"}
             </button>
           )}
         </div>
@@ -207,14 +209,17 @@ export function GoalProgressPageView({
         <div className="pos-gp-columns">
           <div className="pos-gp-main">
             <div className="pos-gp-outcome-row">
-              <div className="pos-gp-card">
+              <div className={cn("pos-gp-card", achieved && "is-achieved")}>
                 <div className="pos-gp-card-head">
                   <div className="pos-gp-card-label">Outcome</div>
-                  {onLogObservation && !closed && (
-                    <button type="button" className="pos-btn-ghost pos-system-edit" onClick={onLogObservation}>
-                      Update
-                    </button>
-                  )}
+                  <div className="pos-gp-card-head-actions">
+                    {achieved && <span className="pos-goal-badge status-achieved xs">Achieved</span>}
+                    {onLogObservation && !closed && (
+                      <button type="button" className="pos-btn-ghost pos-system-edit" onClick={onLogObservation}>
+                        Update
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {outcomeParts?.kind === "ratio" ? (
                   <div className="pos-gp-outcome-nums">
@@ -230,7 +235,9 @@ export function GoalProgressPageView({
                 </p>
                 <div className="pos-gp-field-row">
                   <span>Status</span>
-                  <strong>{OUTCOME_STATUS_LABEL[goal.outcomeStatus ?? "ACTIVE"]}</strong>
+                  <strong className={achieved ? "pos-gp-status-achieved" : undefined}>
+                    {outcomeSnapshot.statusLabel}
+                  </strong>
                 </div>
                 <div className="pos-gp-field-row">
                   <span>Deadline</span>
@@ -261,11 +268,14 @@ export function GoalProgressPageView({
                               {onDeleteObservation && !closed && (
                                 <button
                                   type="button"
-                                  className="pos-btn-ghost danger"
+                                  className="pos-gp-obs-remove"
                                   onClick={() => onDeleteObservation(item.id)}
                                   aria-label={`Remove observation ${entry.detail}`}
+                                  title="Remove observation"
                                 >
-                                  Remove
+                                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                  </svg>
                                 </button>
                               )}
                             </div>
@@ -489,7 +499,7 @@ export function GoalProgressPageView({
                 </div>
                 <div className="pos-gp-field-row">
                   <span>Outcome</span>
-                  <strong>{OUTCOME_STATUS_LABEL[goal.outcomeStatus ?? "ACTIVE"]}</strong>
+                  <strong>{outcomeSnapshot.statusLabel}</strong>
                 </div>
               </section>
             )}

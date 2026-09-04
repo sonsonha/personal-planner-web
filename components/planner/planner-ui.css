@@ -429,6 +429,15 @@
   color: var(--pos-explore-text);
 }
 
+.pos-goal-badge.status-achieved {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.pos-goal-badge.status-achieved.xs {
+  font-size: 10px;
+}
+
 .pos-process-bar {
   display: flex;
   flex-direction: column;
@@ -2120,6 +2129,64 @@
   min-width: 0;
   flex-direction: column;
   gap: 2px;
+}
+
+.pos-gp-obs-remove {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: -4px -4px 0 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #9ca3af;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.pos-gp-obs-row:hover .pos-gp-obs-remove,
+.pos-gp-obs-row:focus-within .pos-gp-obs-remove,
+.pos-gp-obs-remove:focus-visible {
+  opacity: 1;
+}
+
+.pos-gp-obs-remove:hover,
+.pos-gp-obs-remove:focus-visible {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.pos-gp-card-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pos-gp-card.is-achieved {
+  border-color: #6ee7b7;
+  background: linear-gradient(180deg, #f0fdf4 0%, var(--pos-card) 42%);
+}
+
+.pos-gp-status-achieved,
+.pos-mono.achieved,
+.pos-ov-metric-value.achieved {
+  color: #047857;
+}
+
+.pos-btn-secondary.achieved {
+  border-color: #6ee7b7;
+  color: #047857;
+}
+
+.pos-ov-focus-card.is-achieved,
+.pos-pw-focus-card.is-achieved,
+.pos-pw-maintain-card.is-achieved {
+  border-color: #a7f3d0;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.12);
 }
 
 .pos-gp-period-completed {

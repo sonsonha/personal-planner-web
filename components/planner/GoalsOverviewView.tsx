@@ -8,13 +8,13 @@ import {
   GoalBadge,
   ProcessMini,
 } from "./shared";
-import { formatHoursFromMinutes, weekRangeLabel } from "./utils";
+import { formatHoursFromMinutes, weekRangeLabel, cn } from "./utils";
 import type { WorkspaceBlock, WorkspaceTask } from "@/app/goal-project-workspaces";
 import {
   currentMilestone,
   formatShortDate,
+  getOutcomeSnapshot,
   healthLabel,
-  outcomeLine,
 } from "@/app/goal-project-workspaces";
 
 export type GoalsYearGroup = {
@@ -70,17 +70,20 @@ function GoalCard({
   onReview?: () => void;
 }) {
   const milestone = currentMilestone(goal);
-  const outcome = outcomeLine(goal, progress);
+  const outcomeSnapshot = getOutcomeSnapshot(goal, progress);
+  const outcome = outcomeSnapshot.line;
   const processes = (progress?.progress.processes ?? []).slice(0, 3);
   const consistency = progress?.progress.consistency;
   const health = healthLabel(goal, now);
+  const achieved = outcomeSnapshot.achieved;
 
   return (
-    <button type="button" className="pos-ov-focus-card" onClick={onOpen}>
+    <button type="button" className={cn("pos-ov-focus-card", achieved && "is-achieved")} onClick={onOpen}>
       <div className="pos-ov-focus-head">
         <div className="pos-ov-focus-head-main">
           <div className="pos-ov-card-meta">
             <GoalBadge focus={goal.focusType ?? "FOCUS"} />
+            {achieved && <span className="pos-goal-badge status-achieved">Achieved</span>}
             {goal.targetDate && (
               <span className="pos-mono pos-ov-target">Target {formatShortDate(goal.targetDate)}</span>
             )}
@@ -118,7 +121,7 @@ function GoalCard({
       <div className="pos-ov-metrics-strip">
         <div className="pos-ov-metric-cell">
           <div className="pos-ov-metric-label">Outcome</div>
-          <span className="pos-mono pos-ov-metric-value">{outcome ?? "—"}</span>
+          <span className={cn("pos-mono pos-ov-metric-value", achieved && "achieved")}>{outcome ?? "—"}</span>
         </div>
         <div className="pos-ov-metric-cell">
           <div className="pos-ov-metric-label">Stage</div>

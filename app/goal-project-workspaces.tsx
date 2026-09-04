@@ -262,25 +262,90 @@ export {
   type ProgressViewPeriod,
 };
 
+function extractMetricCandidates(text: string): number[] {
+  const cleaned = text
+    .replace(/\b20\d{2}[-/.]\d{1,2}([-/.]\d{1,2})?\b/g, " ")
+    .replace(/\b(19|20)\d{2}\b/g, " ");
+  return [...cleaned.matchAll(/(\d+(?:\.\d+)?)/g)].map((match) => Number(match[1]));
+}
+
 function parseTargetNumber(goal: ApiGoal): number | null {
-  const sources = [goal.outcome, goal.metric, goal.title];
+  const metric = (goal.metric ?? "").toLowerCase();
+  if (metric.includes("offer")) {
+    const fromMetric = extractMetricCandidates(goal.metric ?? "");
+    if (fromMetric.length) return fromMetric[0]!;
+    return 1;
+  }
+
+  const preferBand = /band|ielts|score|gpa|level/.test(
+    `${goal.metric ?? ""} ${goal.outcome ?? ""} ${goal.title}`.toLowerCase(),
+  );
+
+  const sources = [goal.metric, goal.outcome, goal.title];
   for (const source of sources) {
-    const matches = source?.match(/(\d+(?:\.\d+)?)/g);
-    if (matches?.length) return Number(matches[matches.length - 1]);
+    if (!source?.trim()) continue;
+    const numbers = extractMetricCandidates(source);
+    if (!numbers.length) continue;
+    if (preferBand) {
+      const band = numbers.find((n) => n > 0 && n <= 9.5);
+      if (band != null) return band;
+    }
+    return numbers[0]!;
   }
   return null;
 }
 
-export function outcomeLine(goal: ApiGoal, progress?: ApiGoalProgress | null) {
+export type OutcomeSnapshot = {
+  line: string | null;
+  current: number | null;
+  target: number | null;
+  metricMet: boolean;
+  formallyAchieved: boolean;
+  achieved: boolean;
+  statusLabel: string;
+};
+
+export function getOutcomeSnapshot(goal: ApiGoal, progress?: ApiGoalProgress | null): OutcomeSnapshot {
   const latest = progress?.progress.latestObservation
     ?? [...(goal.metricObservations ?? [])].sort((a, b) => a.observedAt.localeCompare(b.observedAt)).at(-1)
     ?? null;
   const target = parseTargetNumber(goal);
+  const current = latest?.value ?? null;
   const metric = (goal.metric ?? "").toLowerCase();
-  if (metric.includes("offer")) return `${latest?.value ?? 0} / ${target ?? 1} offers`;
-  if (latest && target != null && latest.value !== target) return `${latest.value} → ${target}`;
-  if (latest) return String(latest.value);
-  return null;
+  const formallyAchieved =
+    goal.outcomeStatus === "ACHIEVED_ON_TIME"
+    || goal.outcomeStatus === "ACHIEVED_LATE"
+    || goal.status === "COMPLETED";
+  const metricMet = current != null && target != null && current >= target;
+  const achieved = formallyAchieved || metricMet;
+
+  let line: string | null = null;
+  if (metric.includes("offer")) {
+    line = `${current ?? 0} / ${target ?? 1} offers`;
+  } else if (current != null && target != null) {
+    line = `${current} / ${target}`;
+  } else if (current != null) {
+    line = String(current);
+  }
+
+  let statusLabel = OUTCOME_STATUS_LABEL[goal.outcomeStatus ?? "ACTIVE"];
+  if (goal.outcomeStatus && goal.outcomeStatus !== "ACTIVE") {
+    statusLabel = OUTCOME_STATUS_LABEL[goal.outcomeStatus];
+  } else if (metricMet) {
+    statusLabel = "Outcome met";
+  } else if (goal.status === "COMPLETED") {
+    statusLabel = "Achieved";
+  }
+
+  return { line, current, target, metricMet, formallyAchieved, achieved, statusLabel };
+}
+
+export function outcomeLine(goal: ApiGoal, progress?: ApiGoalProgress | null) {
+  return getOutcomeSnapshot(goal, progress).line;
+}
+
+export function isOutcomeAchieved(goal: ApiGoal, progress?: ApiGoalProgress | null) {
+  return getOutcomeSnapshot(goal, progress).achieved;
 }
 
 export function isRecurringProject(project: ApiProject, tasks: WorkspaceTask[]) {
@@ -290,8 +355,12 @@ export function isRecurringProject(project: ApiProject, tasks: WorkspaceTask[]) 
 
 export function healthLabel(goal: ApiGoal, now: Date) {
   const target = parseDate(goal.targetDate);
+  if (goal.outcomeStatus === "ACHIEVED_ON_TIME" || goal.outcomeStatus === "ACHIEVED_LATE") {
+    return OUTCOME_STATUS_LABEL[goal.outcomeStatus];
+  }
   if (goal.outcomeStatus && goal.outcomeStatus !== "ACTIVE") return OUTCOME_STATUS_LABEL[goal.outcomeStatus];
   if (goal.status === "COMPLETED") return "Achieved";
+  if (isOutcomeAchieved(goal)) return "Outcome met";
   if (target && target.getTime() < now.getTime()) return "Review needed";
   return null;
 }
@@ -1024,18 +1093,47 @@ export function GoalProgressView({
   const saveObservations = async (
     next: GoalMetricObservation[],
     message: string,
-    options?: { closeModal?: boolean },
+    options?: { closeModal?: boolean; latest?: GoalMetricObservation | null },
   ) => {
     setEntitySaving(true);
     setEntityError(null);
     try {
+      const draftGoal = { ...goal, metricObservations: next };
+      const snapshot = getOutcomeSnapshot(draftGoal);
+      const stillActive = !goal.outcomeStatus || goal.outcomeStatus === "ACTIVE"
+        || goal.outcomeStatus === "ACHIEVED_ON_TIME"
+        || goal.outcomeStatus === "ACHIEVED_LATE";
+      const payload: Parameters<typeof updateGoal>[1] = { metricObservations: next };
+      if (stillActive) {
+        if (snapshot.metricMet) {
+          const observedAt = options?.latest?.observedAt
+            ?? [...next].sort((a, b) => a.observedAt.localeCompare(b.observedAt)).at(-1)?.observedAt
+            ?? new Date().toISOString();
+          const target = parseDate(goal.targetDate);
+          const observed = parseDate(observedAt);
+          const onTime = !target || !observed || observed.getTime() <= target.getTime();
+          payload.outcomeStatus = onTime ? "ACHIEVED_ON_TIME" : "ACHIEVED_LATE";
+          payload.achievedAt = observedAt;
+        } else if (
+          goal.outcomeStatus === "ACHIEVED_ON_TIME"
+          || goal.outcomeStatus === "ACHIEVED_LATE"
+        ) {
+          payload.outcomeStatus = "ACTIVE";
+          payload.achievedAt = null;
+        }
+      }
+
       if (!live) {
         onChanged?.(`${message} · demo mode`);
         if (options?.closeModal !== false) setObservationOpen(false);
         return;
       }
-      await updateGoal(goal.id, { metricObservations: next });
-      onChanged?.(message);
+      await updateGoal(goal.id, payload);
+      onChanged?.(
+        snapshot.metricMet && stillActive
+          ? `${message} · outcome met`
+          : message,
+      );
       if (options?.closeModal !== false) setObservationOpen(false);
     } catch {
       setEntityError("Could not save this observation.");
@@ -1118,7 +1216,11 @@ export function GoalProgressView({
           onClose={() => { if (!entitySaving) setObservationOpen(false); }}
           onSave={async (observation) => {
             const existing = goal.metricObservations ?? [];
-            await saveObservations([...existing, observation], "Outcome updated");
+            await saveObservations(
+              [...existing, observation],
+              "Outcome updated",
+              { latest: observation },
+            );
           }}
         />
       )}
