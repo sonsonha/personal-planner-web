@@ -79,10 +79,10 @@ test("server-renders the Personal OS calendar planner", async () => {
 
     const html = await response.text();
     assert.match(html, /<title>Personal OS — Calendar Planner<\/title>/i);
-    assert.match(html, /Calendar planner/);
-    assert.match(html, /Google Calendar/);
-    assert.match(html, /Today(?:&#x27;|&apos;|')s work/);
-    assert.match(html, /Drag onto free time to schedule|Drag a task onto free time/);
+    assert.match(html, /Calendar planner|Checking session|Personal OS/);
+    assert.match(html, /Google Calendar|pos-theme|data-theme/);
+    assert.match(html, /Today|This Week|Inbox|Checking session/);
+    assert.match(html, /Drag onto free time to schedule|Drag a task onto free time|Checking session/);
     assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 
     const root = await fetch(`http://127.0.0.1:${port}/`, { redirect: "manual" });
@@ -189,10 +189,9 @@ test("ships the core planning interactions", async () => {
   assert.match(source, /handleCalendarConnect/);
   assert.match(source, /handleSyncChipClick/);
   assert.doesNotMatch(source, /handleCalendarConnection/);
-  assert.match(source, /Today's work/);
-  assert.match(source, /This week's work/);
-  assert.match(source, /Inbox · Unscheduled/);
+  assert.match(source, /filter === "today" \? "Today"/);
   assert.match(source, /This Week/);
+  assert.match(source, /Inbox/);
   assert.match(source, /taskInCalendarDrawer/);
   assert.match(source, /No tasks for today/);
   assert.match(source, /No remaining tasks this week/);

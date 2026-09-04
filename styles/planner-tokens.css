@@ -1,28 +1,31 @@
 /* Personal OS V2 — Design tokens
-   Surfaces + priority families. Light = :root, Dark = [data-theme="dark"]. */
+   Surfaces + priority families. Light = :root, Dark = [data-theme="dark"].
+   Readability pass: stronger contrast, clearer hierarchy, shared type scale. */
 
 :root {
   color-scheme: light;
 
   /* Surfaces */
   --pos-sidebar: #0b0e1a;
-  --pos-canvas: #f4f6f9;
-  --pos-surface-alt: #eef1f6;
+  --pos-canvas: #eef1f6;
+  --pos-surface-alt: #e4e9f1;
   --pos-card: #ffffff;
-  --pos-border: #e2e8f0;
-  --pos-border-light: #eef2f7;
+  --pos-elevated: #ffffff;
+  --pos-border: #d5dde8;
+  --pos-border-light: #e6ebf2;
+  --pos-border-strong: #b8c2d0;
 
-  /* Text */
-  --pos-ink: #0f172a;
-  --pos-ink-secondary: #475569;
-  --pos-ink-muted: #94a3b8;
-  --pos-ink-faint: #cbd5e1;
+  /* Text — stronger hierarchy */
+  --pos-ink: #0b1220;
+  --pos-ink-secondary: #334155;
+  --pos-ink-muted: #64748b;
+  --pos-ink-faint: #94a3b8;
 
   /* Brand / accents */
   --pos-primary: #4f46e5;
   --pos-primary-hover: #4338ca;
   --pos-primary-soft: #eef2ff;
-  --pos-primary-ring: #c7d2fe;
+  --pos-primary-ring: #a5b4fc;
   --pos-blue: #2563eb;
   --pos-blue-soft: #dbeafe;
   --pos-emerald: #059669;
@@ -57,21 +60,33 @@
   --pos-proc-e-soft: #fce7f3;
 
   /* Sidebar chrome (always dark rail) */
-  --pos-sidebar-text: #94a3b8;
-  --pos-sidebar-text-hover: #e2e8f0;
-  --pos-sidebar-muted: #64748b;
-  --pos-sidebar-faint: #475569;
-  --pos-sidebar-hover: rgba(255, 255, 255, 0.05);
-  --pos-sidebar-divider: rgba(255, 255, 255, 0.05);
+  --pos-sidebar-text: #a8b4c7;
+  --pos-sidebar-text-hover: #f1f5f9;
+  --pos-sidebar-muted: #7b889c;
+  --pos-sidebar-faint: #5b677a;
+  --pos-sidebar-hover: rgba(255, 255, 255, 0.06);
+  --pos-sidebar-divider: rgba(255, 255, 255, 0.08);
 
   /* Calendar */
-  --pos-cal-grid-line: #e8edf3;
-  --pos-cal-grid-half: #f1f5f9;
-  --pos-cal-today-wash: rgba(79, 70, 229, 0.06);
+  --pos-cal-grid-line: #d7dee8;
+  --pos-cal-grid-half: #e8edf4;
+  --pos-cal-today-wash: rgba(79, 70, 229, 0.08);
   --pos-cal-hover-wash: rgba(79, 70, 229, 0.04);
   --pos-cal-header: #ffffff;
-  --pos-cal-rail: #94a3b8;
+  --pos-cal-rail: #64748b;
+  --pos-cal-track: #ffffff;
   --pos-now-line: #ef4444;
+
+  /* Type scale */
+  --pos-text-xs: 11px;
+  --pos-text-sm: 12px;
+  --pos-text-md: 13px;
+  --pos-text-lg: 15px;
+  --pos-text-xl: 18px;
+  --pos-text-2xl: 24px;
+  --pos-leading-tight: 1.25;
+  --pos-leading-snug: 1.35;
+  --pos-leading-normal: 1.45;
 
   /* Priority — Do now (p1) red / urgent */
   --priority-p1: #dc2626;
@@ -98,10 +113,10 @@
   --priority-p3-text: #14532d;
   --priority-p3-on-fill: #ffffff;
   --priority-p3-bg: #dcfce7;
-  --priority-p3-fill: #22c55e;
-  --priority-p3-border: #16a34a;
+  --priority-p3-fill: #16a34a;
+  --priority-p3-border: #15803d;
   --priority-p3-soft: #f0fdf4;
-  --priority-p3-strong: #15803d;
+  --priority-p3-strong: #166534;
 
   /* Priority — Drop (p4) amber / muted */
   --priority-p4: #ca8a04;
@@ -128,8 +143,8 @@
   --pos-radius-md: 12px;
   --pos-radius-lg: 16px;
   --pos-radius-xl: 16px;
-  --pos-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --pos-shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --pos-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --pos-shadow-md: 0 8px 24px rgba(15, 23, 42, 0.1);
   --pos-shadow-lg: 0 24px 64px -12px rgba(15, 23, 42, 0.28);
   --pos-sidebar-width: 220px;
   --pos-sidebar-collapsed: 52px;
@@ -178,89 +193,93 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --pos-sidebar: #06080f;
-  --pos-canvas: #0f1419;
-  --pos-surface-alt: #161b22;
-  --pos-card: #1a2029;
-  --pos-border: #2a3340;
-  --pos-border-light: #232b36;
+  /* Cohesive dark workspace — no pale islands */
+  --pos-sidebar: #07090f;
+  --pos-canvas: #0e131a;
+  --pos-surface-alt: #151b24;
+  --pos-card: #1a222d;
+  --pos-elevated: #222b38;
+  --pos-border: #2f3a49;
+  --pos-border-light: #263140;
+  --pos-border-strong: #455365;
 
-  --pos-ink: #f1f5f9;
-  --pos-ink-secondary: #94a3b8;
-  --pos-ink-muted: #64748b;
-  --pos-ink-faint: #475569;
+  --pos-ink: #f8fafc;
+  --pos-ink-secondary: #c5d0de;
+  --pos-ink-muted: #93a4b8;
+  --pos-ink-faint: #6b7c91;
 
-  --pos-primary: #818cf8;
+  --pos-primary: #8b93ff;
   --pos-primary-hover: #a5b4fc;
-  --pos-primary-soft: rgba(99, 102, 241, 0.18);
-  --pos-primary-ring: #6366f1;
+  --pos-primary-soft: rgba(99, 102, 241, 0.22);
+  --pos-primary-ring: #818cf8;
   --pos-blue: #60a5fa;
-  --pos-blue-soft: rgba(37, 99, 235, 0.22);
+  --pos-blue-soft: rgba(37, 99, 235, 0.28);
   --pos-emerald: #34d399;
-  --pos-emerald-soft: rgba(5, 150, 105, 0.2);
+  --pos-emerald-soft: rgba(5, 150, 105, 0.24);
   --pos-amber: #fbbf24;
-  --pos-amber-soft: rgba(217, 119, 6, 0.22);
+  --pos-amber-soft: rgba(217, 119, 6, 0.26);
   --pos-danger: #f87171;
-  --pos-danger-soft: rgba(220, 38, 38, 0.2);
+  --pos-danger-soft: rgba(220, 38, 38, 0.24);
   --pos-cyan: #22d3ee;
-  --pos-cyan-soft: rgba(8, 145, 178, 0.22);
+  --pos-cyan-soft: rgba(8, 145, 178, 0.26);
 
-  --pos-focus: #818cf8;
-  --pos-focus-soft: rgba(99, 102, 241, 0.18);
+  --pos-focus: #8b93ff;
+  --pos-focus-soft: rgba(99, 102, 241, 0.22);
   --pos-maintain: #22d3ee;
-  --pos-maintain-soft: rgba(8, 145, 178, 0.2);
+  --pos-maintain-soft: rgba(8, 145, 178, 0.24);
   --pos-maintain-text: #67e8f9;
   --pos-explore: #94a3b8;
-  --pos-explore-soft: rgba(148, 163, 184, 0.12);
+  --pos-explore-soft: rgba(148, 163, 184, 0.14);
   --pos-explore-text: #cbd5e1;
 
-  --pos-cal-grid-line: #243040;
-  --pos-cal-grid-half: #1c2430;
-  --pos-cal-today-wash: rgba(129, 140, 248, 0.1);
-  --pos-cal-hover-wash: rgba(129, 140, 248, 0.06);
-  --pos-cal-header: #1a2029;
-  --pos-cal-rail: #64748b;
+  --pos-cal-grid-line: #2c3848;
+  --pos-cal-grid-half: #222c3a;
+  --pos-cal-today-wash: rgba(129, 140, 248, 0.14);
+  --pos-cal-hover-wash: rgba(129, 140, 248, 0.07);
+  --pos-cal-header: #1a222d;
+  --pos-cal-rail: #8b9bb0;
+  --pos-cal-track: #141b24;
   --pos-now-line: #f87171;
 
   --priority-p1: #f87171;
   --priority-p1-text: #fecaca;
   --priority-p1-on-fill: #ffffff;
-  --priority-p1-bg: rgba(220, 38, 38, 0.22);
+  --priority-p1-bg: rgba(220, 38, 38, 0.28);
   --priority-p1-fill: #ef4444;
-  --priority-p1-border: #f87171;
-  --priority-p1-soft: rgba(220, 38, 38, 0.14);
+  --priority-p1-border: #fca5a5;
+  --priority-p1-soft: rgba(220, 38, 38, 0.16);
   --priority-p1-strong: #dc2626;
 
   --priority-p2: #60a5fa;
   --priority-p2-text: #bfdbfe;
   --priority-p2-on-fill: #ffffff;
-  --priority-p2-bg: rgba(37, 99, 235, 0.24);
+  --priority-p2-bg: rgba(37, 99, 235, 0.3);
   --priority-p2-fill: #3b82f6;
-  --priority-p2-border: #60a5fa;
-  --priority-p2-soft: rgba(37, 99, 235, 0.14);
+  --priority-p2-border: #93c5fd;
+  --priority-p2-soft: rgba(37, 99, 235, 0.16);
   --priority-p2-strong: #2563eb;
 
   --priority-p3: #4ade80;
   --priority-p3-text: #bbf7d0;
-  --priority-p3-on-fill: #052e16;
-  --priority-p3-bg: rgba(22, 163, 74, 0.24);
-  --priority-p3-fill: #22c55e;
-  --priority-p3-border: #4ade80;
-  --priority-p3-soft: rgba(22, 163, 74, 0.14);
-  --priority-p3-strong: #16a34a;
+  --priority-p3-on-fill: #ffffff;
+  --priority-p3-bg: rgba(22, 163, 74, 0.3);
+  --priority-p3-fill: #16a34a;
+  --priority-p3-border: #86efac;
+  --priority-p3-soft: rgba(22, 163, 74, 0.16);
+  --priority-p3-strong: #15803d;
 
   --priority-p4: #fbbf24;
   --priority-p4-text: #fde68a;
   --priority-p4-on-fill: #1c1917;
-  --priority-p4-bg: rgba(202, 138, 4, 0.22);
-  --priority-p4-fill: #eab308;
-  --priority-p4-border: #fbbf24;
-  --priority-p4-soft: rgba(202, 138, 4, 0.14);
-  --priority-p4-strong: #ca8a04;
+  --priority-p4-bg: rgba(202, 138, 4, 0.28);
+  --priority-p4-fill: #ca8a04;
+  --priority-p4-border: #fcd34d;
+  --priority-p4-soft: rgba(202, 138, 4, 0.16);
+  --priority-p4-strong: #a16207;
 
-  --pos-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --pos-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
-  --pos-shadow-lg: 0 24px 64px -12px rgba(0, 0, 0, 0.55);
+  --pos-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --pos-shadow-md: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --pos-shadow-lg: 0 24px 64px -12px rgba(0, 0, 0, 0.6);
 }
 
 /* Priority attribute helpers — apply to Task rows & Calendar Sessions */

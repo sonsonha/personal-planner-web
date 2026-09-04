@@ -3612,9 +3612,9 @@ function TaskPanel({
   };
 
   const ariaLabel =
-    filter === "today" ? "Today's work"
-      : filter === "week" ? "This week's work"
-        : "Inbox · Unscheduled";
+    filter === "today" ? "Today"
+      : filter === "week" ? "This Week"
+        : "Inbox";
 
   const emptyCopy =
     filter === "today"
