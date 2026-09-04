@@ -507,9 +507,9 @@
 }
 
 .pos-process-completed {
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 600;
-  line-height: 1.1;
+  line-height: 1.2;
 }
 
 .pos-process-target,
@@ -1688,6 +1688,12 @@
   flex: 1;
   overflow: auto;
   padding: 32px;
+}
+
+.pos-proj-scroll {
+  max-width: 1080px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .pos-ov-week-head,
@@ -2893,8 +2899,8 @@
 .pos-proj-table-head,
 .pos-proj-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 160px 200px 180px;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(132px, 0.75fr) minmax(0, 1.1fr) 108px;
+  gap: 16px;
   align-items: center;
 }
 
@@ -2968,16 +2974,20 @@
   display: flex;
   align-items: baseline;
   gap: 2px;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
 }
 
-.pos-proj-week-nums .pos-mono:first-child {
-  font-size: 16px;
-  font-weight: 600;
+.pos-proj-week-nums .pos-mono {
+  font-size: inherit;
+  font-weight: inherit;
 }
 
 .pos-proj-week-nums .pos-process-track,
 .pos-proj-week-process .pos-process-track {
-  width: 96px;
+  width: 100%;
+  max-width: 120px;
 }
 
 .pos-proj-lifetime {

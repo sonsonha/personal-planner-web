@@ -6,7 +6,7 @@ import {
   type ApiGoalProgress,
   type ApiProject,
 } from "@/lib/planner-api";
-import { formatProcessValue } from "@/lib/goal-progress-display";
+import { formatProcessRatio } from "@/lib/goal-progress-display";
 import { inProductWeek, startOfProductWeek } from "@/lib/product-week";
 import {
   ArrowLink,
@@ -436,8 +436,7 @@ export function GoalDetailView({
                         {bucket && (
                           <div className="pos-project-week">
                             <div className="pos-project-week-nums pos-mono" style={{ color: accent.color }}>
-                              <em>{formatProcessValue(bucket.completed, bucket.unit, measurementType)}</em>
-                              <span>/ {formatProcessValue(bucket.target, bucket.unit, measurementType)}</span>
+                              {formatProcessRatio(bucket.completed, bucket.target, bucket.unit, measurementType)}
                             </div>
                             <div className="pos-process-track thin" aria-hidden="true">
                               <div
@@ -569,8 +568,12 @@ export function GoalDetailView({
                             <span>{proc.name}</span>
                             {bucket && (
                               <span className="pos-mono">
-                                {formatProcessValue(bucket.completed, bucket.unit, progressProc?.measurementType ?? proc.measurementType)}/
-                                {formatProcessValue(bucket.target, bucket.unit, progressProc?.measurementType ?? proc.measurementType)}
+                                {formatProcessRatio(
+                                  bucket.completed,
+                                  bucket.target,
+                                  bucket.unit,
+                                  progressProc?.measurementType ?? proc.measurementType,
+                                )}
                               </span>
                             )}
                           </div>

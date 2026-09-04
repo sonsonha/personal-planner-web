@@ -47,7 +47,7 @@ test("processBucketCompact separates target and planned with units", () => {
     { completed: 4, target: 5, planned: 6 },
     "COUNT",
   );
-  assert.equal(sessions.targetLine, "4 sessions / 5 sessions target");
+  assert.equal(sessions.targetLine, "4 / 5 sessions target");
   assert.equal(sessions.plannedLine, "6 sessions planned");
 });
 
@@ -59,6 +59,8 @@ test("formatProcessValue always shows duration hours and count sessions", () => 
   assert.equal(formatProcessValue(2, undefined, "COUNT"), "2 sessions");
   assert.equal(formatProcessValue(3, "sections"), "3 sections");
   assert.equal(formatProcessRatio(4.8, 120, "h"), "4.8h / 120h");
+  assert.equal(formatProcessRatio(1, 3, "applications"), "1 / 3 applications");
+  assert.equal(formatProcessRatio(1, 2, "sections"), "1 / 2 sections");
   assert.equal(normalizeProcessUnit("HR"), "h");
 });
 

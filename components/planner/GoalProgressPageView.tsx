@@ -5,6 +5,7 @@ import type { ApiGoal, ApiGoalProgress } from "@/lib/planner-api";
 import {
   formatObservationEntry,
   formatProcessValue,
+  formatProcessRatio,
   coerceProcessBucketForDisplay,
   type ProcessBucketView,
 } from "@/lib/goal-progress-display";
@@ -77,12 +78,9 @@ function ProcessPeriodCard({
       </div>
       <div className="pos-gp-period-metrics">
         <span className="pos-mono pos-gp-period-completed" style={{ color: accent.color }}>
-          {formatProcessValue(view.completed, unit, measurementType)}
+          {formatProcessRatio(view.completed, view.target, unit, measurementType)}
         </span>
-        <span className="pos-gp-period-planned">
-          <span className="pos-mono">/ {formatProcessValue(view.target, unit, measurementType)}</span>
-          {" "}target
-        </span>
+        <span className="pos-gp-period-planned">target</span>
       </div>
       {view.planned > 0 && (
         <p className="pos-gp-period-planned-line">

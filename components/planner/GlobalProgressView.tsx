@@ -1,7 +1,7 @@
 "use client";
 
 import type { ApiGoal, ApiGoalProgress, ApiProject, GoalFocusType } from "@/lib/planner-api";
-import { formatProcessValue, type ProcessBucketView } from "@/lib/goal-progress-display";
+import { formatProcessRatio, type ProcessBucketView } from "@/lib/goal-progress-display";
 import {
   ConsistencyDots,
   GoalBadge,
@@ -383,14 +383,8 @@ export function GlobalProgressView({
                     {row.processThisWeek ? (
                       <div className="pos-pw-project-week">
                         <span className="pos-mono" style={{ color: accent.color }}>
-                          {formatProcessValue(
+                          {formatProcessRatio(
                             row.processThisWeek.thisWeek.completed,
-                            row.processThisWeek.thisWeek.unit,
-                            row.processThisWeek.measurementType,
-                          )}
-                        </span>
-                        <span className="pos-mono pos-muted">
-                          /{formatProcessValue(
                             row.processThisWeek.thisWeek.target,
                             row.processThisWeek.thisWeek.unit,
                             row.processThisWeek.measurementType,

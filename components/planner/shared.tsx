@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { GoalFocusType, GoalMilestone } from "@/lib/planner-api";
-import { formatProcessValue, coerceProcessBucketForDisplay, type ProcessBucketView } from "@/lib/goal-progress-display";
+import { formatProcessValue, formatProcessRatio, coerceProcessBucketForDisplay, type ProcessBucketView } from "@/lib/goal-progress-display";
 import { cn, processAccent } from "./utils";
 
 export function SectionLabel({
@@ -95,12 +95,9 @@ export function ProcessBar({
       </div>
       <div className="pos-process-bar-metrics">
         <span className="pos-mono pos-process-completed" style={{ color: accent.color }}>
-          {formatProcessValue(view.completed, unit, measurementType)}
+          {formatProcessRatio(view.completed, view.target, unit, measurementType)}
         </span>
-        <span className="pos-process-target">
-          <span className="pos-mono">/ {formatProcessValue(view.target, unit, measurementType)}</span>
-          {" "}target
-        </span>
+        <span className="pos-process-target">target</span>
       </div>
       {view.planned > 0 && (
         <p className="pos-process-planned">
@@ -148,6 +145,7 @@ export function ProcessMini({
   const atTarget = view.target > 0 && view.completed >= view.target;
   const doneLabel = formatProcessValue(view.completed, view.unit, measurementType);
   const targetLabel = formatProcessValue(view.target, view.unit, measurementType);
+  const ratioLabel = formatProcessRatio(view.completed, view.target, view.unit, measurementType);
 
   return (
     <div
@@ -164,9 +162,7 @@ export function ProcessMini({
         style={{ color: atTarget ? accent.color : undefined }}
         aria-label={`${doneLabel} done of ${targetLabel} weekly target`}
       >
-        <span className="pos-process-mini-done">{doneLabel}</span>
-        <span className="pos-process-mini-sep"> / </span>
-        <span className="pos-process-mini-target">{targetLabel}</span>
+        {ratioLabel}
       </span>
     </div>
   );

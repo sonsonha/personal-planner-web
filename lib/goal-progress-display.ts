@@ -86,13 +86,19 @@ export function formatProcessValue(
   return `${num} ${normalized}`;
 }
 
+/** Ratio with unit once for word units: `1 / 3 applications`. Hours keep compact `4.8h / 2h`. */
 export function formatProcessRatio(
   completed: number,
   target: number,
   unit?: string | null,
   measurementType?: string | null,
 ) {
-  return `${formatProcessValue(completed, unit, measurementType)} / ${formatProcessValue(target, unit, measurementType)}`;
+  const normalized = normalizeProcessUnit(unit, measurementType);
+  const left = formatNumber(completed);
+  const right = formatNumber(target);
+  if (!normalized) return `${left} / ${right}`;
+  if (normalized === "h") return `${left}h / ${right}h`;
+  return `${left} / ${right} ${normalized}`;
 }
 
 export function progressPeriodLabel(period: ProgressViewPeriod) {

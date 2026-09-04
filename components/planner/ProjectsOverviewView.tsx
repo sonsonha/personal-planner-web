@@ -1,7 +1,7 @@
 "use client";
 
 import type { ApiGoal, ApiProject } from "@/lib/planner-api";
-import { formatProcessValue, type ProcessBucketView } from "@/lib/goal-progress-display";
+import { formatProcessRatio, type ProcessBucketView } from "@/lib/goal-progress-display";
 import { projectWeekSummary, thisWeekLabel } from "@/lib/product-week";
 import {
   EmptyState,
@@ -68,10 +68,12 @@ function ProjectRow({
           <div className="pos-proj-week-process">
             <div className="pos-proj-week-nums">
               <span className="pos-mono" style={{ color: accent.color }}>
-                {formatProcessValue(processInfo.thisWeek.completed, processInfo.thisWeek.unit, processInfo.measurementType)}
-              </span>
-              <span className="pos-mono pos-muted">
-                /{formatProcessValue(processInfo.thisWeek.target, processInfo.thisWeek.unit, processInfo.measurementType)}
+                {formatProcessRatio(
+                  processInfo.thisWeek.completed,
+                  processInfo.thisWeek.target,
+                  processInfo.thisWeek.unit,
+                  processInfo.measurementType,
+                )}
               </span>
             </div>
             <div className="pos-process-track thin" aria-hidden="true">
