@@ -32,6 +32,13 @@ const jetbrains = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Personal OS — Calendar Planner",
   description: "Plan tasks against real time and keep your week in sync.",
+  icons: {
+    icon: [
+      { url: "/favicon.png", type: "image/png", sizes: "64x64" },
+      { url: "/favicon-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
   openGraph: {
     title: "Personal OS — Calendar Planner",
     description: "Plan tasks against real time and keep your week in sync.",
