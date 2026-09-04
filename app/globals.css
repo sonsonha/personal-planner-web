@@ -507,7 +507,7 @@ button {
 .all-day-row,
 .calendar-grid {
   display: grid;
-  grid-template-columns: 54px repeat(var(--day-count), minmax(86px, 1fr));
+  grid-template-columns: 64px repeat(var(--day-count), minmax(86px, 1fr));
 }
 
 .calendar-days {
@@ -642,10 +642,14 @@ button {
   overflow: auto;
   scrollbar-color: #ccd0dd transparent;
   scrollbar-width: thin;
+  /* Keep 00:00 label/grid line clear of the sticky all-day row above. */
+  scroll-padding-top: 12px;
 }
 
 .calendar-grid {
   min-width: 665px;
+  padding-top: 12px;
+  box-sizing: content-box;
 }
 
 .time-rail,
@@ -656,10 +660,15 @@ button {
 
 .time-rail span {
   position: absolute;
-  right: 9px;
+  right: 8px;
   color: #a5aaba;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .day-track {
@@ -1752,7 +1761,7 @@ button {
   .calendar-grid { min-width: 0; }
   .calendar-days,
   .all-day-row,
-  .calendar-grid { grid-template-columns: 48px repeat(var(--day-count), minmax(80px, 1fr)); }
+  .calendar-grid { grid-template-columns: 56px repeat(var(--day-count), minmax(80px, 1fr)); }
   .priority-picker:not(.compact) { grid-template-columns: 1fr 1fr; }
   .tasks-workspace { padding: 20px 12px 30px; }
   .gp-panel { width: min(100%, 560px); }
@@ -2637,6 +2646,14 @@ button {
   border-bottom: 1px solid var(--pos-border);
   background: var(--pos-cal-header);
   max-height: 72px;
+  position: relative;
+  z-index: 2;
+}
+
+.pos-cal .calendar-scroll {
+  position: relative;
+  z-index: 1;
+  background: var(--pos-cal-track, var(--pos-card));
 }
 
 .pos-cal .all-day-chip {

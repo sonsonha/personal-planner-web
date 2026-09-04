@@ -26,10 +26,10 @@ export function formatMinutesOfDay(totalMinutes: number, format: ClockFormat = "
   return `${twelve}:${mm} ${suffix}`;
 }
 
-/** Hour gutter label: `13` or `1 PM`. */
+/** Hour gutter label: `05:00` or `5 AM`. */
 export function formatHourGutter(hour: number, format: ClockFormat = "24h") {
   const normalized = ((hour % 24) + 24) % 24;
-  if (format === "24h") return String(normalized).padStart(2, "0");
+  if (format === "24h") return formatMinutesOfDay(normalized * 60, "24h");
   if (normalized === 0) return "12 AM";
   if (normalized === 12) return "12 PM";
   return normalized > 12 ? `${normalized - 12} PM` : `${normalized} AM`;

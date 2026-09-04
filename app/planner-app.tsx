@@ -1315,7 +1315,8 @@ export function PlannerApp({
       const el = scrollRef.current;
       if (!el) return;
       const current = new Date();
-      const minuteY = current.getHours() * 60 + current.getMinutes() - START_HOUR * 60;
+      const gridPadTop = 12; /* matches .calendar-grid padding-top */
+      const minuteY = current.getHours() * 60 + current.getMinutes() - START_HOUR * 60 + gridPadTop;
       const viewport = el.clientHeight;
       const maxScroll = Math.max(0, el.scrollHeight - viewport);
       // Prefer current time near the middle; clamp when near day edges.
@@ -2654,7 +2655,7 @@ export function PlannerApp({
               <div className="calendar-grid" style={{ "--day-count": visibleDays.length } as React.CSSProperties}>
                 <div className="time-rail">
                   {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, index) => (
-                    <span key={index} style={{ top: index * 60 - 7 }}>
+                    <span key={index} style={{ top: index * 60 - 6 }}>
                       {index === END_HOUR - START_HOUR ? "" : formatHourGutter(START_HOUR + index, clockFormat)}
                     </span>
                   ))}
