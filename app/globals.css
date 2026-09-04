@@ -765,6 +765,30 @@ button {
   text-decoration: line-through;
 }
 
+.calendar-event.is-past:not(.external) {
+  opacity: 0.58;
+  filter: saturate(0.7);
+}
+
+.calendar-event.is-past.done:not(.external) {
+  opacity: 0.5;
+}
+
+.calendar-event.past-open:not(.external) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #b91c1c 35%, transparent);
+}
+
+.event-past-note {
+  display: block;
+  margin-top: 1px;
+  color: #b91c1c;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  opacity: 0.9;
+}
+
 .now-line {
   position: absolute;
   z-index: 5;
@@ -1029,9 +1053,27 @@ button {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: var(--pos-ink);
+  color: var(--pos-ink-muted);
   font-size: 12px;
-  font-weight: 550;
+  font-weight: 500;
+}
+
+.pos-cal-side .task-meta {
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--pos-ink-muted);
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.82;
+}
+
+.pos-cal-side .task-meta .task-project,
+.pos-cal-side .task-meta .pos-mono {
+  color: var(--pos-ink-muted);
+}
+
+.pos-cal-side .pos-cal-side-progress {
+  opacity: 0.75;
 }
 
 .task-priority-chip {
@@ -2666,7 +2708,40 @@ button {
 .pos-cal .calendar-event.done {
   opacity: 0.72;
   filter: saturate(0.75);
-  cursor: default;
+  cursor: grab;
+}
+
+.pos-cal .calendar-event.done:active {
+  cursor: grabbing;
+}
+
+.pos-cal .calendar-event.is-past:not(.external) {
+  opacity: 0.55;
+  filter: saturate(0.65);
+}
+
+.pos-cal .calendar-event.is-past.done:not(.external) {
+  opacity: 0.48;
+}
+
+.pos-cal .calendar-event.past-open:not(.external) {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, #dc2626 28%, transparent),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.pos-cal .event-past-note {
+  display: block;
+  margin-top: 1px;
+  color: #b91c1c;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+[data-theme="dark"] .pos-cal .event-past-note {
+  color: #fca5a5;
 }
 
 .pos-cal .calendar-event.done .event-title-row strong {
@@ -2989,19 +3064,6 @@ button {
   line-height: var(--pos-leading-snug);
   color: var(--pos-ink);
   letter-spacing: -0.01em;
-}
-
-.pos-cal-side .task-meta {
-  gap: 8px;
-  margin-top: 4px;
-  color: var(--pos-ink);
-  font-size: 12px;
-  font-weight: 550;
-}
-
-.pos-cal-side .task-meta .task-project,
-.pos-cal-side .task-meta .pos-mono {
-  color: var(--pos-ink);
 }
 
 .pos-cal-side .empty-tasks {

@@ -2765,12 +2765,15 @@ export function PlannerApp({
                       const geometry = overlapGeometry(block.col, block.numCols);
                       const sessionDone = isSessionDone(block.status);
                       const taskDone = Boolean(block.taskId && doneTaskIds.has(block.taskId));
+                      const blockEnd = slotDate(weekStart, block.day, block.start + block.duration);
+                      const isPast = blockEnd.getTime() < now.getTime();
                       return (
                         <CalendarEvent
                           key={block.id}
                           block={block}
                           done={sessionDone || taskDone}
                           sessionDone={sessionDone}
+                          isPast={isPast}
                           layout={geometry}
                           selected={blockPopover?.blockId === block.id}
                           onOpenTask={(taskId) => {
@@ -3242,6 +3245,7 @@ function CalendarEvent({
   block,
   done,
   sessionDone,
+  isPast = false,
   layout,
   selected = false,
   onOpenTask,
@@ -3254,6 +3258,8 @@ function CalendarEvent({
   block: CalendarBlock;
   done: boolean;
   sessionDone: boolean;
+  /** Session end is before now — visual only; interaction stays enabled. */
+  isPast?: boolean;
   layout: { left: string; right: string };
   selected?: boolean;
   onOpenTask: (taskId: string) => void;
@@ -3401,8 +3407,6 @@ function CalendarEvent({
     const onMove = (moveEvent: PointerEvent) => {
       const state = moveRef.current;
       if (!state || moveEvent.pointerId !== state.pointerId) return;
-      // Completed sessions stay selectable but are not draggable.
-      if (done) return;
       const dx = moveEvent.clientX - state.startX;
       const dy = moveEvent.clientY - state.startY;
       if (!state.dragging) {
@@ -3480,6 +3484,8 @@ function CalendarEvent({
         "calendar-event",
         block.type,
         done ? "done" : "",
+        isPast ? "is-past" : "",
+        isPast && !sessionDone && !isExternal ? "past-open" : "",
         isFailed ? "sync-failed" : "",
         isPending ? "sync-pending" : "",
         selected ? "selected" : "",
@@ -3494,14 +3500,18 @@ function CalendarEvent({
           ? `${block.title}, Google Calendar, read-only`
           : done
             ? `${block.title}, completed`
-            : block.title
+            : isPast
+              ? `${block.title}, past, not completed`
+              : block.title
       }
       title={
         isExternal
           ? "Google Calendar · read-only"
           : isFailed
             ? "Saved in Personal OS; Google Calendar sync failed"
-            : undefined
+            : isPast && !sessionDone
+              ? "Past session · not marked done"
+              : undefined
       }
       style={{
         top: block.start - START_HOUR * 60 + 1,
@@ -3554,10 +3564,13 @@ function CalendarEvent({
         </span>
       )}
       {showMeta && block.meta && <span className="event-meta">{block.meta}</span>}
+      {isPast && !sessionDone && !isExternal && displayDuration >= 28 && (
+        <span className="event-past-note">Not done</span>
+      )}
       {isFailed && displayDuration >= 60 && (
         <span className="event-sync-note">Saved locally · sync failed</span>
       )}
-      {block.type === "task" && !done && (
+      {block.type === "task" && (
         <button
           type="button"
           className="event-resize-handle"
