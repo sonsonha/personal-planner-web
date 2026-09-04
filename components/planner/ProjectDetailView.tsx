@@ -45,7 +45,7 @@ export type ProjectDetailViewProps = {
   blocks: WorkspaceBlock[];
   now: Date;
   weekLabel: string;
-  processThisWeek?: { name: string; thisWeek: ProcessBucketView } | null;
+  processThisWeek?: { name: string; thisWeek: ProcessBucketView; measurementType?: string } | null;
   onBack: () => void;
   onEdit: () => void;
   onComplete: () => void;
@@ -171,7 +171,11 @@ export function ProjectDetailView({
           {processThisWeek && (
             <section>
               <SectionLabel right={weekLabel}>This week</SectionLabel>
-              <ProcessBar name={processThisWeek.name} bucket={processThisWeek.thisWeek} />
+              <ProcessBar
+                name={processThisWeek.name}
+                bucket={processThisWeek.thisWeek}
+                measurementType={processThisWeek.measurementType}
+              />
             </section>
           )}
 

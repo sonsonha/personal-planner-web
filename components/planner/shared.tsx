@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { GoalFocusType, GoalMilestone } from "@/lib/planner-api";
-import { formatProcessValue, type ProcessBucketView } from "@/lib/goal-progress-display";
+import { formatProcessValue, formatProcessRatio, type ProcessBucketView } from "@/lib/goal-progress-display";
 import { cn, processAccent } from "./utils";
 
 export function SectionLabel({
@@ -39,10 +39,15 @@ export function ProcessBar({
   name,
   bucket,
   accentIndex = 0,
+  measurementType,
+  periodSuffix = "/wk",
 }: {
   name: string;
   bucket: ProcessBucketView;
   accentIndex?: number;
+  measurementType?: string | null;
+  /** Shown after target in the legend, e.g. /wk or /mo. */
+  periodSuffix?: string;
 }) {
   const accent = processAccent(accentIndex);
   const denom = Math.max(bucket.target, 0.0001);
@@ -56,6 +61,7 @@ export function ProcessBar({
       : bucket.completed > 0
         ? "In progress"
         : "Not started";
+  const unit = bucket.unit;
 
   return (
     <article className="pos-process-bar">
@@ -70,16 +76,16 @@ export function ProcessBar({
       </div>
       <div className="pos-process-bar-metrics">
         <span className="pos-mono pos-process-completed" style={{ color: accent.color }}>
-          {formatProcessValue(bucket.completed, bucket.unit)}
+          {formatProcessValue(bucket.completed, unit, measurementType)}
         </span>
         <span className="pos-process-target">
-          <span className="pos-mono">/ {formatProcessValue(bucket.target, bucket.unit)}</span>
+          <span className="pos-mono">/ {formatProcessValue(bucket.target, unit, measurementType)}</span>
           {" "}target
         </span>
       </div>
       {bucket.planned > 0 && (
         <p className="pos-process-planned">
-          <span className="pos-mono">{formatProcessValue(bucket.planned, bucket.unit)}</span>
+          <span className="pos-mono">{formatProcessValue(bucket.planned, unit, measurementType)}</span>
           {" "}planned
         </p>
       )}
@@ -96,8 +102,8 @@ export function ProcessBar({
       <div className="pos-process-legend">
         <span>
           <i style={{ backgroundColor: accent.light, borderColor: accent.color }} />
-          target {formatProcessValue(bucket.target, bucket.unit)}
-          {bucket.unit === "h" ? "/wk" : ""}
+          target {formatProcessValue(bucket.target, unit, measurementType)}
+          {periodSuffix}
         </span>
       </div>
     </article>
@@ -108,10 +114,12 @@ export function ProcessMini({
   name,
   bucket,
   accentIndex = 0,
+  measurementType,
 }: {
   name: string;
   bucket: ProcessBucketView;
   accentIndex?: number;
+  measurementType?: string | null;
 }) {
   const accent = processAccent(accentIndex);
   const denom = Math.max(bucket.target, 0.0001);
@@ -130,9 +138,7 @@ export function ProcessMini({
         className="pos-process-mini-values pos-mono"
         style={{ color: atTarget ? accent.color : undefined }}
       >
-        {formatProcessValue(bucket.completed, bucket.unit)}/
-        {formatProcessValue(bucket.target, bucket.unit)}
-        {bucket.unit === "h" ? "h" : ""}
+        {formatProcessRatio(bucket.completed, bucket.target, bucket.unit, measurementType)}
       </span>
     </div>
   );

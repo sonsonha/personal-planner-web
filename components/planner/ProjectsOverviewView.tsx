@@ -39,7 +39,7 @@ function ProjectRow({
   tasks: WorkspaceTask[];
   blocks: WorkspaceBlock[];
   now: Date;
-  processInfo: { name: string; thisWeek: ProcessBucketView } | null;
+  processInfo: { name: string; thisWeek: ProcessBucketView; measurementType?: string } | null;
   onOpen: () => void;
 }) {
   const week = projectWeekSummary(project.id, tasks, now);
@@ -68,10 +68,10 @@ function ProjectRow({
           <div className="pos-proj-week-process">
             <div className="pos-proj-week-nums">
               <span className="pos-mono" style={{ color: accent.color }}>
-                {formatProcessValue(processInfo.thisWeek.completed, processInfo.thisWeek.unit)}
+                {formatProcessValue(processInfo.thisWeek.completed, processInfo.thisWeek.unit, processInfo.measurementType)}
               </span>
               <span className="pos-mono pos-muted">
-                /{formatProcessValue(processInfo.thisWeek.target, processInfo.thisWeek.unit)}
+                /{formatProcessValue(processInfo.thisWeek.target, processInfo.thisWeek.unit, processInfo.measurementType)}
               </span>
             </div>
             <div className="pos-process-track thin" aria-hidden="true">
@@ -154,7 +154,7 @@ export type ProjectsOverviewViewProps = {
   tasks: WorkspaceTask[];
   blocks: WorkspaceBlock[];
   now: Date;
-  processByProjectId: Record<string, { name: string; thisWeek: ProcessBucketView } | null>;
+  processByProjectId: Record<string, { name: string; thisWeek: ProcessBucketView; measurementType?: string } | null>;
   weekLabel: string;
   onOpen: (id: string) => void;
   onCreate: () => void;

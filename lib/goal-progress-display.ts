@@ -10,6 +10,7 @@ export type ProcessBucketView = {
 export type ProcessSummary = {
   id: string;
   name: string;
+  measurementType?: string;
   thisWeek: ProcessBucketView;
   thisMonth: ProcessBucketView;
   allTime: ProcessBucketView;
@@ -21,15 +22,52 @@ const PERIOD_LABEL: Record<ProgressViewPeriod, string> = {
   all: "All time",
 };
 
-export function formatProcessValue(value: number, unit?: string) {
-  if (unit === "h") return `${value}h`;
-  if (Number.isInteger(value)) return `${value}`;
-  return `${Math.round(value * 10) / 10}`;
+const HOUR_UNITS = new Set(["h", "hr", "hrs", "hour", "hours"]);
+
+/** Normalize process units for display. DURATION → h; COUNT/BINARY with no unit → sessions. */
+export function normalizeProcessUnit(
+  unit?: string | null,
+  measurementType?: string | null,
+): string | undefined {
+  const raw = unit?.trim();
+  if (raw) {
+    if (HOUR_UNITS.has(raw.toLowerCase())) return "h";
+    return raw;
+  }
+  if (measurementType === "DURATION") return "h";
+  if (measurementType === "COUNT" || measurementType === "BINARY") return "sessions";
+  return undefined;
 }
 
-export function formatProcessRatio(completed: number, target: number, unit?: string) {
-  const left = Number.isInteger(completed) ? String(completed) : String(Math.round(completed * 10) / 10);
-  return `${left} / ${formatProcessValue(target, unit)}`;
+export function isHoursProcessUnit(unit?: string | null, measurementType?: string | null) {
+  return normalizeProcessUnit(unit, measurementType) === "h";
+}
+
+function formatNumber(value: number) {
+  if (Number.isInteger(value)) return String(value);
+  return String(Math.round(value * 10) / 10);
+}
+
+/** Always include a unit when known — e.g. 4.8h, 120h, 2 sessions. */
+export function formatProcessValue(
+  value: number,
+  unit?: string | null,
+  measurementType?: string | null,
+) {
+  const normalized = normalizeProcessUnit(unit, measurementType);
+  const num = formatNumber(value);
+  if (!normalized) return num;
+  if (normalized === "h") return `${num}h`;
+  return `${num} ${normalized}`;
+}
+
+export function formatProcessRatio(
+  completed: number,
+  target: number,
+  unit?: string | null,
+  measurementType?: string | null,
+) {
+  return `${formatProcessValue(completed, unit, measurementType)} / ${formatProcessValue(target, unit, measurementType)}`;
 }
 
 export function progressPeriodLabel(period: ProgressViewPeriod) {
@@ -57,10 +95,14 @@ export function processOnTargetSummary(
   return `${onTarget} of ${processes.length} ${noun}${qualifier} on target`;
 }
 
-export function processBucketCompact(bucket: ProcessBucketView) {
-  const targetLine = `${formatProcessRatio(bucket.completed, bucket.target, bucket.unit)} target`;
+export function processBucketCompact(
+  bucket: ProcessBucketView,
+  measurementType?: string | null,
+) {
+  const unit = bucket.unit;
+  const targetLine = `${formatProcessRatio(bucket.completed, bucket.target, unit, measurementType)} target`;
   const plannedLine = bucket.planned > 0
-    ? `${formatProcessValue(bucket.planned, bucket.unit)} planned`
+    ? `${formatProcessValue(bucket.planned, unit, measurementType)} planned`
     : null;
   return { targetLine, plannedLine };
 }

@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   formatObservationEntry,
+  formatProcessRatio,
+  formatProcessValue,
   isVagueGoalOutcome,
+  normalizeProcessUnit,
   processBucketCompact,
   processOnTargetSummary,
 } from "../lib/goal-progress-display.ts";
@@ -34,10 +37,27 @@ test("processOnTargetSummary counts processes meeting threshold", () => {
   assert.equal(processOnTargetSummary(processes, "week"), "2 of 3 processes currently on target");
 });
 
-test("processBucketCompact separates target and planned", () => {
-  const lines = processBucketCompact({ completed: 4, target: 5, planned: 6 });
-  assert.equal(lines.targetLine, "4 / 5 target");
-  assert.equal(lines.plannedLine, "6 planned");
+test("processBucketCompact separates target and planned with units", () => {
+  const hours = processBucketCompact({ completed: 4.8, target: 120, planned: 10.2, unit: "h" });
+  assert.equal(hours.targetLine, "4.8h / 120h target");
+  assert.equal(hours.plannedLine, "10.2h planned");
+
+  const sessions = processBucketCompact(
+    { completed: 4, target: 5, planned: 6 },
+    "COUNT",
+  );
+  assert.equal(sessions.targetLine, "4 sessions / 5 sessions target");
+  assert.equal(sessions.plannedLine, "6 sessions planned");
+});
+
+test("formatProcessValue always shows duration hours and count sessions", () => {
+  assert.equal(formatProcessValue(4.8, "h"), "4.8h");
+  assert.equal(formatProcessValue(120, "hours"), "120h");
+  assert.equal(formatProcessValue(4.8, undefined, "DURATION"), "4.8h");
+  assert.equal(formatProcessValue(2, undefined, "COUNT"), "2 sessions");
+  assert.equal(formatProcessValue(3, "sections"), "3 sections");
+  assert.equal(formatProcessRatio(4.8, 120, "h"), "4.8h / 120h");
+  assert.equal(normalizeProcessUnit("HR"), "h");
 });
 
 test("formatObservationEntry prefers readable month labels", () => {

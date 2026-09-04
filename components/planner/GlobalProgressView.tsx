@@ -25,7 +25,7 @@ export type GlobalProgressProjectRow = {
   project: ApiProject;
   goal?: ApiGoal;
   nextTitle: string | null;
-  processThisWeek: { name: string; thisWeek: ProcessBucketView } | null;
+  processThisWeek: { name: string; thisWeek: ProcessBucketView; measurementType?: string } | null;
   weekDone: number;
   weekOpen: number;
 };
@@ -142,7 +142,13 @@ function FocusGoalCard({
       {processes.length > 0 && (
         <div className="pos-pw-mini-stack">
           {processes.map((proc, i) => (
-            <ProcessMini key={proc.id} name={proc.name} bucket={proc.thisWeek} accentIndex={i} />
+            <ProcessMini
+              key={proc.id}
+              name={proc.name}
+              bucket={proc.thisWeek}
+              accentIndex={i}
+              measurementType={proc.measurementType}
+            />
           ))}
         </div>
       )}
@@ -180,7 +186,13 @@ function MaintainGoalCard({
       {processes.length > 0 ? (
         <div className="pos-pw-mini-stack">
           {processes.map((proc, i) => (
-            <ProcessMini key={proc.id} name={proc.name} bucket={proc.thisWeek} accentIndex={i} />
+            <ProcessMini
+              key={proc.id}
+              name={proc.name}
+              bucket={proc.thisWeek}
+              accentIndex={i}
+              measurementType={proc.measurementType}
+            />
           ))}
         </div>
       ) : (
@@ -357,12 +369,14 @@ export function GlobalProgressView({
                           {formatProcessValue(
                             row.processThisWeek.thisWeek.completed,
                             row.processThisWeek.thisWeek.unit,
+                            row.processThisWeek.measurementType,
                           )}
                         </span>
                         <span className="pos-mono pos-muted">
                           /{formatProcessValue(
                             row.processThisWeek.thisWeek.target,
                             row.processThisWeek.thisWeek.unit,
+                            row.processThisWeek.measurementType,
                           )}
                         </span>
                         <div className="pos-process-track thin" aria-hidden="true">

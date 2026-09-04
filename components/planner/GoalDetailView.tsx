@@ -348,6 +348,7 @@ export function GoalDetailView({
                       name={proc.name}
                       bucket={proc.thisWeek}
                       accentIndex={index}
+                      measurementType={proc.measurementType}
                     />
                   ))}
                 </div>
@@ -403,9 +404,12 @@ export function GoalDetailView({
                     const accent = processAccent(index);
                     const process = goalProcesses.find((p) => p.id === project.defaultGoalProcessId)
                       ?? processes.find((p) => p.id === project.defaultGoalProcessId);
-                    const bucket = process
-                      ? (progress?.progress.processes.find((p) => p.id === process.id)?.thisWeek ?? null)
-                      : null;
+                    const progressProc = process
+                      ? progress?.progress.processes.find((p) => p.id === process.id)
+                      : undefined;
+                    const bucket = progressProc?.thisWeek ?? null;
+                    const measurementType = progressProc?.measurementType
+                      ?? goalProcesses.find((p) => p.id === process?.id)?.measurementType;
                     const projectWeek = weekTasks.filter((t) => t.projectId === project.id);
                     const next = projectWeek[0];
                     const nextBlk = next ? blockForTask(next.id, blocks) : undefined;
@@ -430,8 +434,8 @@ export function GoalDetailView({
                         {bucket && (
                           <div className="pos-project-week">
                             <div className="pos-project-week-nums pos-mono" style={{ color: accent.color }}>
-                              <em>{formatProcessValue(bucket.completed, bucket.unit)}</em>
-                              <span>/ {formatProcessValue(bucket.target, bucket.unit)}</span>
+                              <em>{formatProcessValue(bucket.completed, bucket.unit, measurementType)}</em>
+                              <span>/ {formatProcessValue(bucket.target, bucket.unit, measurementType)}</span>
                             </div>
                             <div className="pos-process-track thin" aria-hidden="true">
                               <div
@@ -550,7 +554,8 @@ export function GoalDetailView({
                 <ul className="pos-systems-list pos-systems-overview">
                   {goalProcesses.map((proc, index) => {
                     const accent = processAccent(index);
-                    const bucket = processes.find((p) => p.id === proc.id)?.thisWeek;
+                    const progressProc = processes.find((p) => p.id === proc.id);
+                    const bucket = progressProc?.thisWeek;
                     const pct = bucket && bucket.target > 0
                       ? Math.min((bucket.completed / bucket.target) * 100, 100)
                       : 0;
@@ -562,8 +567,8 @@ export function GoalDetailView({
                             <span>{proc.name}</span>
                             {bucket && (
                               <span className="pos-mono">
-                                {formatProcessValue(bucket.completed, bucket.unit)}/
-                                {formatProcessValue(bucket.target, bucket.unit)}
+                                {formatProcessValue(bucket.completed, bucket.unit, progressProc?.measurementType ?? proc.measurementType)}/
+                                {formatProcessValue(bucket.target, bucket.unit, progressProc?.measurementType ?? proc.measurementType)}
                               </span>
                             )}
                           </div>

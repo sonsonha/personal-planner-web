@@ -148,7 +148,13 @@ function GoalCard({
         <div className="pos-ov-process-block">
           <div className="pos-ov-metric-label">Process this week</div>
           {processes.map((proc, i) => (
-            <ProcessMini key={proc.id} name={proc.name} bucket={proc.thisWeek} accentIndex={i} />
+            <ProcessMini
+              key={proc.id}
+              name={proc.name}
+              bucket={proc.thisWeek}
+              accentIndex={i}
+              measurementType={proc.measurementType}
+            />
           ))}
         </div>
       ) : (

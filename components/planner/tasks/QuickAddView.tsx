@@ -6,6 +6,7 @@ import {
   PRIORITY_META,
   type TaskHorizon,
   type TaskPriority,
+  type TasksGoalOption,
   type TasksProjectOption,
 } from "./types";
 
@@ -15,19 +16,25 @@ const FOR_OPTIONS: Array<{ id: TaskHorizon; label: string }> = [
   { id: "month", label: "Month" },
 ];
 
-const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120] as const;
-
 export type QuickAddViewProps = {
   title: string;
   onTitleChange: (value: string) => void;
+  goalId: string | null;
+  onGoalChange: (goalId: string | null) => void;
+  goals: TasksGoalOption[];
   projectId: string | null;
   onProjectChange: (projectId: string | null) => void;
+  /** Projects already filtered for the selected goal (plus Inbox/none). */
   projects: TasksProjectOption[];
+  /** True until a Goal is chosen (Inbox path keeps project disabled too). */
+  projectDisabled?: boolean;
+  goalProcessId: string | null;
+  onGoalProcessChange: (goalProcessId: string | null) => void;
+  processes: Array<{ id: string; name: string }>;
+  processHint?: string;
   /** Planning period membership — labeled "For", never "Due". */
   forHorizon: Exclude<TaskHorizon, null>;
   onForHorizonChange: (value: Exclude<TaskHorizon, null>) => void;
-  duration: number;
-  onDurationChange: (minutes: number) => void;
   priority: TaskPriority;
   onPriorityChange: (priority: TaskPriority) => void;
   /** Parent-owned period picker (date / week / month). */
@@ -47,13 +54,19 @@ export type QuickAddViewProps = {
 export function QuickAddView({
   title,
   onTitleChange,
+  goalId,
+  onGoalChange,
+  goals,
   projectId,
   onProjectChange,
   projects,
+  projectDisabled = false,
+  goalProcessId,
+  onGoalProcessChange,
+  processes,
+  processHint,
   forHorizon,
   onForHorizonChange,
-  duration,
-  onDurationChange,
   priority,
   onPriorityChange,
   periodControl,
@@ -67,6 +80,10 @@ export function QuickAddView({
   onSubmit,
   onClose,
 }: QuickAddViewProps) {
+  const activeGoals = goals.filter(
+    (goal) => goal.status === "ACTIVE" || goal.status === "active",
+  );
+
   return (
     <div className="pos-qa-backdrop">
       <button
@@ -108,11 +125,27 @@ export function QuickAddView({
         <div className="pos-qa-fields">
           <div className="pos-qa-block">
             <label className="pos-qa-field">
-              <span>Belongs to</span>
+              <span>Goal</span>
+              <select
+                value={goalId ?? ""}
+                onChange={(event) => onGoalChange(event.target.value || null)}
+                disabled={saving}
+              >
+                <option value="">No goal (Inbox)</option>
+                {activeGoals.map((goal) => (
+                  <option key={goal.id} value={goal.id}>
+                    {goal.outcome?.trim() || goal.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="pos-qa-field">
+              <span>Project</span>
               <select
                 value={projectId ?? ""}
                 onChange={(event) => onProjectChange(event.target.value || null)}
-                disabled={saving}
+                disabled={saving || projectDisabled}
               >
                 {projects.map((project) => (
                   <option key={project.id ?? "inbox"} value={project.id ?? ""}>
@@ -120,7 +153,23 @@ export function QuickAddView({
                   </option>
                 ))}
               </select>
-              <p className="pos-qa-for-hint">Project also links its Goal when configured.</p>
+            </label>
+
+            <label className="pos-qa-field">
+              <span>Process</span>
+              <select
+                value={goalProcessId ?? ""}
+                onChange={(event) => onGoalProcessChange(event.target.value || null)}
+                disabled={saving || !goalId}
+              >
+                <option value="">None</option>
+                {processes.map((process) => (
+                  <option key={process.id} value={process.id}>
+                    {process.name}
+                  </option>
+                ))}
+              </select>
+              {processHint && <p className="pos-qa-for-hint">{processHint}</p>}
             </label>
 
             <div className="pos-qa-field">
@@ -170,21 +219,6 @@ export function QuickAddView({
           </div>
 
           <div className="pos-qa-block pos-qa-block-stack">
-            <label className="pos-qa-field">
-              <span>Estimated effort</span>
-              <select
-                value={duration}
-                onChange={(event) => onDurationChange(Number(event.target.value))}
-                disabled={saving}
-              >
-                {DURATION_OPTIONS.map((mins) => (
-                  <option key={mins} value={mins}>
-                    {mins < 60 ? `${mins} minutes` : mins === 60 ? "1 hour" : `${mins / 60} hours`}
-                  </option>
-                ))}
-              </select>
-            </label>
-
             <div className="pos-qa-priority" role="group" aria-label="Priority">
               <span className="pos-qa-field-label">Priority</span>
               <div className="pos-qa-priority-chips">

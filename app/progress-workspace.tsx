@@ -268,7 +268,7 @@ export function ProgressWorkspace({
       goal,
       nextTitle: weekOpen[0]?.title ?? null,
       processThisWeek: process
-        ? { name: process.name, thisWeek: process.thisWeek }
+        ? { name: process.name, thisWeek: process.thisWeek, measurementType: process.measurementType }
         : null,
       weekDone: weekDone.length,
       weekOpen: weekOpen.length,

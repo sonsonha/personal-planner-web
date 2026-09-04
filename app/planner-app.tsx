@@ -39,6 +39,7 @@ import {
   TaskEditorView,
   TasksWorkspaceView,
 } from "@/components/planner/tasks";
+import type { TasksGoalOption, TasksProjectOption } from "@/components/planner/tasks/types";
 import {
   GoogleEventPopover,
   PersonalOsBlockPopover,
@@ -1959,7 +1960,7 @@ export function PlannerApp({
       title: task.title,
       day,
       start,
-      duration: task.duration,
+      duration: DEFAULT_SESSION_MINUTES,
       color: priorityColor(task.priority),
       type: "task",
       taskId: task.id,
@@ -1984,7 +1985,7 @@ export function PlannerApp({
     showToast(liveDataRef.current ? "Scheduling task…" : "Task scheduled · demo mode");
     if (!liveDataRef.current) return;
 
-    const endAt = new Date(startAt.getTime() + task.duration * 60_000);
+    const endAt = new Date(startAt.getTime() + DEFAULT_SESSION_MINUTES * 60_000);
     try {
       const saved = await createPlannerTimeBlock({
         taskId: task.id,
@@ -2022,10 +2023,15 @@ export function PlannerApp({
     scope: HorizonScope | null = captureScope,
     when: Date = taskAnchor,
     repeatWeeks: number | null = null,
+    goalId: string | null | undefined = undefined,
+    goalProcessId: string | null | undefined = undefined,
   ): Promise<PlannerTask | null> => {
-    const project = projects.find((item) => item.id === projectId) ?? projects.at(-1)!;
-    const inheritedGoalId = project.goalId ?? null;
-    const inheritedGoalProcessId = project.defaultGoalProcessId ?? null;
+    const project = projects.find((item) => item.id === projectId)
+      ?? (projectId === null ? { id: null, title: "Inbox", color: "#94a3b8" } as ProjectOption : projects.at(-1)!);
+    const resolvedGoalId = goalId !== undefined ? goalId : (project.goalId ?? null);
+    const resolvedGoalProcessId = goalProcessId !== undefined
+      ? goalProcessId
+      : (project.defaultGoalProcessId ?? null);
     const resolvedScope = scope && scope !== "all" ? scope : "day";
     const periodAnchor = startOfDay(when);
     const period = duePeriodForScope(resolvedScope, periodAnchor);
@@ -2034,8 +2040,8 @@ export function PlannerApp({
       title,
       notes: "",
       projectId,
-      goalId: inheritedGoalId,
-      goalProcessId: inheritedGoalProcessId,
+      goalId: resolvedGoalId,
+      goalProcessId: resolvedGoalProcessId,
       project: project.title,
       color: project.color,
       duration,
@@ -2067,8 +2073,8 @@ export function PlannerApp({
       const saved = await createPlannerTask({
         title,
         projectId,
-        goalId: inheritedGoalId,
-        goalProcessId: inheritedGoalProcessId,
+        goalId: resolvedGoalId,
+        goalProcessId: resolvedGoalProcessId,
         durationMinutes: duration,
         priority: priorityToApi(priority),
         dueAt: period.dueAt,
@@ -2912,6 +2918,7 @@ export function PlannerApp({
       {quickAddOpen && (
         <QuickAdd
           projects={projects}
+          goals={goals}
           scope={captureScope}
           anchor={taskAnchor}
           onClose={() => setQuickAddOpen(false)}
@@ -4644,12 +4651,14 @@ function TaskEditor({
 
 function QuickAdd({
   projects,
+  goals,
   scope,
   anchor,
   onClose,
   onAdd,
 }: {
   projects: ProjectOption[];
+  goals: ApiGoal[];
   scope: HorizonScope | null;
   anchor: Date;
   onClose: () => void;
@@ -4661,13 +4670,16 @@ function QuickAdd({
     scope: HorizonScope | null,
     when: Date,
     repeatWeeks?: number | null,
+    goalId?: string | null,
+    goalProcessId?: string | null,
   ) => void;
 }) {
   const defaultHorizon: Exclude<HorizonScope, "all"> =
     scope === "week" || scope === "month" || scope === "day" ? scope : "day";
   const [title, setTitle] = useState("");
-  const [duration, setDuration] = useState(30);
-  const [projectId, setProjectId] = useState<string | null>(projects[0]?.id ?? null);
+  const [goalId, setGoalId] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [goalProcessId, setGoalProcessId] = useState<string | null>(null);
   const [priority, setPriority] = useState<TaskPriority>("p2");
   const [horizon, setHorizon] = useState<Exclude<HorizonScope, "all">>(defaultHorizon);
   const [when, setWhen] = useState(() => startOfDay(anchor));
@@ -4676,6 +4688,65 @@ function QuickAdd({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const goalOptions: TasksGoalOption[] = goals.map((goal) => ({
+    id: goal.id,
+    title: goal.title,
+    outcome: goal.outcome,
+    status: goal.status,
+    processes: (goal.processes ?? []).map((process) => ({
+      id: process.id,
+      name: process.name,
+      active: process.active,
+    })),
+  }));
+
+  const selectedGoal = goals.find((goal) => goal.id === goalId);
+  const processes = (selectedGoal?.processes ?? [])
+    .filter((process) => process.active)
+    .map((process) => ({ id: process.id, name: process.name }));
+
+  const projectOptions: TasksProjectOption[] = !goalId
+    ? [{ id: null, title: "Inbox", color: "#94a3b8" }]
+    : [
+        { id: null, title: "None", color: "#94a3b8", goalId },
+        ...projects
+          .filter((project) => project.id && project.goalId === goalId)
+          .map((project) => ({
+            id: project.id,
+            title: project.title,
+            color: project.color,
+            goalId: project.goalId ?? null,
+            defaultGoalProcessId: project.defaultGoalProcessId ?? null,
+          })),
+      ];
+
+  const processHint = !goalId
+    ? "Won’t count toward a process"
+    : goalProcessId
+      ? `Counts toward ${processes.find((p) => p.id === goalProcessId)?.name ?? "selected process"}`
+      : "Won’t count toward a process";
+
+  const onGoalChange = (nextGoalId: string | null) => {
+    setGoalId(nextGoalId);
+    setProjectId(null);
+    setGoalProcessId(null);
+  };
+
+  const onProjectChange = (nextProjectId: string | null) => {
+    setProjectId(nextProjectId);
+    if (!goalId) {
+      setGoalProcessId(null);
+      return;
+    }
+    const nextProject = projects.find((project) => project.id === nextProjectId);
+    const defaultId = nextProject?.defaultGoalProcessId ?? null;
+    const valid = Boolean(
+      defaultId
+      && (selectedGoal?.processes ?? []).some((process) => process.active && process.id === defaultId),
+    );
+    setGoalProcessId(valid ? defaultId : null);
+  };
+
   const submit = () => {
     if (!title.trim() || saving) return;
     setSaving(true);
@@ -4683,20 +4754,36 @@ function QuickAdd({
     const weeks = horizon === "week" && repeatWeekly
       ? Math.max(1, Math.min(52, Number(repeatWeeks) || 8))
       : null;
-    onAdd(title.trim(), duration, projectId, priority, horizon, when, weeks);
+    onAdd(
+      title.trim(),
+      DEFAULT_SESSION_MINUTES,
+      projectId,
+      priority,
+      horizon,
+      when,
+      weeks,
+      goalId,
+      goalProcessId,
+    );
   };
 
   return (
     <QuickAddView
       title={title}
       onTitleChange={setTitle}
+      goalId={goalId}
+      onGoalChange={onGoalChange}
+      goals={goalOptions}
       projectId={projectId}
-      onProjectChange={setProjectId}
-      projects={projects}
+      onProjectChange={onProjectChange}
+      projects={projectOptions}
+      projectDisabled={!goalId}
+      goalProcessId={goalProcessId}
+      onGoalProcessChange={setGoalProcessId}
+      processes={processes}
+      processHint={processHint}
       forHorizon={horizon}
       onForHorizonChange={setHorizon}
-      duration={duration}
-      onDurationChange={setDuration}
       priority={priority}
       onPriorityChange={setPriority}
       periodControl={<PeriodFields horizon={horizon} value={when} onChange={setWhen} compact />}
