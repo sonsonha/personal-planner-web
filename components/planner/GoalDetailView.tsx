@@ -419,6 +419,7 @@ export function GoalDetailView({
                         type="button"
                         className="pos-project-card"
                         onClick={() => onOpenProject?.(project.id)}
+                        aria-label={`Edit project ${project.title}`}
                       >
                         <div className="pos-project-card-top">
                           <div>
@@ -430,6 +431,7 @@ export function GoalDetailView({
                             </strong>
                             {process && <span>{process.name}</span>}
                           </div>
+                          <span className="pos-btn-ghost pos-system-edit" aria-hidden="true">Edit</span>
                         </div>
                         {bucket && (
                           <div className="pos-project-week">

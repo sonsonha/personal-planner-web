@@ -2881,7 +2881,6 @@ export function PlannerApp({
             }}
             onOpenTask={setEditingTaskId}
             onGoCalendar={() => goTo("calendar")}
-            onOpenProject={(projectId) => goTo("projects", projectId)}
             onViewFullProgress={(goalId) => goTo("progress", goalId)}
             initialDetailId={entityId}
             onOpenGoal={(goalId) => goTo("goals", goalId)}

@@ -1280,6 +1280,17 @@
   outline: none;
 }
 
+.pos-project-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pos-project-card-top > div {
+  min-width: 0;
+}
+
 .pos-project-card-top strong {
   display: block;
   color: var(--pos-ink);
@@ -1288,11 +1299,16 @@
   line-height: 1.3;
 }
 
-.pos-project-card-top span {
+.pos-project-card-top > div > span {
   display: block;
   margin-top: 2px;
   color: var(--pos-ink-muted);
   font-size: 11px;
+}
+
+.pos-project-card-top .pos-system-edit {
+  flex: 0 0 auto;
+  margin-top: 0;
 }
 
 .pos-project-week-nums {

@@ -376,7 +376,6 @@ export function GoalsWorkspace({
   onOpenTask,
   onGoCalendar,
   onAddWeekTask,
-  onOpenProject,
   onViewFullProgress,
   evidenceEpoch = 0,
   initialDetailId = null,
@@ -393,7 +392,6 @@ export function GoalsWorkspace({
   onOpenTask: (taskId: string) => void;
   onGoCalendar: () => void;
   onAddWeekTask: (projectId: string | null, title: string) => void;
-  onOpenProject?: (projectId: string) => void;
   onViewFullProgress?: (goalId: string) => void;
   evidenceEpoch?: number;
   initialDetailId?: string | null;
@@ -501,7 +499,6 @@ export function GoalsWorkspace({
           onOpenTask={onOpenTask}
           onGoCalendar={onGoCalendar}
           onAddWeekTask={onAddWeekTask}
-          onOpenProject={onOpenProject}
           onViewFullProgress={onViewFullProgress}
           evidenceEpoch={evidenceEpoch}
           openReview={openReview}
@@ -799,7 +796,6 @@ function GoalDetailPage({
   onOpenTask,
   onGoCalendar,
   onAddWeekTask,
-  onOpenProject,
   onViewFullProgress,
   evidenceEpoch = 0,
   openReview = false,
@@ -816,12 +812,11 @@ function GoalDetailPage({
   onOpenTask: (taskId: string) => void;
   onGoCalendar: () => void;
   onAddWeekTask: (projectId: string | null, title: string) => void;
-  onOpenProject?: (projectId: string) => void;
   onViewFullProgress?: (goalId: string) => void;
   evidenceEpoch?: number;
   openReview?: boolean;
 }) {
-  const [creatingProject, setCreatingProject] = useState(false);
+  const [projectModal, setProjectModal] = useState<ApiProject | "create" | null>(null);
   const [editingGoal, setEditingGoal] = useState(false);
   const [managingMilestones, setManagingMilestones] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
@@ -933,7 +928,10 @@ function GoalDetailPage({
         onReview={() => setShowReview(true)}
         onCopyContext={() => { void copyFullContext(); }}
         onOpenTask={onOpenTask}
-        onOpenProject={onOpenProject}
+        onOpenProject={(projectId) => {
+          const project = projects.find((item) => item.id === projectId && item.active);
+          if (project) setProjectModal(project);
+        }}
         onSetMilestone={setMilestoneCurrent}
         onManageMilestones={() => setManagingMilestones(true)}
         onAddWeekWork={(title) => {
@@ -943,7 +941,7 @@ function GoalDetailPage({
           }
           onAddWeekTask(linked[0]!.id, title);
         }}
-        onCreateProject={() => setCreatingProject(true)}
+        onCreateProject={() => setProjectModal("create")}
         onAddProcess={() => { setEntityError(null); setProcessModal("create"); }}
         onEditProcess={(processId) => {
           const process = (goal.processes ?? []).find((item) => item.id === processId);
@@ -1000,15 +998,15 @@ function GoalDetailPage({
         />
       )}
 
-      {creatingProject && (
+      {projectModal && (
         <ProjectEditorModal
-          project={null}
+          project={projectModal === "create" ? null : projectModal}
           goals={goals}
           prefillGoalId={goal.id}
           live={live}
-          onClose={() => setCreatingProject(false)}
+          onClose={() => setProjectModal(null)}
           onSaved={(message) => {
-            setCreatingProject(false);
+            setProjectModal(null);
             onChanged(message);
           }}
         />
