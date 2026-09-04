@@ -428,6 +428,10 @@ function minutesToTime(minutes: number) {
   return `${twelve}:${String(mins).padStart(2, "0")} ${suffix}`;
 }
 
+function timeRangeLabel(start: number, duration: number) {
+  return `${minutesToTime(start)} – ${minutesToTime(start + duration)}`;
+}
+
 function durationLabel(minutes: number) {
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
@@ -588,7 +592,7 @@ function defaultScheduleStart() {
 
 function scheduleLabel(block?: CalendarBlock) {
   if (!block) return "Scheduled";
-  return `${minutesToTime(block.start)} · ${block.duration < 60 ? `${block.duration}m` : durationLabel(block.duration)}`;
+  return timeRangeLabel(block.start, block.duration);
 }
 
 function projectOptions(projects: ApiProject[]): ProjectOption[] {
@@ -3464,9 +3468,7 @@ function CalendarEvent({
       </div>
       {showTime && (
         <span className="event-time pos-mono">
-          {isCompact
-            ? `${minutesToTime(block.start)}–${minutesToTime(block.start + displayDuration)}`
-            : `${minutesToTime(block.start)} · ${durationLabel(displayDuration)}`}
+          {timeRangeLabel(block.start, displayDuration)}
         </span>
       )}
       {showMeta && block.meta && <span className="event-meta">{block.meta}</span>}
