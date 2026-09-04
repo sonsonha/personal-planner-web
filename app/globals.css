@@ -486,6 +486,7 @@ button {
   display: grid;
   min-width: 0;
   min-height: 0;
+  height: 100%;
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -497,8 +498,9 @@ button {
   display: grid;
   min-width: 0;
   min-height: 0;
+  height: 100%;
   grid-template-rows: 57px 34px minmax(0, 1fr);
-  background: #fff;
+  background: var(--pos-card);
 }
 
 .calendar-days,
@@ -1027,8 +1029,9 @@ button {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #8a90a2;
-  font-size: 9px;
+  color: var(--pos-ink);
+  font-size: 12px;
+  font-weight: 550;
 }
 
 .task-priority-chip {
@@ -1682,6 +1685,7 @@ button {
   .tasks-toggle { padding: 0 8px; }
   .tasks-toggle { font-size: 0; }
   .calendar-card { grid-template-rows: 53px 32px minmax(0, 1fr); }
+  .calendar-card.pos-cal.month-view { grid-template-rows: minmax(0, 1fr); }
   .calendar-grid { min-width: 0; }
   .calendar-days,
   .all-day-row,
@@ -2507,6 +2511,11 @@ button {
   box-shadow: var(--pos-shadow-sm);
 }
 
+/* Month view: single full-height child (week grid rows would otherwise squash it). */
+.calendar-card.pos-cal.month-view {
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .pos-cal .calendar-days {
   border-bottom: 1px solid var(--pos-border);
   background: var(--pos-cal-header);
@@ -2598,20 +2607,28 @@ button {
   font-weight: 600;
 }
 
-/* Personal OS / Google / done / sync — priority full-fill for Personal OS Sessions. */
+/* Personal OS / Google / done / sync — priority-colored Sessions. */
 .pos-cal .calendar-event {
   --event-color: var(--priority-solid, #2563eb);
   z-index: 2;
   overflow: hidden;
   padding: 5px 8px;
-  border: 1px solid color-mix(in srgb, var(--priority-border, var(--event-color)) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--priority-border, var(--event-color)) 45%, var(--pos-border));
   border-left: 3px solid var(--priority-strong, var(--event-color));
   border-radius: 8px;
-  background: var(--priority-fill, var(--event-color));
-  color: var(--priority-on-fill, #fff);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+  /* Light: soft tint + solid dark text (readable). Dark overrides below. */
+  background: var(--priority-bg, var(--priority-fill));
+  color: var(--pos-ink);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
   transform: none;
   cursor: grab;
+}
+
+[data-theme="dark"] .pos-cal .calendar-event:not(.external) {
+  background: var(--priority-fill, var(--event-color));
+  color: var(--priority-on-fill, #fff);
+  border-color: color-mix(in srgb, var(--priority-border, var(--event-color)) 55%, transparent);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
 }
 
 .pos-cal .calendar-event:hover {
@@ -2621,8 +2638,13 @@ button {
 }
 
 .pos-cal .calendar-event.selected {
-  outline: 2px solid color-mix(in srgb, var(--priority-on-fill, #fff) 55%, var(--priority-border));
+  outline: 2px solid color-mix(in srgb, var(--priority-strong, var(--pos-primary)) 55%, var(--pos-border));
   outline-offset: 1px;
+  box-shadow: 0 0 0 1px var(--priority-border), 0 6px 16px rgba(15, 23, 42, 0.12);
+}
+
+[data-theme="dark"] .pos-cal .calendar-event:not(.external).selected {
+  outline: 2px solid color-mix(in srgb, var(--priority-on-fill, #fff) 55%, var(--priority-border));
   box-shadow: 0 0 0 1px var(--priority-border), 0 6px 16px rgba(15, 23, 42, 0.2);
 }
 
@@ -2674,7 +2696,7 @@ button {
 }
 
 .pos-cal .event-title-row strong {
-  font-size: var(--pos-text-sm);
+  font-size: 13px;
   font-weight: 700;
   line-height: var(--pos-leading-tight);
   color: inherit;
@@ -2682,7 +2704,7 @@ button {
 }
 
 .pos-cal .calendar-event.tiny .event-title-row strong {
-  font-size: var(--pos-text-xs);
+  font-size: 12px;
 }
 
 .pos-cal .event-time,
@@ -2691,22 +2713,29 @@ button {
   display: block;
   margin-top: 2px;
   overflow: hidden;
-  color: color-mix(in srgb, var(--priority-on-fill, #fff) 88%, transparent);
-  font-size: var(--pos-text-xs);
+  color: var(--pos-ink);
+  font-size: 12px;
   line-height: var(--pos-leading-tight);
-  font-weight: 550;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+[data-theme="dark"] .pos-cal .calendar-event:not(.external) .event-time,
+[data-theme="dark"] .pos-cal .calendar-event:not(.external) .event-meta,
+[data-theme="dark"] .pos-cal .calendar-event:not(.external) .event-sync-note {
+  color: color-mix(in srgb, var(--priority-on-fill, #fff) 92%, transparent);
+}
+
 .pos-cal .calendar-event.done .event-time,
 .pos-cal .calendar-event.done .event-meta {
-  color: color-mix(in srgb, var(--priority-on-fill, #fff) 70%, transparent);
+  color: inherit;
+  opacity: 0.8;
 }
 
 .pos-cal .calendar-event.external .event-time,
 .pos-cal .calendar-event.external .event-meta {
-  color: var(--pos-ink-muted);
+  color: var(--pos-ink);
 }
 
 .pos-cal .calendar-event.sync-failed .event-sync-note {
@@ -2719,6 +2748,12 @@ button {
   width: 16px;
   height: 16px;
   min-width: 16px;
+  border-color: color-mix(in srgb, var(--priority-strong, var(--pos-ink)) 45%, transparent);
+  background: color-mix(in srgb, var(--pos-card) 70%, transparent);
+  color: var(--priority-strong, var(--pos-ink));
+}
+
+[data-theme="dark"] .pos-cal .calendar-event:not(.external) .event-complete {
   border-color: color-mix(in srgb, var(--priority-on-fill, #fff) 55%, transparent);
   background: color-mix(in srgb, var(--priority-on-fill, #fff) 18%, transparent);
   color: var(--priority-on-fill, #fff);
@@ -2726,7 +2761,7 @@ button {
 
 .pos-cal .calendar-event.done .event-complete,
 .pos-cal .event-complete.checked {
-  border-color: #fff;
+  border-color: #059669;
   background: #059669;
   color: #fff;
   opacity: 1;
@@ -2899,8 +2934,8 @@ button {
 
 .pos-cal-side-progress {
   margin-top: 3px;
-  color: var(--pos-ink-muted);
-  font-size: var(--pos-text-xs);
+  color: var(--pos-ink);
+  font-size: 12px;
   font-weight: 550;
 }
 
@@ -2922,9 +2957,10 @@ button {
 
 .pos-cal-side .drag-hint {
   margin: 10px 12px 6px;
-  color: var(--pos-ink-muted);
-  font-size: var(--pos-text-xs);
+  color: var(--pos-ink);
+  font-size: 12px;
   font-weight: 550;
+  opacity: 0.78;
 }
 
 .pos-cal-side .task-list {
@@ -2958,9 +2994,14 @@ button {
 .pos-cal-side .task-meta {
   gap: 8px;
   margin-top: 4px;
-  color: var(--pos-ink-muted);
-  font-size: var(--pos-text-xs);
+  color: var(--pos-ink);
+  font-size: 12px;
   font-weight: 550;
+}
+
+.pos-cal-side .task-meta .task-project,
+.pos-cal-side .task-meta .pos-mono {
+  color: var(--pos-ink);
 }
 
 .pos-cal-side .empty-tasks {
@@ -2973,39 +3014,52 @@ button {
   font-size: var(--pos-text-md);
 }
 
-/* Month */
+/* Month — fill the calendar card edge-to-edge */
 .month-calendar.pos-cal-month {
+  display: flex;
+  flex-direction: column;
   gap: 0;
   padding: 0;
   height: 100%;
+  min-height: 0;
   background: var(--pos-card);
 }
 
 .pos-cal-month .month-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  flex: 0 0 auto;
   gap: 0;
   border-bottom: 1px solid var(--pos-border);
   background: var(--pos-cal-header);
 }
 
 .pos-cal-month .month-weekdays span {
-  padding: 10px 0;
+  padding: 12px 0;
   border-right: 1px solid var(--pos-border-light);
-  color: var(--pos-ink-muted);
-  font-size: var(--pos-text-xs);
+  color: var(--pos-ink);
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .pos-cal-month .month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: repeat(6, minmax(0, 1fr));
   gap: 0;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .pos-cal-month .month-cell {
-  gap: 4px;
-  min-height: 96px;
-  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 0;
+  height: 100%;
+  padding: 10px 8px;
   border: 0;
   border-right: 1px solid var(--pos-border-light);
   border-bottom: 1px solid var(--pos-border-light);
@@ -3013,6 +3067,7 @@ button {
   background: var(--pos-card);
   color: var(--pos-ink);
   cursor: pointer;
+  text-align: left;
 }
 
 .pos-cal-month .month-cell:hover {
@@ -3026,6 +3081,8 @@ button {
 
 .pos-cal-month .month-cell.muted {
   background: var(--pos-surface-alt);
+  opacity: 1;
+  color: var(--pos-ink-secondary);
 }
 
 .pos-cal-month .month-cell-head {
@@ -3036,12 +3093,13 @@ button {
 
 .pos-cal-month .month-cell strong {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   place-items: center;
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pos-ink);
 }
 
 .pos-cal-month .month-cell.today strong {
@@ -3073,46 +3131,62 @@ button {
 }
 
 .pos-cal-month .month-events {
+  display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
+  gap: 3px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .pos-cal-month .month-event-chip {
   overflow: hidden;
-  padding: 2px 5px;
-  border-radius: 4px;
-  font-size: 10px;
-  line-height: 1.2;
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .pos-cal-month .month-event-chip.os {
-  background: #eef2ff;
-  color: #3730a3;
+  background: var(--priority-bg, var(--pos-primary-soft));
+  color: var(--pos-ink);
+  border-left: 3px solid var(--priority-strong, var(--pos-primary));
 }
 
 .pos-cal-month .month-event-chip.gcal {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--pos-surface-alt);
+  color: var(--pos-ink);
+  border-left: 3px solid var(--pos-ink-muted);
+}
+
+.pos-cal-month .month-events small {
+  color: var(--pos-ink);
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .pos-cal-month .month-legend {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 14px;
   padding: 8px 14px;
-  border-top: 1px solid #f0ede6;
+  border-top: 1px solid var(--pos-border);
   background: var(--pos-surface-alt);
-  color: #6b7280;
-  font-size: 10px;
+  color: var(--pos-ink);
+  font-size: 12px;
+  font-weight: 550;
 }
 
 .pos-cal-month .month-legend em {
   margin-left: auto;
   font-style: normal;
-  color: #9ca3af;
+  color: var(--pos-ink);
+  font-weight: 550;
 }
 
 .pos-cal-month .month-legend span {

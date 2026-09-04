@@ -2454,7 +2454,7 @@ export function PlannerApp({
 
         <div className={`planner-layout ${taskPanelOpen && view !== "month" ? "with-panel" : ""}`}>
           <section
-            className="calendar-card pos-cal"
+            className={`calendar-card pos-cal${view === "month" ? " month-view" : ""}`}
             aria-label={view === "month" ? "Monthly calendar" : "Weekly calendar"}
             aria-busy={connection === "loading" || connection === "syncing"}
           >
@@ -3530,7 +3530,12 @@ function MonthCalendar({
               </div>
               <div className="month-events">
                 {labels.map((block) => (
-                  <span key={block.id} className="month-event-chip os" title={block.title}>
+                  <span
+                    key={block.id}
+                    className="month-event-chip os"
+                    data-priority={block.priority ?? "p2"}
+                    title={block.title}
+                  >
                     {block.title}
                   </span>
                 ))}
