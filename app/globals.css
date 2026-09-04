@@ -4047,6 +4047,9 @@ button {
 .gp-ai-drag:disabled{opacity:.4;cursor:not-allowed}
 .gp-ai-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
 .gp-ai-why,.gp-ai-meta{font-size:.85rem;opacity:.72;margin:0}
+.gp-ai-why-field{display:grid;gap:.35rem;font-size:.85rem;color:var(--pos-ink-muted,rgba(0,0,0,.65))}
+.gp-ai-why-field textarea{width:100%;min-height:2.5rem;resize:vertical;padding:.5rem .65rem;border:1px solid var(--pos-border,rgba(0,0,0,.12));border-radius:8px;background:var(--pos-card,#fff);color:var(--pos-ink,#111);font:inherit;opacity:1}
+.gp-ai-row-3{grid-template-columns:1fr 1fr 1fr}
 .gp-ai-check-row{display:flex;gap:.5rem;align-items:flex-start;margin:.35rem 0}
 .gp-ai-list{margin:.25rem 0 0;padding-left:1.1rem}
 .gp-ai-footer{flex-wrap:wrap;gap:.5rem}

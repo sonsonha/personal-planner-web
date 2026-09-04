@@ -5,10 +5,15 @@ import type { GoalMetricObservation } from "@/lib/planner-api";
 
 export type OutcomeObservationModalProps = {
   metricHint?: string | null;
+  /** Parsed outcome target (e.g. 1 offer). Editable so users can fix 0/0-style bugs. */
+  initialTarget?: number | null;
   saving?: boolean;
   error?: string | null;
   onClose: () => void;
-  onSave: (observation: GoalMetricObservation) => void | Promise<void>;
+  onSave: (
+    observation: GoalMetricObservation,
+    meta?: { target: number },
+  ) => void | Promise<void>;
 };
 
 function uid() {
@@ -27,12 +32,16 @@ function todayInputValue() {
 
 export function OutcomeObservationModal({
   metricHint,
+  initialTarget = null,
   saving = false,
   error,
   onClose,
   onSave,
 }: OutcomeObservationModalProps) {
-  const [value, setValue] = useState("1");
+  const [value, setValue] = useState("0");
+  const [target, setTarget] = useState(
+    initialTarget != null && Number.isFinite(initialTarget) ? String(initialTarget) : "1",
+  );
   const [date, setDate] = useState(todayInputValue);
   const [label, setLabel] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -47,8 +56,13 @@ export function OutcomeObservationModal({
 
   const submit = async () => {
     const numeric = Number(value);
+    const targetNum = Number(target);
     if (!Number.isFinite(numeric)) {
-      setLocalError("Enter a valid number.");
+      setLocalError("Enter a valid current value.");
+      return;
+    }
+    if (!Number.isFinite(targetNum) || targetNum < 0) {
+      setLocalError("Enter a valid target.");
       return;
     }
     if (!date) {
@@ -58,13 +72,16 @@ export function OutcomeObservationModal({
     setLocalError(null);
     const observedAt = new Date(`${date}T12:00:00`).toISOString();
     const trimmedLabel = label.trim();
-    await onSave({
-      id: uid(),
-      observedAt,
-      value: numeric,
-      label: trimmedLabel || undefined,
-      note: trimmedLabel || undefined,
-    });
+    await onSave(
+      {
+        id: uid(),
+        observedAt,
+        value: numeric,
+        label: trimmedLabel || undefined,
+        note: trimmedLabel || undefined,
+      },
+      { target: targetNum },
+    );
   };
 
   return (
@@ -80,7 +97,7 @@ export function OutcomeObservationModal({
         className="pos-qa-modal pos-entity-form-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Log outcome observation"
+        aria-label="Update outcome"
         onSubmit={(event) => {
           event.preventDefault();
           if (saving) return;
@@ -97,8 +114,8 @@ export function OutcomeObservationModal({
         </div>
 
         <p className="pos-entity-form-lede">
-          Log the current outcome value (for example offers received). This is separate from process
-          evidence, which still updates from completed tasks.
+          Set the outcome target and log the current value (for example offers received). Process
+          evidence still comes from scheduled or completed sessions.
         </p>
         {metricHint?.trim() && (
           <p className="pos-qa-for-hint">Metric: {metricHint.trim()}</p>
@@ -115,19 +132,31 @@ export function OutcomeObservationModal({
                 onChange={(event) => setValue(event.target.value)}
                 disabled={saving}
                 autoFocus
-                aria-label="Observation value"
+                aria-label="Current outcome value"
               />
             </label>
             <label className="pos-qa-field">
-              <span className="pos-qa-field-label">Date</span>
+              <span className="pos-qa-field-label">Target</span>
               <input
-                type="date"
-                value={date}
-                onChange={(event) => setDate(event.target.value)}
+                type="number"
+                step="any"
+                min="0"
+                value={target}
+                onChange={(event) => setTarget(event.target.value)}
                 disabled={saving}
+                aria-label="Outcome target"
               />
             </label>
           </div>
+          <label className="pos-qa-field">
+            <span className="pos-qa-field-label">Date</span>
+            <input
+              type="date"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              disabled={saving}
+            />
+          </label>
           <label className="pos-qa-field">
             <span className="pos-qa-field-label">Label (optional)</span>
             <input
@@ -147,7 +176,7 @@ export function OutcomeObservationModal({
               Cancel
             </button>
             <button type="submit" className="pos-btn-primary" disabled={saving}>
-              {saving ? "Saving…" : "Save observation"}
+              {saving ? "Saving…" : "Save"}
             </button>
           </div>
         </div>

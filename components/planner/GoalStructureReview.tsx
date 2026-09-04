@@ -19,7 +19,9 @@ type Props = {
   targetDate: string;
   focusType: GoalFocusType;
   suggestion: GoalStructureSuggestion;
-  onSuggestionChange: (next: GoalStructureSuggestion) => void;
+  onSuggestionChange: (
+    next: GoalStructureSuggestion | ((prev: GoalStructureSuggestion) => GoalStructureSuggestion),
+  ) => void;
   onClose: () => void;
   onSaved: (message: string) => void;
   onRegenerate: () => Promise<void>;
@@ -56,24 +58,44 @@ export function GoalStructureReview({
   const [dragProject, setDragProject] = useState<number | null>(null);
 
   const update = (patch: Partial<GoalStructureSuggestion>) => {
-    onSuggestionChange({ ...suggestion, ...patch });
+    onSuggestionChange((prev) => ({ ...prev, ...patch }));
+  };
+
+  const patchAt = <K extends "metrics" | "milestones" | "processes" | "projects">(
+    key: K,
+    index: number,
+    patch: Partial<GoalStructureSuggestion[K][number]>,
+  ) => {
+    onSuggestionChange((prev) => ({
+      ...prev,
+      [key]: prev[key].map((item, i) => (i === index ? { ...item, ...patch } : item)),
+    }));
   };
 
   const reorderMilestones = (from: number, to: number) => {
     if (from === to) return;
-    update({ milestones: moveAt(suggestion.milestones, from, to) });
+    onSuggestionChange((prev) => ({
+      ...prev,
+      milestones: moveAt(prev.milestones, from, to),
+    }));
     setDragMilestone(to);
   };
 
   const reorderProcesses = (from: number, to: number) => {
     if (from === to) return;
-    update({ processes: moveAt(suggestion.processes, from, to) });
+    onSuggestionChange((prev) => ({
+      ...prev,
+      processes: moveAt(prev.processes, from, to),
+    }));
     setDragProcess(to);
   };
 
   const reorderProjects = (from: number, to: number) => {
     if (from === to) return;
-    update({ projects: moveAt(suggestion.projects, from, to) });
+    onSuggestionChange((prev) => ({
+      ...prev,
+      projects: moveAt(prev.projects, from, to),
+    }));
     setDragProject(to);
   };
 
@@ -140,12 +162,13 @@ export function GoalStructureReview({
             <textarea
               value={suggestion.outcome?.statement ?? ""}
               onChange={(e) =>
-                update({
+                onSuggestionChange((prev) => ({
+                  ...prev,
                   outcome: {
                     statement: e.target.value,
-                    confidence: suggestion.outcome?.confidence ?? "MEDIUM",
+                    confidence: prev.outcome?.confidence ?? "MEDIUM",
                   },
-                })
+                }))
               }
               rows={2}
             />
@@ -160,11 +183,7 @@ export function GoalStructureReview({
               <div key={`m-${index}`} className="gp-ai-card">
                 <input
                   value={metric.name}
-                  onChange={(e) => {
-                    const metrics = [...suggestion.metrics];
-                    metrics[index] = { ...metric, name: e.target.value };
-                    update({ metrics });
-                  }}
+                  onChange={(e) => patchAt("metrics", index, { name: e.target.value })}
                 />
                 <div className="gp-ai-row">
                   <label>
@@ -172,14 +191,11 @@ export function GoalStructureReview({
                     <input
                       type="number"
                       value={metric.currentValue ?? ""}
-                      onChange={(e) => {
-                        const metrics = [...suggestion.metrics];
-                        metrics[index] = {
-                          ...metric,
+                      onChange={(e) =>
+                        patchAt("metrics", index, {
                           currentValue: e.target.value === "" ? null : Number(e.target.value),
-                        };
-                        update({ metrics });
-                      }}
+                        })
+                      }
                     />
                   </label>
                   <label>
@@ -187,14 +203,11 @@ export function GoalStructureReview({
                     <input
                       type="number"
                       value={metric.targetValue ?? ""}
-                      onChange={(e) => {
-                        const metrics = [...suggestion.metrics];
-                        metrics[index] = {
-                          ...metric,
+                      onChange={(e) =>
+                        patchAt("metrics", index, {
                           targetValue: e.target.value === "" ? null : Number(e.target.value),
-                        };
-                        update({ metrics });
-                      }}
+                        })
+                      }
                     />
                   </label>
                 </div>
@@ -204,11 +217,25 @@ export function GoalStructureReview({
                 {metric.possibleAlternatives?.length ? (
                   <p className="gp-ai-why">Alternatives: {metric.possibleAlternatives.join("; ")}</p>
                 ) : null}
-                {metric.rationale ? <p className="gp-ai-why">Why: {metric.rationale}</p> : null}
+                <label className="gp-ai-why-field">
+                  Why
+                  <textarea
+                    rows={2}
+                    value={metric.rationale ?? ""}
+                    placeholder="Why this metric matters"
+                    disabled={saving}
+                    onChange={(e) => patchAt("metrics", index, { rationale: e.target.value })}
+                  />
+                </label>
                 <button
                   type="button"
                   className="pos-btn-ghost"
-                  onClick={() => update({ metrics: suggestion.metrics.filter((_, i) => i !== index) })}
+                  onClick={() =>
+                    onSuggestionChange((prev) => ({
+                      ...prev,
+                      metrics: prev.metrics.filter((_, i) => i !== index),
+                    }))
+                  }
                 >
                   Remove
                 </button>
@@ -223,9 +250,10 @@ export function GoalStructureReview({
                 type="button"
                 className="pos-btn-ghost"
                 onClick={() =>
-                  update({
-                    milestones: [...suggestion.milestones, { title: "New milestone" }],
-                  })
+                  onSuggestionChange((prev) => ({
+                    ...prev,
+                    milestones: [...prev.milestones, { title: "New milestone" }],
+                  }))
                 }
               >
                 + Add
@@ -263,17 +291,16 @@ export function GoalStructureReview({
                 </button>
                 <input
                   value={item.title}
-                  onChange={(e) => {
-                    const milestones = [...suggestion.milestones];
-                    milestones[index] = { ...item, title: e.target.value };
-                    update({ milestones });
-                  }}
+                  onChange={(e) => patchAt("milestones", index, { title: e.target.value })}
                 />
                 <button
                   type="button"
                   className="pos-btn-ghost"
                   onClick={() =>
-                    update({ milestones: suggestion.milestones.filter((_, i) => i !== index) })
+                    onSuggestionChange((prev) => ({
+                      ...prev,
+                      milestones: prev.milestones.filter((_, i) => i !== index),
+                    }))
                   }
                 >
                   Remove
@@ -289,9 +316,10 @@ export function GoalStructureReview({
                 type="button"
                 className="pos-btn-ghost"
                 onClick={() =>
-                  update({
+                  onSuggestionChange((prev) => ({
+                    ...prev,
                     processes: [
-                      ...suggestion.processes,
+                      ...prev.processes,
                       {
                         name: "New process",
                         metricType: "COUNT",
@@ -301,7 +329,7 @@ export function GoalStructureReview({
                         confidence: "MEDIUM",
                       },
                     ],
-                  })
+                  }))
                 }
               >
                 + Add
@@ -342,40 +370,38 @@ export function GoalStructureReview({
                     value={proc.name}
                     onChange={(e) => {
                       const nextName = e.target.value;
-                      const processes = [...suggestion.processes];
                       const rawUnit = (proc.unit ?? "").trim();
                       const hourish = /^(h|hr|hrs|hour|hours|min|mins|minute|minutes|m)$/i.test(rawUnit);
                       const shouldGuess = proc.metricType !== "DURATION"
                         && (!rawUnit || hourish || rawUnit === guessCountUnit(proc.name));
-                      processes[index] = {
-                        ...proc,
+                      patchAt("processes", index, {
                         name: nextName,
                         unit: shouldGuess ? guessCountUnit(nextName) : proc.unit,
-                      };
-                      update({ processes });
+                      });
                     }}
                   />
                   <button
                     type="button"
                     className="pos-btn-ghost"
                     onClick={() =>
-                      update({ processes: suggestion.processes.filter((_, i) => i !== index) })
+                      onSuggestionChange((prev) => ({
+                        ...prev,
+                        processes: prev.processes.filter((_, i) => i !== index),
+                      }))
                     }
                   >
                     Remove
                   </button>
                 </div>
-                <div className="gp-ai-row">
+                <div className="gp-ai-row gp-ai-row-3">
                   <label>
                     Target / week
                     <input
                       type="number"
                       value={proc.targetValue}
-                      onChange={(e) => {
-                        const processes = [...suggestion.processes];
-                        processes[index] = { ...proc, targetValue: Number(e.target.value) || 0 };
-                        update({ processes });
-                      }}
+                      onChange={(e) =>
+                        patchAt("processes", index, { targetValue: Number(e.target.value) || 0 })
+                      }
                     />
                   </label>
                   <label>
@@ -384,17 +410,14 @@ export function GoalStructureReview({
                       value={proc.metricType}
                       onChange={(e) => {
                         const nextType = e.target.value as "COUNT" | "DURATION";
-                        const processes = [...suggestion.processes];
                         const rawUnit = (proc.unit ?? "").trim();
                         const hourish = /^(h|hr|hrs|hour|hours|min|mins|minute|minutes|m)$/i.test(rawUnit);
-                        processes[index] = {
-                          ...proc,
+                        patchAt("processes", index, {
                           metricType: nextType,
                           unit: nextType === "DURATION"
                             ? "h"
                             : (!rawUnit || hourish ? guessCountUnit(proc.name) : proc.unit),
-                        };
-                        update({ processes });
+                        });
                       }}
                     >
                       <option value="COUNT">Count</option>
@@ -407,15 +430,20 @@ export function GoalStructureReview({
                       value={proc.metricType === "DURATION" ? "h" : (proc.unit ?? "")}
                       disabled={proc.metricType === "DURATION" || saving}
                       placeholder={guessCountUnit(proc.name)}
-                      onChange={(e) => {
-                        const processes = [...suggestion.processes];
-                        processes[index] = { ...proc, unit: e.target.value };
-                        update({ processes });
-                      }}
+                      onChange={(e) => patchAt("processes", index, { unit: e.target.value })}
                     />
                   </label>
                 </div>
-                {proc.rationale ? <p className="gp-ai-why">Why: {proc.rationale}</p> : null}
+                <label className="gp-ai-why-field">
+                  Why
+                  <textarea
+                    rows={2}
+                    value={proc.rationale ?? ""}
+                    placeholder="Why this process"
+                    disabled={saving}
+                    onChange={(e) => patchAt("processes", index, { rationale: e.target.value })}
+                  />
+                </label>
               </div>
             ))}
           </section>
@@ -427,9 +455,10 @@ export function GoalStructureReview({
                 type="button"
                 className="pos-btn-ghost"
                 onClick={() =>
-                  update({
+                  onSuggestionChange((prev) => ({
+                    ...prev,
                     projects: [
-                      ...suggestion.projects,
+                      ...prev.projects,
                       {
                         title: "New project",
                         purpose: "",
@@ -437,7 +466,7 @@ export function GoalStructureReview({
                         suggestedDefaultProcessName: null,
                       },
                     ],
-                  })
+                  }))
                 }
               >
                 + Add
@@ -476,17 +505,16 @@ export function GoalStructureReview({
                   </button>
                   <input
                     value={project.title}
-                    onChange={(e) => {
-                      const projects = [...suggestion.projects];
-                      projects[index] = { ...project, title: e.target.value };
-                      update({ projects });
-                    }}
+                    onChange={(e) => patchAt("projects", index, { title: e.target.value })}
                   />
                   <button
                     type="button"
                     className="pos-btn-ghost"
                     onClick={() =>
-                      update({ projects: suggestion.projects.filter((_, i) => i !== index) })
+                      onSuggestionChange((prev) => ({
+                        ...prev,
+                        projects: prev.projects.filter((_, i) => i !== index),
+                      }))
                     }
                   >
                     Remove
@@ -497,14 +525,11 @@ export function GoalStructureReview({
                     Type
                     <select
                       value={project.projectType === "HABIT" ? "HABIT" : "STANDARD"}
-                      onChange={(e) => {
-                        const projects = [...suggestion.projects];
-                        projects[index] = {
-                          ...project,
+                      onChange={(e) =>
+                        patchAt("projects", index, {
                           projectType: e.target.value === "HABIT" ? "HABIT" : "STANDARD",
-                        };
-                        update({ projects });
-                      }}
+                        })
+                      }
                     >
                       <option value="STANDARD">Project</option>
                       <option value="HABIT">Habit</option>
@@ -518,13 +543,18 @@ export function GoalStructureReview({
                   value={project.purpose ?? ""}
                   placeholder="Purpose"
                   rows={2}
-                  onChange={(e) => {
-                    const projects = [...suggestion.projects];
-                    projects[index] = { ...project, purpose: e.target.value };
-                    update({ projects });
-                  }}
+                  onChange={(e) => patchAt("projects", index, { purpose: e.target.value })}
                 />
-                {project.rationale ? <p className="gp-ai-why">Why: {project.rationale}</p> : null}
+                <label className="gp-ai-why-field">
+                  Why
+                  <textarea
+                    rows={2}
+                    value={project.rationale ?? ""}
+                    placeholder="Why this project"
+                    disabled={saving}
+                    onChange={(e) => patchAt("projects", index, { rationale: e.target.value })}
+                  />
+                </label>
               </div>
             ))}
           </section>
