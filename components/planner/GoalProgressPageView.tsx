@@ -515,7 +515,7 @@ export function GoalProgressPageView({
                 </strong>
               </div>
               <div className="pos-gp-summary-row">
-                <span>Protected time</span>
+                <span>Time protected</span>
                 <strong className="pos-mono">
                   {formatHoursFromMinutes(protectedMinutes)}h this wk
                 </strong>
@@ -528,7 +528,10 @@ export function GoalProgressPageView({
 
             {processes.length > 0 && (
               <div className="pos-gp-card">
-                <div className="pos-gp-card-label">This week</div>
+                <div className="pos-gp-mini-head">
+                  <div className="pos-gp-card-label">Process this week</div>
+                  <span className="pos-pw-mini-legend">done / weekly target</span>
+                </div>
                 <div className="pos-gp-mini-stack">
                   {processes.map((proc, index) => (
                     <ProcessMini

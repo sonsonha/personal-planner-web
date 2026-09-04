@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { GoalFocusType, GoalMilestone } from "@/lib/planner-api";
-import { formatProcessValue, formatProcessRatio, coerceProcessBucketForDisplay, type ProcessBucketView } from "@/lib/goal-progress-display";
+import { formatProcessValue, coerceProcessBucketForDisplay, type ProcessBucketView } from "@/lib/goal-progress-display";
 import { cn, processAccent } from "./utils";
 
 export function SectionLabel({
@@ -146,9 +146,14 @@ export function ProcessMini({
   const completedPct = Math.min((view.completed / denom) * 100, 100);
   const plannedPct = Math.min((view.planned / denom) * 100, 100);
   const atTarget = view.target > 0 && view.completed >= view.target;
+  const doneLabel = formatProcessValue(view.completed, view.unit, measurementType);
+  const targetLabel = formatProcessValue(view.target, view.unit, measurementType);
 
   return (
-    <div className="pos-process-mini">
+    <div
+      className="pos-process-mini"
+      title={`${name}: ${doneLabel} done of ${targetLabel} weekly target`}
+    >
       <span className="pos-process-mini-name">{name}</span>
       <div className="pos-process-mini-track" aria-hidden="true">
         <div style={{ width: `${plannedPct}%`, backgroundColor: accent.light }} />
@@ -157,8 +162,11 @@ export function ProcessMini({
       <span
         className="pos-process-mini-values pos-mono"
         style={{ color: atTarget ? accent.color : undefined }}
+        aria-label={`${doneLabel} done of ${targetLabel} weekly target`}
       >
-        {formatProcessRatio(view.completed, view.target, view.unit, measurementType)}
+        <span className="pos-process-mini-done">{doneLabel}</span>
+        <span className="pos-process-mini-sep"> / </span>
+        <span className="pos-process-mini-target">{targetLabel}</span>
       </span>
     </div>
   );

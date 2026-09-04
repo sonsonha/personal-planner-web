@@ -2581,6 +2581,18 @@
   font-weight: 600;
 }
 
+.pos-gp-mini-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.pos-gp-mini-head .pos-gp-card-label {
+  margin-bottom: 0;
+}
+
 .pos-gp-mini-stack {
   display: flex;
   flex-direction: column;
@@ -3331,6 +3343,43 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.pos-pw-mini-head,
+.pos-ov-process-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pos-pw-mini-legend {
+  color: #9ca3af;
+  font-family: var(--pos-font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.pos-pw-metric-hint {
+  display: block;
+  margin-top: 2px;
+  color: #9ca3af;
+  font-family: var(--pos-font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.pos-process-mini-target {
+  color: var(--pos-ink-muted);
+  font-weight: 500;
+}
+
+.pos-process-mini-sep {
+  color: #d1d5db;
 }
 
 .pos-pw-maintain-grid {

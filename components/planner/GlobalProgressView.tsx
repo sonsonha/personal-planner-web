@@ -121,8 +121,9 @@ function FocusGoalCard({
             <strong className={cn("pos-mono", achieved && "achieved")}>{outcome ?? "—"}</strong>
           </div>
           <div>
-            <span className="pos-pw-metric-label">Protected</span>
+            <span className="pos-pw-metric-label">Time protected</span>
             <strong className="pos-mono indigo">{formatHoursFromMinutes(protectedMinutes)}h</strong>
+            <span className="pos-pw-metric-hint">this week on calendar</span>
           </div>
           <div>
             <span className="pos-pw-metric-label">Consistency</span>
@@ -144,6 +145,10 @@ function FocusGoalCard({
 
       {processes.length > 0 && (
         <div className="pos-pw-mini-stack">
+          <div className="pos-pw-mini-head">
+            <span className="pos-pw-metric-label">Process this week</span>
+            <span className="pos-pw-mini-legend">done / weekly target</span>
+          </div>
           {processes.map((proc, i) => (
             <ProcessMini
               key={proc.id}
@@ -193,6 +198,10 @@ function MaintainGoalCard({
       )}
       {processes.length > 0 ? (
         <div className="pos-pw-mini-stack">
+          <div className="pos-pw-mini-head">
+            <span className="pos-pw-metric-label">Process this week</span>
+            <span className="pos-pw-mini-legend">done / weekly target</span>
+          </div>
           {processes.map((proc, i) => (
             <ProcessMini
               key={proc.id}

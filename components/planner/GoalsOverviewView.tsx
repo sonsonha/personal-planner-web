@@ -131,11 +131,11 @@ function GoalCard({
           </div>
         </div>
         <div className="pos-ov-metric-cell">
-          <div className="pos-ov-metric-label">Protected</div>
+          <div className="pos-ov-metric-label">Time protected</div>
           <span className="pos-mono pos-ov-metric-value indigo">
             {formatHoursFromMinutes(protectedMinutes)}h
           </span>
-          <span className="pos-ov-metric-unit">this wk</span>
+          <span className="pos-ov-metric-unit">this wk on calendar</span>
         </div>
         <div className="pos-ov-metric-cell pos-ov-metric-consistency">
           <div className="pos-ov-metric-label">Consistency</div>
@@ -149,7 +149,10 @@ function GoalCard({
 
       {processes.length > 0 ? (
         <div className="pos-ov-process-block">
-          <div className="pos-ov-metric-label">Process this week</div>
+          <div className="pos-ov-process-head">
+            <div className="pos-ov-metric-label">Process this week</div>
+            <span className="pos-pw-mini-legend">done / weekly target</span>
+          </div>
           {processes.map((proc, i) => (
             <ProcessMini
               key={proc.id}
