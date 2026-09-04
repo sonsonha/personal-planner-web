@@ -1900,7 +1900,13 @@ export function PlannerApp({
     try {
       await deleteTimeBlock(block.id);
       if (dropToInbox) {
-        await updateTask(taskId, { status: "INBOX" });
+        // deleteTimeBlock already derives INBOX when no sessions remain;
+        // treat a follow-up PATCH failure as non-fatal.
+        try {
+          await updateTask(taskId, { status: "INBOX" });
+        } catch {
+          /* ignore — local status already updated optimistically */
+        }
         showToast("Removed from Calendar — task kept");
       } else {
         showToast("Session removed — other work sessions kept");
