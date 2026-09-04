@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { GoalProcess } from "@/lib/planner-api";
 
 export type ProcessEditorModalProps = {
@@ -13,9 +13,28 @@ export type ProcessEditorModalProps = {
 };
 
 const MINUTE_UNITS = new Set(["min", "mins", "minute", "minutes", "m"]);
+const HOUR_UNITS = new Set(["h", "hr", "hrs", "hour", "hours"]);
 
 function isMinuteUnit(unit?: string | null) {
   return Boolean(unit && MINUTE_UNITS.has(unit.trim().toLowerCase()));
+}
+
+function isHourUnit(unit?: string | null) {
+  return Boolean(unit && HOUR_UNITS.has(unit.trim().toLowerCase()));
+}
+
+/** Suggest a count noun from the process name (e.g. applications, sections). */
+export function guessCountUnit(name: string): string {
+  const n = name.trim().toLowerCase();
+  if (!n) return "sessions";
+  if (/\b(applications?|applicat\w*|apply|apps?)\b/.test(n)) return "applications";
+  if (/\bsections?\b/.test(n)) return "sections";
+  if (/\boutreach|messages?|emails?\b/.test(n)) return "messages";
+  if (/\binterviews?\b/.test(n) && !/\b(prepar|practic|study|mock)\b/.test(n)) return "interviews";
+  if (/\b(problems?|leetcode|coding)\b/.test(n)) return "problems";
+  if (/\bsessions?\b/.test(n)) return "sessions";
+  if (/\breps?\b/.test(n)) return "reps";
+  return "sessions";
 }
 
 /** Editor always works in hours for DURATION; convert legacy minute targets. */
@@ -28,10 +47,21 @@ function initialEditorState(process: GoalProcess | null) {
       unit: "h",
     };
   }
+  if (measurementType === "DURATION") {
+    return {
+      measurementType,
+      targetValue: String(process?.targetValue ?? 2),
+      unit: "h",
+    };
+  }
+  const rawUnit = process?.unit?.trim() ?? "";
+  const unit = !rawUnit || isHourUnit(rawUnit) || isMinuteUnit(rawUnit)
+    ? guessCountUnit(process?.name ?? "")
+    : rawUnit;
   return {
     measurementType,
     targetValue: String(process?.targetValue ?? 5),
-    unit: measurementType === "DURATION" ? "h" : (process?.unit ?? ""),
+    unit,
   };
 }
 
@@ -69,6 +99,31 @@ export function ProcessEditorModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, saving]);
 
+  const periodLabel =
+    period === "DAY" ? "day" : period === "MONTH" ? "month" : "week";
+
+  const previewUnit = measurementType === "DURATION"
+    ? "h"
+    : (unit.trim() || guessCountUnit(name));
+
+  const preview = useMemo(
+    () => `${targetValue || "0"} ${previewUnit} / ${periodLabel}`,
+    [targetValue, previewUnit, periodLabel],
+  );
+
+  const setType = (next: GoalProcess["measurementType"]) => {
+    setMeasurementType(next);
+    if (next === "DURATION") {
+      setUnit("h");
+      return;
+    }
+    if (next === "COUNT" || next === "BINARY" || next === "CUSTOM_METRIC") {
+      if (!unit.trim() || isHourUnit(unit) || isMinuteUnit(unit)) {
+        setUnit(guessCountUnit(name));
+      }
+    }
+  };
+
   const submit = async () => {
     const target = Number(targetValue);
     if (!name.trim()) {
@@ -80,22 +135,18 @@ export function ProcessEditorModal({
       return;
     }
     setLocalError(null);
+    const countUnit = unit.trim() || guessCountUnit(name);
     const next: GoalProcess = {
       id: process?.id ?? uid(),
       name: name.trim(),
       measurementType,
       targetValue: target,
-      unit: measurementType === "DURATION"
-        ? "h"
-        : (unit.trim() || undefined),
+      unit: measurementType === "DURATION" ? "h" : countUnit,
       period,
       active: process?.active ?? true,
     };
     await onSave(next);
   };
-
-  const periodLabel =
-    period === "DAY" ? "Day" : period === "MONTH" ? "Month" : "Week";
 
   return (
     <div className="pos-qa-backdrop">
@@ -107,7 +158,7 @@ export function ProcessEditorModal({
         disabled={saving}
       />
       <form
-        className="pos-qa-modal pos-entity-form-modal"
+        className="pos-qa-modal pos-entity-form-modal pos-process-editor"
         role="dialog"
         aria-modal="true"
         aria-label={editing ? "Edit process" : "New process"}
@@ -127,8 +178,8 @@ export function ProcessEditorModal({
         </div>
 
         <p className="pos-entity-form-lede">
-          Change the quota definition (name, count or hours, target). Evidence numbers update
-          automatically from linked tasks that are scheduled or completed — they are not edited here.
+          Define the weekly quota. Progress still comes from scheduled or completed sessions —
+          you only edit the target here.
         </p>
 
         <div className="pos-qa-fields">
@@ -136,45 +187,56 @@ export function ProcessEditorModal({
             <span className="pos-qa-field-label">Name</span>
             <input
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Technical Preparation"
+              onChange={(e) => {
+                const nextName = e.target.value;
+                setName(nextName);
+                if (
+                  measurementType !== "DURATION"
+                  && (!unit.trim() || unit === guessCountUnit(name) || isHourUnit(unit))
+                ) {
+                  setUnit(guessCountUnit(nextName));
+                }
+              }}
+              placeholder="Quality applications"
               autoFocus
               disabled={saving}
             />
           </label>
 
+          <div className="pos-qa-field">
+            <span className="pos-qa-field-label">Measure as</span>
+            <div className="pos-qa-for-tabs" role="group" aria-label="Measurement type">
+              <button
+                type="button"
+                className={measurementType === "COUNT" ? "active" : undefined}
+                onClick={() => setType("COUNT")}
+                disabled={saving}
+              >
+                Count
+              </button>
+              <button
+                type="button"
+                className={measurementType === "DURATION" ? "active" : undefined}
+                onClick={() => setType("DURATION")}
+                disabled={saving}
+              >
+                Hours
+              </button>
+            </div>
+          </div>
+
           <div className="pos-entity-form-row">
             <label className="pos-qa-field">
               <span className="pos-qa-field-label">Target</span>
-              <div className="pos-entity-form-inline">
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={targetValue}
-                  onChange={(e) => setTargetValue(e.target.value)}
-                  disabled={saving}
-                  aria-label="Target value"
-                />
-                <select
-                  value={measurementType}
-                  onChange={(e) => {
-                    const next = e.target.value as GoalProcess["measurementType"];
-                    setMeasurementType(next);
-                    if (next === "DURATION") setUnit("h");
-                    if (next === "COUNT" && unit === "h") setUnit("");
-                  }}
-                  disabled={saving}
-                  aria-label="Measurement type"
-                >
-                  <option value="COUNT">Count</option>
-                  <option value="DURATION">Hours</option>
-                  <optgroup label="Advanced">
-                    <option value="BINARY">Binary</option>
-                    <option value="CUSTOM_METRIC">Custom</option>
-                  </optgroup>
-                </select>
-              </div>
+              <input
+                type="number"
+                min="0"
+                step={measurementType === "DURATION" ? "0.1" : "1"}
+                value={targetValue}
+                onChange={(e) => setTargetValue(e.target.value)}
+                disabled={saving}
+                aria-label="Target value"
+              />
             </label>
             <label className="pos-qa-field">
               <span className="pos-qa-field-label">Per</span>
@@ -191,29 +253,34 @@ export function ProcessEditorModal({
             </label>
           </div>
 
-          {(measurementType === "COUNT" || measurementType === "CUSTOM_METRIC" || measurementType === "BINARY") && (
+          {measurementType === "DURATION" ? (
+            <div className="pos-qa-field">
+              <span className="pos-qa-field-label">Unit</span>
+              <input value="hours (h)" disabled readOnly aria-label="Duration unit" />
+              <p className="pos-qa-for-hint">
+                Measured from calendar sessions on linked tasks. Target is hours (2 = 2h/{periodLabel}).
+              </p>
+            </div>
+          ) : (
             <label className="pos-qa-field">
-              <span className="pos-qa-field-label">Unit label (optional)</span>
+              <span className="pos-qa-field-label">Unit label</span>
               <input
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
-                placeholder="sessions"
+                placeholder={guessCountUnit(name)}
                 disabled={saving}
+                aria-label="Unit label"
               />
+              <p className="pos-qa-for-hint">
+                Shown next to numbers — e.g. applications, sections, sessions.
+              </p>
             </label>
           )}
 
-          {measurementType === "DURATION" && (
-            <p className="pos-qa-for-hint">
-              Hours are measured from calendar sessions on linked tasks (not from estimated effort).
-              Target is in hours (e.g. 2 = 2h/week), not minutes.
-            </p>
-          )}
-
-          <p className="pos-qa-for-hint">
-            Example: {targetValue || "5"}{" "}
-            {measurementType === "DURATION" ? "h" : (unit || "sessions")} / {periodLabel.toLowerCase()}
-          </p>
+          <div className="pos-process-editor-preview" aria-live="polite">
+            <span className="pos-qa-field-label">Preview</span>
+            <strong className="pos-mono">{preview}</strong>
+          </div>
         </div>
 
         {(localError || error) && <p className="pos-entity-form-error">{localError || error}</p>}

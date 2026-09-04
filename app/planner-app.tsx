@@ -2932,6 +2932,7 @@ export function PlannerApp({
             live={connection === "live"}
             onChanged={(message) => {
               setReloadKey((value) => value + 1);
+              setEvidenceEpoch((value) => value + 1);
               showToast(message);
             }}
             onOpenTask={setEditingTaskId}
@@ -2962,6 +2963,7 @@ export function PlannerApp({
             onOpenProject={(projectId) => goTo("projects", projectId)}
             onChanged={(message) => {
               setReloadKey((value) => value + 1);
+              setEvidenceEpoch((value) => value + 1);
               showToast(message);
             }}
           />

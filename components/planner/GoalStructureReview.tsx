@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { GripVertical } from "lucide-react";
 import type { GoalStructureSuggestion } from "@/lib/ai-api";
 import {
   acceptGoalStructure,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/ai-api";
 import type { GoalFocusType } from "@/lib/planner-api";
 import { PlannerApiError } from "@/lib/planner-api";
+import { guessCountUnit } from "@/components/planner/ProcessEditorModal";
 
 type Props = {
   title: string;
@@ -23,6 +25,15 @@ type Props = {
   onRegenerate: () => Promise<void>;
   regenerating?: boolean;
 };
+
+function moveAt<T>(list: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return list;
+  const next = [...list];
+  const [moved] = next.splice(from, 1);
+  if (!moved) return list;
+  next.splice(to, 0, moved);
+  return next;
+}
 
 export function GoalStructureReview({
   title,
@@ -40,9 +51,30 @@ export function GoalStructureReview({
   const [error, setError] = useState<string | null>(null);
   const [selectedActions, setSelectedActions] = useState<Set<number>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
+  const [dragMilestone, setDragMilestone] = useState<number | null>(null);
+  const [dragProcess, setDragProcess] = useState<number | null>(null);
+  const [dragProject, setDragProject] = useState<number | null>(null);
 
   const update = (patch: Partial<GoalStructureSuggestion>) => {
     onSuggestionChange({ ...suggestion, ...patch });
+  };
+
+  const reorderMilestones = (from: number, to: number) => {
+    if (from === to) return;
+    update({ milestones: moveAt(suggestion.milestones, from, to) });
+    setDragMilestone(to);
+  };
+
+  const reorderProcesses = (from: number, to: number) => {
+    if (from === to) return;
+    update({ processes: moveAt(suggestion.processes, from, to) });
+    setDragProcess(to);
+  };
+
+  const reorderProjects = (from: number, to: number) => {
+    if (from === to) return;
+    update({ projects: moveAt(suggestion.projects, from, to) });
+    setDragProject(to);
   };
 
   const useStructure = async () => {
@@ -199,8 +231,36 @@ export function GoalStructureReview({
                 + Add
               </button>
             </div>
+            <p className="gp-ai-drag-hint">Drag the handle to reorder.</p>
             {suggestion.milestones.map((item, index) => (
-              <div key={`ms-${index}`} className="gp-ai-card gp-ai-card-row">
+              <div
+                key={`ms-${index}`}
+                className={`gp-ai-card gp-ai-card-row${dragMilestone === index ? " is-dragging" : ""}`}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  if (dragMilestone != null) reorderMilestones(dragMilestone, index);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragMilestone(null);
+                }}
+              >
+                <button
+                  type="button"
+                  className="gp-ai-drag"
+                  draggable={!saving}
+                  aria-label={`Reorder milestone ${item.title || index + 1}`}
+                  title="Drag to reorder"
+                  onDragStart={(event) => {
+                    setDragMilestone(index);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", String(index));
+                  }}
+                  onDragEnd={() => setDragMilestone(null)}
+                  disabled={saving}
+                >
+                  <GripVertical size={16} aria-hidden="true" />
+                </button>
                 <input
                   value={item.title}
                   onChange={(e) => {
@@ -237,6 +297,7 @@ export function GoalStructureReview({
                         metricType: "COUNT",
                         targetValue: 1,
                         period: "WEEK",
+                        unit: "sessions",
                         confidence: "MEDIUM",
                       },
                     ],
@@ -246,16 +307,64 @@ export function GoalStructureReview({
                 + Add
               </button>
             </div>
+            <p className="gp-ai-drag-hint">Drag the handle to reorder.</p>
             {suggestion.processes.map((proc, index) => (
-              <div key={`p-${index}`} className="gp-ai-card">
-                <input
-                  value={proc.name}
-                  onChange={(e) => {
-                    const processes = [...suggestion.processes];
-                    processes[index] = { ...proc, name: e.target.value };
-                    update({ processes });
-                  }}
-                />
+              <div
+                key={`p-${index}`}
+                className={`gp-ai-card${dragProcess === index ? " is-dragging" : ""}`}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  if (dragProcess != null) reorderProcesses(dragProcess, index);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragProcess(null);
+                }}
+              >
+                <div className="gp-ai-card-row">
+                  <button
+                    type="button"
+                    className="gp-ai-drag"
+                    draggable={!saving}
+                    aria-label={`Reorder process ${proc.name || index + 1}`}
+                    title="Drag to reorder"
+                    onDragStart={(event) => {
+                      setDragProcess(index);
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", String(index));
+                    }}
+                    onDragEnd={() => setDragProcess(null)}
+                    disabled={saving}
+                  >
+                    <GripVertical size={16} aria-hidden="true" />
+                  </button>
+                  <input
+                    value={proc.name}
+                    onChange={(e) => {
+                      const nextName = e.target.value;
+                      const processes = [...suggestion.processes];
+                      const rawUnit = (proc.unit ?? "").trim();
+                      const hourish = /^(h|hr|hrs|hour|hours|min|mins|minute|minutes|m)$/i.test(rawUnit);
+                      const shouldGuess = proc.metricType !== "DURATION"
+                        && (!rawUnit || hourish || rawUnit === guessCountUnit(proc.name));
+                      processes[index] = {
+                        ...proc,
+                        name: nextName,
+                        unit: shouldGuess ? guessCountUnit(nextName) : proc.unit,
+                      };
+                      update({ processes });
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="pos-btn-ghost"
+                    onClick={() =>
+                      update({ processes: suggestion.processes.filter((_, i) => i !== index) })
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
                 <div className="gp-ai-row">
                   <label>
                     Target / week
@@ -274,11 +383,16 @@ export function GoalStructureReview({
                     <select
                       value={proc.metricType}
                       onChange={(e) => {
+                        const nextType = e.target.value as "COUNT" | "DURATION";
                         const processes = [...suggestion.processes];
+                        const rawUnit = (proc.unit ?? "").trim();
+                        const hourish = /^(h|hr|hrs|hour|hours|min|mins|minute|minutes|m)$/i.test(rawUnit);
                         processes[index] = {
                           ...proc,
-                          metricType: e.target.value as "COUNT" | "DURATION",
-                          unit: e.target.value === "DURATION" ? "h" : proc.unit,
+                          metricType: nextType,
+                          unit: nextType === "DURATION"
+                            ? "h"
+                            : (!rawUnit || hourish ? guessCountUnit(proc.name) : proc.unit),
                         };
                         update({ processes });
                       }}
@@ -287,17 +401,21 @@ export function GoalStructureReview({
                       <option value="DURATION">Duration (hours)</option>
                     </select>
                   </label>
+                  <label>
+                    Unit
+                    <input
+                      value={proc.metricType === "DURATION" ? "h" : (proc.unit ?? "")}
+                      disabled={proc.metricType === "DURATION" || saving}
+                      placeholder={guessCountUnit(proc.name)}
+                      onChange={(e) => {
+                        const processes = [...suggestion.processes];
+                        processes[index] = { ...proc, unit: e.target.value };
+                        update({ processes });
+                      }}
+                    />
+                  </label>
                 </div>
                 {proc.rationale ? <p className="gp-ai-why">Why: {proc.rationale}</p> : null}
-                <button
-                  type="button"
-                  className="pos-btn-ghost"
-                  onClick={() =>
-                    update({ processes: suggestion.processes.filter((_, i) => i !== index) })
-                  }
-                >
-                  Remove
-                </button>
               </div>
             ))}
           </section>
@@ -325,16 +443,55 @@ export function GoalStructureReview({
                 + Add
               </button>
             </div>
+            <p className="gp-ai-drag-hint">Drag the handle to reorder.</p>
             {suggestion.projects.map((project, index) => (
-              <div key={`pr-${index}`} className="gp-ai-card">
-                <input
-                  value={project.title}
-                  onChange={(e) => {
-                    const projects = [...suggestion.projects];
-                    projects[index] = { ...project, title: e.target.value };
-                    update({ projects });
-                  }}
-                />
+              <div
+                key={`pr-${index}`}
+                className={`gp-ai-card${dragProject === index ? " is-dragging" : ""}`}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  if (dragProject != null) reorderProjects(dragProject, index);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragProject(null);
+                }}
+              >
+                <div className="gp-ai-card-row">
+                  <button
+                    type="button"
+                    className="gp-ai-drag"
+                    draggable={!saving}
+                    aria-label={`Reorder project ${project.title || index + 1}`}
+                    title="Drag to reorder"
+                    onDragStart={(event) => {
+                      setDragProject(index);
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", String(index));
+                    }}
+                    onDragEnd={() => setDragProject(null)}
+                    disabled={saving}
+                  >
+                    <GripVertical size={16} aria-hidden="true" />
+                  </button>
+                  <input
+                    value={project.title}
+                    onChange={(e) => {
+                      const projects = [...suggestion.projects];
+                      projects[index] = { ...project, title: e.target.value };
+                      update({ projects });
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="pos-btn-ghost"
+                    onClick={() =>
+                      update({ projects: suggestion.projects.filter((_, i) => i !== index) })
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
                 <div className="gp-ai-row">
                   <label>
                     Type
@@ -368,15 +525,6 @@ export function GoalStructureReview({
                   }}
                 />
                 {project.rationale ? <p className="gp-ai-why">Why: {project.rationale}</p> : null}
-                <button
-                  type="button"
-                  className="pos-btn-ghost"
-                  onClick={() =>
-                    update({ projects: suggestion.projects.filter((_, i) => i !== index) })
-                  }
-                >
-                  Remove
-                </button>
               </div>
             ))}
           </section>

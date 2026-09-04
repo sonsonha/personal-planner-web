@@ -4613,6 +4613,7 @@
 }
 
 .pos-qa-field select,
+.pos-qa-field input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
 .pos-te-field-grid select,
 .pos-te-date-field input,
 .pos-te-notes textarea,
@@ -4627,7 +4628,15 @@
   font-weight: 500;
 }
 
+.pos-qa-field input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):disabled,
+.pos-qa-field select:disabled {
+  opacity: 0.75;
+  background: var(--pos-surface-alt, #f3f4f6);
+  cursor: not-allowed;
+}
+
 .pos-qa-field select:focus-visible,
+.pos-qa-field input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):focus-visible,
 .pos-te-field-grid select:focus-visible,
 .pos-te-date-field input:focus-visible,
 .pos-te-notes textarea:focus-visible,
@@ -4635,6 +4644,7 @@
 .pos-te-title-field input:focus-visible {
   outline: 2px solid var(--pos-primary-ring);
   outline-offset: 1px;
+  border-color: color-mix(in srgb, var(--pos-primary) 45%, var(--pos-border));
 }
 
 .pos-qa-for-tabs,
@@ -5216,6 +5226,22 @@
 .pos-entity-form-inline > select {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.pos-process-editor-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px dashed var(--pos-border);
+  border-radius: 12px;
+  background: var(--pos-surface-alt, #f9fafb);
+}
+
+.pos-process-editor-preview strong {
+  color: var(--pos-ink);
+  font-size: 18px;
+  font-weight: 650;
 }
 
 .pos-entity-form-suffix {

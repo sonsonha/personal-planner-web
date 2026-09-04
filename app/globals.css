@@ -4038,8 +4038,13 @@ button {
 .gp-ai-review-body{overflow:auto}
 .gp-ai-section{margin:1rem 0}
 .gp-ai-section-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem}
+.gp-ai-drag-hint{margin:.15rem 0 .35rem;color:var(--pos-ink-muted,#6b7280);font-size:12px}
 .gp-ai-card{border:1px solid var(--pos-border,rgba(0,0,0,.08));border-radius:10px;padding:.75rem;margin:.5rem 0;display:grid;gap:.5rem}
-.gp-ai-card-row{grid-template-columns:1fr auto;align-items:center}
+.gp-ai-card.is-dragging{opacity:.55}
+.gp-ai-card-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:.5rem;align-items:center}
+.gp-ai-drag{display:inline-flex;align-items:center;justify-content:center;width:28px;height:36px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--pos-muted,#9ca3af);cursor:grab}
+.gp-ai-drag:active{cursor:grabbing}
+.gp-ai-drag:disabled{opacity:.4;cursor:not-allowed}
 .gp-ai-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
 .gp-ai-why,.gp-ai-meta{font-size:.85rem;opacity:.72;margin:0}
 .gp-ai-check-row{display:flex;gap:.5rem;align-items:flex-start;margin:.35rem 0}

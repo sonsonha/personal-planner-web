@@ -849,6 +849,10 @@ function GoalDetailPage({
     if (openReview) setShowReview(true);
   }, [openReview]);
 
+  const processesKey = (goal.processes ?? [])
+    .map((p) => `${p.id}:${p.name}:${p.measurementType}:${p.targetValue}:${p.unit}:${p.period}`)
+    .join("|");
+
   useEffect(() => {
     let cancelled = false;
     setLoadingProgress(true);
@@ -863,7 +867,13 @@ function GoalDetailPage({
         if (!cancelled) setLoadingProgress(false);
       });
     return () => { cancelled = true; };
-  }, [goal.id, now, evidenceEpoch]);
+  }, [goal.id, now, evidenceEpoch, processesKey]);
+
+  const refreshProgress = () => {
+    fetchGoalProgress(goal.id, now.toISOString())
+      .then((next) => setProgress(next))
+      .catch(() => { /* keep current progress */ });
+  };
 
   const setMilestoneCurrent = async (id: string) => {
     const milestones = goal.milestones ?? [];
@@ -897,6 +907,7 @@ function GoalDetailPage({
         live,
       });
       onChanged(message);
+      refreshProgress();
       setProcessModal(null);
     } catch {
       setEntityError("Could not save this process.");
