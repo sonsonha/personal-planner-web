@@ -1011,8 +1011,12 @@ export function PlannerApp({
     }
 
     lastCalendarSyncAttemptRef.current = nowMs;
-    if (options.announce) setGoogleConnection("syncing");
-    setCalendarUiOverride("SYNCING");
+    // Only flash Syncing UI for explicit user action — background auto-sync
+    // used to leave OVERRIDE=SYNCING and make the sidebar look stuck.
+    if (options.announce) {
+      setGoogleConnection("syncing");
+      setCalendarUiOverride("SYNCING");
+    }
 
     const operation = syncGoogleCalendar()
       .then(({ summary }) => {
@@ -1053,12 +1057,20 @@ export function PlannerApp({
           setToast(
             code === "GOOGLE_FORBIDDEN"
               ? calendarErrorCopy("GOOGLE_FORBIDDEN")
-              : "Google Calendar connected. Sync needs attention.",
+              : code === "PLANNER_UNAVAILABLE"
+                ? "Calendar sync timed out — tap Sync now to retry."
+                : "Google Calendar connected. Sync needs attention.",
           );
         }
       })
       .finally(() => {
         calendarSyncInFlightRef.current = null;
+        // Recover if a timed-out request left the UI on Syncing.
+        setCalendarUiOverride((current) => (current === "SYNCING" ? null : current));
+        setGoogleConnection((current) => {
+          if (current !== "syncing") return current;
+          return "connected";
+        });
       });
 
     calendarSyncInFlightRef.current = operation;
