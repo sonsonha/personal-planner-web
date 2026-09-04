@@ -1661,6 +1661,7 @@
 .pos-ov-section-label.focus { color: var(--pos-primary); }
 .pos-ov-section-label.maintain { color: var(--pos-maintain-text); }
 .pos-ov-section-label.explore { color: var(--pos-explore-text); }
+.pos-ov-section-label.year { color: var(--pos-ink); font-variant-numeric: tabular-nums; }
 
 .pos-ov-section-sub {
   color: var(--pos-ink-muted);
@@ -1675,6 +1676,7 @@
 .pos-ov-section-rule.focus { background: #e0e7ff; }
 .pos-ov-section-rule.maintain { background: #cffafe; }
 .pos-ov-section-rule.explore { background: #e5e7eb; }
+.pos-ov-section-rule.year { background: var(--pos-border); }
 
 .pos-ov-focus-grid {
   display: grid;
@@ -4185,7 +4187,7 @@
 .pos-te-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -316,18 +316,44 @@ export function GoalsWorkspace({
     .filter((goal) => goal.status === "ACTIVE")
     .filter((goal) => goalBelongsToHorizon(goal, horizon, now, projects, tasks))
     .sort((a, b) => {
-      const focus = FOCUS_ORDER.indexOf(a.focusType ?? "FOCUS") - FOCUS_ORDER.indexOf(b.focusType ?? "FOCUS");
-      if (focus !== 0) return focus;
       const aDate = parseDate(a.targetDate)?.getTime() ?? Number.MAX_SAFE_INTEGER;
       const bDate = parseDate(b.targetDate)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      return aDate - bDate;
+      if (aDate !== bDate) return aDate - bDate;
+      const focus = FOCUS_ORDER.indexOf(a.focusType ?? "FOCUS") - FOCUS_ORDER.indexOf(b.focusType ?? "FOCUS");
+      return focus;
     }), [goals, horizon, now, projects, tasks]);
 
-  const grouped = FOCUS_ORDER.map((focus) => ({
-    focus,
-    items: activeGoals.filter((goal) => (goal.focusType ?? "FOCUS") === focus),
-  })).filter((group) => group.items.length > 0);
-  const focusCount = grouped.find((group) => group.focus === "FOCUS")?.items.length ?? 0;
+  const groupedByYear = useMemo(() => {
+    const buckets = new Map<number | "none", ApiGoal[]>();
+    for (const goal of activeGoals) {
+      const year = parseDate(goal.targetDate)?.getFullYear() ?? null;
+      const key = year ?? "none";
+      const list = buckets.get(key) ?? [];
+      list.push(goal);
+      buckets.set(key, list);
+    }
+    const years = [...buckets.keys()]
+      .filter((key): key is number => typeof key === "number")
+      .sort((a, b) => a - b);
+    return [
+      ...years.map((year) => ({
+        year,
+        label: String(year),
+        sub: "By target date",
+        items: buckets.get(year) ?? [],
+      })),
+      ...(buckets.has("none")
+        ? [{
+            year: null as number | null,
+            label: "No deadline",
+            sub: "Goals without a target date",
+            items: buckets.get("none") ?? [],
+          }]
+        : []),
+    ].filter((group) => group.items.length > 0);
+  }, [activeGoals]);
+
+  const focusCount = activeGoals.filter((goal) => (goal.focusType ?? "FOCUS") === "FOCUS").length;
   const goalIdsKey = activeGoals.map((goal) => goal.id).join(",");
 
   useEffect(() => {
@@ -382,7 +408,7 @@ export function GoalsWorkspace({
   return (
     <section className="gp-workspace gp-workspace-overview" aria-label="Goals">
       <GoalsOverviewView
-        grouped={grouped}
+        grouped={groupedByYear}
         progressById={progressById}
         projects={projects}
         tasks={tasks}
