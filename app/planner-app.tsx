@@ -86,6 +86,14 @@ import {
   isSessionDone,
 } from "@/lib/session-evidence";
 import { startOfProductWeek } from "@/lib/product-week";
+import {
+  type ClockFormat,
+  formatHourGutter,
+  formatMinuteRange,
+  formatMinutesOfDay,
+  readClockFormat,
+  writeClockFormat,
+} from "@/lib/clock-format";
 import { GoalsWorkspace, ProgressWorkspace, ProjectsWorkspace, type HorizonScope } from "./planner-workspaces";
 import { parsePlannerPath, plannerPath, type PlannerSection } from "./planner-routes";
 import { aggregateTaskSchedule, formatScheduledMinutes, remainingSessionsAfterRemove } from "@/lib/task-schedule";
@@ -424,16 +432,12 @@ function addDays(value: Date, amount: number) {
   return date;
 }
 
-function minutesToTime(minutes: number) {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  const suffix = hours >= 12 ? "PM" : "AM";
-  const twelve = hours % 12 || 12;
-  return `${twelve}:${String(mins).padStart(2, "0")} ${suffix}`;
+function minutesToTime(minutes: number, format: ClockFormat = "24h") {
+  return formatMinutesOfDay(minutes, format);
 }
 
-function timeRangeLabel(start: number, duration: number) {
-  return `${minutesToTime(start)} – ${minutesToTime(start + duration)}`;
+function timeRangeLabel(start: number, duration: number, format: ClockFormat = "24h") {
+  return formatMinuteRange(start, duration, format);
 }
 
 function durationLabel(minutes: number) {
@@ -911,6 +915,7 @@ export function PlannerApp({
     });
   }, [pathname, router]);
   const [now] = useState(() => new Date());
+  const [clockFormat, setClockFormat] = useState<ClockFormat>("24h");
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [view, setView] = useState<CalendarView>("week");
   const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(new Date()));
@@ -1320,6 +1325,10 @@ export function PlannerApp({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [activeSection, view, weekStart]);
+
+  useEffect(() => {
+    setClockFormat(readClockFormat());
+  }, []);
 
   useEffect(() => {
     if (activeSection !== "calendar" || view === "month") return;
@@ -2526,6 +2535,30 @@ export function PlannerApp({
               <span><strong className="pos-mono">{durationLabel(openMinutes)}</strong> open</span>
               {view === "day" && <small>Day capacity</small>}
             </div>
+            <div className="view-switcher" aria-label="Clock format">
+              <button
+                type="button"
+                className={clockFormat === "24h" ? "active" : ""}
+                onClick={() => {
+                  writeClockFormat("24h");
+                  setClockFormat("24h");
+                }}
+                title="24-hour clock"
+              >
+                24h
+              </button>
+              <button
+                type="button"
+                className={clockFormat === "12h" ? "active" : ""}
+                onClick={() => {
+                  writeClockFormat("12h");
+                  setClockFormat("12h");
+                }}
+                title="12-hour clock"
+              >
+                12h
+              </button>
+            </div>
             <div className="view-switcher" aria-label="Calendar view">
               <button className={view === "day" ? "active" : ""} onClick={() => {
                 if (scrollRef.current) savedScrollRef.current = scrollRef.current.scrollTop;
@@ -2622,7 +2655,7 @@ export function PlannerApp({
                 <div className="time-rail">
                   {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, index) => (
                     <span key={index} style={{ top: index * 60 - 7 }}>
-                      {index === END_HOUR - START_HOUR ? "" : minutesToTime((START_HOUR + index) * 60).replace(":00", "")}
+                      {index === END_HOUR - START_HOUR ? "" : formatHourGutter(START_HOUR + index, clockFormat)}
                     </span>
                   ))}
                 </div>
@@ -2748,7 +2781,7 @@ export function PlannerApp({
                   >
                     {isCurrentWeek && dayIndex === nowDay && nowMinute >= START_HOUR * 60 && nowMinute <= END_HOUR * 60 && (
                       <div className="now-line" style={{ top: nowMinute - START_HOUR * 60 }}>
-                        <span className="pos-mono">{minutesToTime(nowMinute)}</span>
+                        <span className="pos-mono">{minutesToTime(nowMinute, clockFormat)}</span>
                       </div>
                     )}
                     {slotSelectPreview?.day === dayIndex && (
@@ -2760,9 +2793,9 @@ export function PlannerApp({
                           height: Math.max(18, slotSelectPreview.duration),
                         }}
                       >
-                        <span className="pos-mono">{minutesToTime(slotSelectPreview.start)}</span>
+                        <span className="pos-mono">{minutesToTime(slotSelectPreview.start, clockFormat)}</span>
                         <span className="pos-mono">
-                          {minutesToTime(slotSelectPreview.start + slotSelectPreview.duration)}
+                          {minutesToTime(slotSelectPreview.start + slotSelectPreview.duration, clockFormat)}
                         </span>
                       </div>
                     )}
@@ -2777,7 +2810,7 @@ export function PlannerApp({
                       >
                         <strong>{slotPicker.title?.trim() || "(No title)"}</strong>
                         <span className="pos-mono">
-                          {minutesToTime(slotPicker.start)}–{minutesToTime(slotPicker.start + slotPicker.duration)}
+                          {minutesToTime(slotPicker.start, clockFormat)}–{minutesToTime(slotPicker.start + slotPicker.duration, clockFormat)}
                         </span>
                       </div>
                     )}
@@ -2791,6 +2824,7 @@ export function PlannerApp({
                         <CalendarEvent
                           key={block.id}
                           block={block}
+                          clockFormat={clockFormat}
                           done={sessionDone || taskDone}
                           sessionDone={sessionDone}
                           isPast={isPast}
@@ -2973,7 +3007,7 @@ export function PlannerApp({
           weekday: "short",
           month: "short",
           day: "numeric",
-        })} · ${minutesToTime(slotPicker.start)}–${minutesToTime(end)}`;
+        })} · ${minutesToTime(slotPicker.start, clockFormat)}–${minutesToTime(end, clockFormat)}`;
         return (
           <CalendarQuickCreatePopover
             key={`${slotPicker.day}-${slotPicker.start}`}
@@ -3105,6 +3139,7 @@ export function PlannerApp({
           return (
             <GoogleEventPopover
               block={popBlock}
+              clockFormat={clockFormat}
               anchor={blockPopover.rect}
               onClose={() => setBlockPopover(null)}
             />
@@ -3113,6 +3148,7 @@ export function PlannerApp({
         return (
           <PersonalOsBlockPopover
             block={popBlock}
+            clockFormat={clockFormat}
             sessionDone={sessionDone}
             anchor={blockPopover.rect}
             onClose={() => setBlockPopover(null)}
@@ -3262,6 +3298,7 @@ export function PlannerApp({
 
 function CalendarEvent({
   block,
+  clockFormat = "24h",
   done,
   sessionDone,
   isPast = false,
@@ -3275,6 +3312,7 @@ function CalendarEvent({
   onToggleSessionDone,
 }: {
   block: CalendarBlock;
+  clockFormat?: ClockFormat;
   done: boolean;
   sessionDone: boolean;
   /** Session end is before now — visual only; interaction stays enabled. */
@@ -3579,7 +3617,7 @@ function CalendarEvent({
       </div>
       {showTime && (
         <span className="event-time pos-mono">
-          {timeRangeLabel(block.start, displayDuration)}
+          {timeRangeLabel(block.start, displayDuration, clockFormat)}
         </span>
       )}
       {showMeta && block.meta && <span className="event-meta">{block.meta}</span>}

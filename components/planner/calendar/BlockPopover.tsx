@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import { cn } from "../utils";
 import { isSessionDone } from "@/lib/session-evidence";
+import {
+  type ClockFormat,
+  formatMinuteRange,
+} from "@/lib/clock-format";
 
 export type CalendarPopoverBlock = {
   id: string;
@@ -18,18 +22,8 @@ export type CalendarPopoverBlock = {
   repeatSeriesId?: string | null;
 };
 
-function formatMinutes(minutes: number) {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  const suffix = hours >= 12 ? "PM" : "AM";
-  const twelve = hours % 12 || 12;
-  return mins === 0
-    ? `${twelve} ${suffix}`
-    : `${twelve}:${String(mins).padStart(2, "0")} ${suffix}`;
-}
-
-function formatRange(start: number, duration: number) {
-  return `${formatMinutes(start)} – ${formatMinutes(start + duration)}`;
+function formatRange(start: number, duration: number, format: ClockFormat = "24h") {
+  return formatMinuteRange(start, duration, format);
 }
 
 type PopoverShellProps = {
@@ -67,6 +61,7 @@ export type PersonalOsBlockPopoverProps = {
   /** Session done (block.status), not only task done. */
   sessionDone: boolean;
   anchor: DOMRect;
+  clockFormat?: ClockFormat;
   saving?: boolean;
   onClose: () => void;
   onSaveNotes: (notes: string) => void;
@@ -79,6 +74,7 @@ export function PersonalOsBlockPopover({
   block,
   sessionDone,
   anchor,
+  clockFormat = "24h",
   saving = false,
   onClose,
   onSaveNotes,
@@ -101,7 +97,7 @@ export function PersonalOsBlockPopover({
       <div className="pos-cal-popover-head">
         <p className="pos-cal-popover-title">{block.title}</p>
         {block.meta && <p className="pos-cal-popover-sub">{block.meta}</p>}
-        <p className="pos-cal-popover-time pos-mono">{formatRange(block.start, block.duration)}</p>
+        <p className="pos-cal-popover-time pos-mono">{formatRange(block.start, block.duration, clockFormat)}</p>
         {sessionDone && <p className="pos-cal-popover-sub">Session done</p>}
         {failed && (
           <div className="pos-cal-popover-sync-fail" role="status">
@@ -186,17 +182,18 @@ export function PersonalOsBlockPopover({
 export type GoogleEventPopoverProps = {
   block: CalendarPopoverBlock;
   anchor: DOMRect;
+  clockFormat?: ClockFormat;
   onClose: () => void;
 };
 
-export function GoogleEventPopover({ block, anchor, onClose }: GoogleEventPopoverProps) {
+export function GoogleEventPopover({ block, anchor, clockFormat = "24h", onClose }: GoogleEventPopoverProps) {
   const { left, top } = positionPopover(anchor, 220, 160);
   return (
     <PopoverShell left={left} top={top} onClose={onClose} className="google">
       <div className="pos-cal-popover-head">
         <p className="pos-cal-popover-title">{block.title}</p>
         <p className="pos-cal-popover-sub">{block.meta ?? "Google Calendar"}</p>
-        <p className="pos-cal-popover-time pos-mono">{formatRange(block.start, block.duration)}</p>
+        <p className="pos-cal-popover-time pos-mono">{formatRange(block.start, block.duration, clockFormat)}</p>
       </div>
       <div className="pos-cal-popover-readonly">
         <svg width="10" height="11" viewBox="0 0 10 11" fill="none" aria-hidden="true">
