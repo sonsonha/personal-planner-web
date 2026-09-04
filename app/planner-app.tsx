@@ -971,8 +971,22 @@ export function PlannerApp({
 
   const [toastKind, setToastKind] = useState<ToastKind>("info");
   const [search, setSearch] = useState("");
-  const [showPlannerBlocks, setShowPlannerBlocks] = useState(true);
-  const [showExternalEvents, setShowExternalEvents] = useState(true);
+  const [showPlannerBlocks, setShowPlannerBlocks] = useState(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      return window.localStorage.getItem("pos-show-planner-blocks") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const [showExternalEvents, setShowExternalEvents] = useState(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      return window.localStorage.getItem("pos-show-external-events") !== "0";
+    } catch {
+      return true;
+    }
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const tasksSearchRef = useRef<HTMLInputElement>(null);
@@ -2262,8 +2276,28 @@ export function PlannerApp({
                     : googleConnection === "loading" ? "Checking…"
                       : "Retry"
         }
-        onTogglePlannerBlocks={() => setShowPlannerBlocks((value) => !value)}
-        onToggleExternalEvents={() => setShowExternalEvents((value) => !value)}
+        onTogglePlannerBlocks={() => {
+          setShowPlannerBlocks((value) => {
+            const next = !value;
+            try {
+              window.localStorage.setItem("pos-show-planner-blocks", next ? "1" : "0");
+            } catch {
+              /* ignore */
+            }
+            return next;
+          });
+        }}
+        onToggleExternalEvents={() => {
+          setShowExternalEvents((value) => {
+            const next = !value;
+            try {
+              window.localStorage.setItem("pos-show-external-events", next ? "1" : "0");
+            } catch {
+              /* ignore */
+            }
+            return next;
+          });
+        }}
         onGoToday={() => {
           goTo("calendar");
           goToday();
