@@ -445,8 +445,14 @@
 
 .pos-process-bar-top {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+}
+
+.pos-process-bar-top > .pos-process-bar-name {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .pos-process-bar-top-right {
@@ -461,10 +467,15 @@
 }
 
 .pos-process-bar-name {
+  min-width: 0;
   color: var(--pos-ink);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .pos-process-bar-status {
@@ -481,14 +492,15 @@
 
 .pos-process-bar-metrics {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px;
+  gap: 4px 6px;
 }
 
 .pos-process-completed {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .pos-process-target,
@@ -496,6 +508,7 @@
   color: var(--pos-ink-muted);
   font-family: var(--pos-font-sans);
   font-size: 12px;
+  line-height: 1.3;
 }
 
 .pos-process-planned {
@@ -543,25 +556,34 @@
 }
 
 .pos-process-mini {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(4.5rem, auto);
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 6px;
   align-items: center;
-  gap: 10px;
 }
 
 .pos-process-mini-name {
-  flex: 0 0 7.5rem;
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
   overflow: hidden;
   color: var(--pos-ink-muted);
   font-family: var(--pos-font-sans);
   font-size: 12px;
   font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
 }
 
 .pos-process-mini-track {
   position: relative;
-  flex: 1;
+  grid-column: 1 / -1;
+  grid-row: 2;
   height: 6px;
   overflow: hidden;
   border-radius: 999px;
@@ -569,10 +591,14 @@
 }
 
 .pos-process-mini-values {
-  flex: 0 0 3.5rem;
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
   color: var(--pos-ink-muted);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.25;
   text-align: right;
+  white-space: nowrap;
 }
 
 .pos-milestone-timeline {
@@ -646,19 +672,25 @@
 }
 
 .pos-milestone-labels {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 4px;
 }
 
 .pos-milestone-label {
-  flex: 1;
-  padding-right: 8px;
+  min-width: 0;
+  padding-right: 4px;
   color: var(--pos-ink-muted);
-  font-size: 11px;
-  line-height: 1.3;
+  font-size: 10px;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .pos-milestone-label:last-child {
-  flex: 0 0 auto;
+  flex: unset;
 }
 
 .pos-milestone-label.done {
@@ -2051,10 +2083,55 @@
   font-size: 22px;
 }
 
+.pos-gp-card-head,
+.pos-gp-obs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.pos-gp-card-head .pos-gp-card-label,
+.pos-gp-obs-head .pos-gp-card-label {
+  margin-bottom: 0;
+}
+
 .pos-gp-outcome-sub {
   margin: 6px 0 14px;
   color: var(--pos-ink-muted);
   font-size: 12px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.pos-gp-obs-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pos-gp-obs-row > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pos-gp-period-completed {
+  font-size: 22px;
+}
+
+.pos-gp-period-name {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .pos-gp-field-row {

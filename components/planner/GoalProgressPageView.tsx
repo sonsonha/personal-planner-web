@@ -123,6 +123,8 @@ export type GoalProgressPageViewProps = {
   onReview?: () => void;
   onAddProcess?: () => void;
   onEditProcess?: (processId: string) => void;
+  onLogObservation?: () => void;
+  onDeleteObservation?: (observationId: string) => void;
 };
 
 export function GoalProgressPageView({
@@ -135,6 +137,8 @@ export function GoalProgressPageView({
   onReview,
   onAddProcess,
   onEditProcess,
+  onLogObservation,
+  onDeleteObservation,
 }: GoalProgressPageViewProps) {
   const [period, setPeriod] = useState<PeriodKey>("thisWeek");
   const [showAllEvidence, setShowAllEvidence] = useState(false);
@@ -204,7 +208,14 @@ export function GoalProgressPageView({
           <div className="pos-gp-main">
             <div className="pos-gp-outcome-row">
               <div className="pos-gp-card">
-                <div className="pos-gp-card-label">Outcome</div>
+                <div className="pos-gp-card-head">
+                  <div className="pos-gp-card-label">Outcome</div>
+                  {onLogObservation && !closed && (
+                    <button type="button" className="pos-btn-ghost pos-system-edit" onClick={onLogObservation}>
+                      Update
+                    </button>
+                  )}
+                </div>
                 {outcomeParts?.kind === "ratio" ? (
                   <div className="pos-gp-outcome-nums">
                     <span className="pos-mono pos-gp-outcome-big">{outcomeParts.left}</span>
@@ -214,7 +225,9 @@ export function GoalProgressPageView({
                 ) : (
                   <div className="pos-mono pos-gp-outcome-big">{outcome ?? "—"}</div>
                 )}
-                <p className="pos-gp-outcome-sub">{goal.metric || "Result"}</p>
+                <p className="pos-gp-outcome-sub" title={goal.metric || undefined}>
+                  {goal.metric || "Result"}
+                </p>
                 <div className="pos-gp-field-row">
                   <span>Status</span>
                   <strong>{OUTCOME_STATUS_LABEL[goal.outcomeStatus ?? "ACTIVE"]}</strong>
@@ -224,7 +237,14 @@ export function GoalProgressPageView({
                   <strong>{formatShortDate(goal.targetDate) ?? "No deadline"}</strong>
                 </div>
                 <div className="pos-gp-obs">
-                  <div className="pos-gp-card-label">Observations</div>
+                  <div className="pos-gp-obs-head">
+                    <div className="pos-gp-card-label">Observations</div>
+                    {onLogObservation && !closed && (
+                      <button type="button" className="pos-btn-ghost" onClick={onLogObservation}>
+                        + Log
+                      </button>
+                    )}
+                  </div>
                   {observations.length === 0 ? (
                     <p className="pos-muted italic">No outcome observations yet.</p>
                   ) : (
@@ -233,8 +253,22 @@ export function GoalProgressPageView({
                         const entry = formatObservationEntry(item);
                         return (
                           <li key={item.id}>
-                            <strong>{entry.month}</strong>
-                            <span>{entry.detail}</span>
+                            <div className="pos-gp-obs-row">
+                              <div>
+                                <strong>{entry.month}</strong>
+                                <span>{entry.detail}</span>
+                              </div>
+                              {onDeleteObservation && !closed && (
+                                <button
+                                  type="button"
+                                  className="pos-btn-ghost danger"
+                                  onClick={() => onDeleteObservation(item.id)}
+                                  aria-label={`Remove observation ${entry.detail}`}
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </div>
                           </li>
                         );
                       })}

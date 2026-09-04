@@ -24,6 +24,7 @@ import {
   type GoalMilestone,
   type GoalOutcomeStatus,
   type GoalProcess,
+  type GoalMetricObservation,
   type GoalReflection,
 } from "@/lib/planner-api";
 import {
@@ -55,6 +56,7 @@ import { GoalProgressPageView } from "@/components/planner/GoalProgressPageView"
 import { GoalReviewView } from "@/components/planner/GoalReviewView";
 import { GoalsOverviewView } from "@/components/planner/GoalsOverviewView";
 import { ProcessEditorModal } from "@/components/planner/ProcessEditorModal";
+import { OutcomeObservationModal } from "@/components/planner/OutcomeObservationModal";
 import { ProjectDetailView } from "@/components/planner/ProjectDetailView";
 import { ProjectsOverviewView } from "@/components/planner/ProjectsOverviewView";
 import { weekRangeLabel } from "@/components/planner/utils";
@@ -1003,6 +1005,7 @@ export function GoalProgressView({
   onEditProcess?: (processId: string) => void;
 }) {
   const [processModal, setProcessModal] = useState<"create" | GoalProcess | null>(null);
+  const [observationOpen, setObservationOpen] = useState(false);
   const [entitySaving, setEntitySaving] = useState(false);
   const [entityError, setEntityError] = useState<string | null>(null);
 
@@ -1017,6 +1020,29 @@ export function GoalProgressView({
       setProcessModal(process);
     }
   });
+
+  const saveObservations = async (
+    next: GoalMetricObservation[],
+    message: string,
+    options?: { closeModal?: boolean },
+  ) => {
+    setEntitySaving(true);
+    setEntityError(null);
+    try {
+      if (!live) {
+        onChanged?.(`${message} · demo mode`);
+        if (options?.closeModal !== false) setObservationOpen(false);
+        return;
+      }
+      await updateGoal(goal.id, { metricObservations: next });
+      onChanged?.(message);
+      if (options?.closeModal !== false) setObservationOpen(false);
+    } catch {
+      setEntityError("Could not save this observation.");
+    } finally {
+      setEntitySaving(false);
+    }
+  };
 
   const saveProcesses = async (processes: GoalProcess[], message: string) => {
     setEntitySaving(true);
@@ -1056,6 +1082,14 @@ export function GoalProgressView({
         onReview={onReview}
         onAddProcess={openCreate}
         onEditProcess={openEdit}
+        onLogObservation={() => {
+          setEntityError(null);
+          setObservationOpen(true);
+        }}
+        onDeleteObservation={(observationId) => {
+          const next = (goal.metricObservations ?? []).filter((item) => item.id !== observationId);
+          void saveObservations(next, "Observation removed", { closeModal: false });
+        }}
       />
       {processModal && (
         <ProcessEditorModal
@@ -1073,6 +1107,18 @@ export function GoalProgressView({
           onDelete={processModal === "create" ? undefined : async (process) => {
             const processes = (goal.processes ?? []).filter((item) => item.id !== process.id);
             await saveProcesses(processes, "Process removed");
+          }}
+        />
+      )}
+      {observationOpen && (
+        <OutcomeObservationModal
+          metricHint={goal.metric}
+          saving={entitySaving}
+          error={entityError}
+          onClose={() => { if (!entitySaving) setObservationOpen(false); }}
+          onSave={async (observation) => {
+            const existing = goal.metricObservations ?? [];
+            await saveObservations([...existing, observation], "Outcome updated");
           }}
         />
       )}
