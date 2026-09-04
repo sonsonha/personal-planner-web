@@ -147,11 +147,13 @@ export type GoalDetailViewProps = {
   onBack: () => void;
   onGoCalendar: () => void;
   onViewProgress: () => void;
+  onEdit: () => void;
   onReview: () => void;
   onCopyContext?: () => void;
   onOpenTask: (taskId: string) => void;
   onOpenProject?: (projectId: string) => void;
   onSetMilestone: (id: string) => void;
+  onManageMilestones: () => void;
   onAddWeekWork: (title: string) => void;
   onCreateProject: () => void;
   onAddProcess: () => void;
@@ -172,11 +174,13 @@ export function GoalDetailView({
   onBack,
   onGoCalendar,
   onViewProgress,
+  onEdit,
   onReview,
   onCopyContext,
   onOpenTask,
   onOpenProject,
   onSetMilestone,
+  onManageMilestones,
   onAddWeekWork,
   onCreateProject,
   onAddProcess,
@@ -236,6 +240,9 @@ export function GoalDetailView({
         )}
         <button type="button" className="pos-btn-secondary indigo" onClick={onGoCalendar}>
           Open Calendar
+        </button>
+        <button type="button" className="pos-btn-secondary" onClick={onEdit}>
+          Edit
         </button>
         <button type="button" className="pos-btn-secondary" onClick={onViewProgress} disabled={!progress && !loadingProgress}>
           View Progress
@@ -367,14 +374,24 @@ export function GoalDetailView({
               </p>
             </section>
 
-            {milestones.length > 0 && (
-              <section>
-                <SectionLabel right="Click milestone to update">Goal journey</SectionLabel>
+            <section>
+              <SectionLabel
+                right={
+                  <button type="button" className="pos-text-link" onClick={onManageMilestones}>
+                    {milestones.length > 0 ? "Manage" : "Add milestones"}
+                  </button>
+                }
+              >
+                Goal journey
+              </SectionLabel>
+              {milestones.length > 0 ? (
                 <div className="pos-journey-card">
                   <MilestoneTimeline milestones={milestones} onSetCurrent={onSetMilestone} />
                 </div>
-              </section>
-            )}
+              ) : (
+                <EmptyState title="No milestones yet." sub="Add checkpoints for this Goal’s journey." />
+              )}
+            </section>
 
             <section>
               <SectionLabel>Linked projects</SectionLabel>

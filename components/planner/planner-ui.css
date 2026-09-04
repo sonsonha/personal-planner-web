@@ -4935,6 +4935,42 @@
   font-weight: 500;
 }
 
+.pos-milestone-edit-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pos-milestone-edit-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.pos-milestone-edit-list input,
+.pos-milestone-edit-list select,
+.pos-milestone-edit-add input {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--pos-border);
+  border-radius: 10px;
+  background: var(--pos-card);
+  color: var(--pos-ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.pos-milestone-edit-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .pos-entity-form-footer {
   display: flex;
   flex-wrap: wrap;

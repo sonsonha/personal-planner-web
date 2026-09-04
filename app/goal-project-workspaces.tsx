@@ -8,6 +8,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   createGoal,
   createProject,
+  deleteGoal,
   deleteProject,
   fetchGoalProgress,
   updateGoal,
@@ -690,6 +691,8 @@ function GoalDetailPage({
   openReview?: boolean;
 }) {
   const [creatingProject, setCreatingProject] = useState(false);
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [managingMilestones, setManagingMilestones] = useState(false);
   const [showProgress, setShowProgress] = useState(false);
   const [showReview, setShowReview] = useState(openReview);
   const [progress, setProgress] = useState<ApiGoalProgress | null>(null);
@@ -788,11 +791,13 @@ function GoalDetailPage({
           if (onViewFullProgress) onViewFullProgress(goal.id);
           else if (progress) setShowProgress(true);
         }}
+        onEdit={() => setEditingGoal(true)}
         onReview={() => setShowReview(true)}
         onCopyContext={() => { void copyFullContext(); }}
         onOpenTask={onOpenTask}
         onOpenProject={onOpenProject}
         onSetMilestone={setMilestoneCurrent}
+        onManageMilestones={() => setManagingMilestones(true)}
         onAddWeekWork={(title) => {
           if (linked.length === 0) {
             onChanged("Link a project to this goal before adding weekly work");
@@ -810,6 +815,32 @@ function GoalDetailPage({
           }
         }}
       />
+
+      {editingGoal && (
+        <GoalEditorModal
+          goal={goal}
+          live={live}
+          focusCount={goals.filter((g) => g.status === "ACTIVE" && (g.focusType ?? "FOCUS") === "FOCUS" && g.id !== goal.id).length}
+          onClose={() => setEditingGoal(false)}
+          onSaved={(message, deleted) => {
+            setEditingGoal(false);
+            onChanged(message);
+            if (deleted) onClose();
+          }}
+        />
+      )}
+
+      {managingMilestones && (
+        <MilestoneEditorModal
+          goal={goal}
+          live={live}
+          onClose={() => setManagingMilestones(false)}
+          onSaved={(message) => {
+            setManagingMilestones(false);
+            onChanged(message);
+          }}
+        />
+      )}
 
       {processModal && (
         <ProcessEditorModal
@@ -1141,6 +1172,328 @@ export function ProjectsWorkspace({
 function linkedProcess(project: ApiProject, progressById: Record<string, ApiGoalProgress>) {
   if (!project.defaultGoalProcessId || !project.goalId) return null;
   return progressById[project.goalId]?.progress.processes.find((item) => item.id === project.defaultGoalProcessId) ?? null;
+}
+
+function GoalEditorModal({
+  goal,
+  live,
+  focusCount = 0,
+  onClose,
+  onSaved,
+}: {
+  goal: ApiGoal;
+  live: boolean;
+  focusCount?: number;
+  onClose: () => void;
+  onSaved: (message: string, deleted?: boolean) => void;
+}) {
+  const [outcome, setOutcome] = useState(goal.outcome?.trim() || goal.title);
+  const [targetDate, setTargetDate] = useState(goal.targetDate ?? "");
+  const [metric, setMetric] = useState(goal.metric ?? "");
+  const [why, setWhy] = useState(goal.why ?? "");
+  const [focusType, setFocusType] = useState<GoalFocusType>(goal.focusType ?? "FOCUS");
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, saving]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!outcome.trim()) {
+      setError("Describe the outcome you want to make true.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const payload = {
+      title: outcome.trim(),
+      outcome: outcome.trim(),
+      targetDate: targetDate || null,
+      metric: metric.trim(),
+      why: why.trim(),
+      focusType,
+    };
+    if (!live) {
+      onSaved("Goal updated · demo mode");
+      return;
+    }
+    try {
+      await updateGoal(goal.id, payload);
+      onSaved("Goal updated");
+    } catch {
+      setSaving(false);
+      setError("Could not save this goal.");
+    }
+  };
+
+  const remove = async () => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    if (!live) {
+      onSaved("Goal deleted · demo mode", true);
+      return;
+    }
+    try {
+      await deleteGoal(goal.id);
+      onSaved("Goal deleted · linked projects kept (unlinked)", true);
+    } catch {
+      setSaving(false);
+      setError("Could not delete this goal.");
+    }
+  };
+
+  return (
+    <div className="pos-qa-backdrop">
+      <button className="pos-qa-dismiss" type="button" aria-label="Close" onClick={onClose} disabled={saving} />
+      <form
+        className="pos-qa-modal pos-entity-form-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Edit goal"
+        onSubmit={submit}
+      >
+        <div className="pos-qa-header">
+          <span className="pos-qa-eyebrow">Edit goal</span>
+          <button type="button" className="pos-qa-close" onClick={onClose} aria-label="Close" disabled={saving}>
+            <X size={16} />
+          </button>
+        </div>
+        <div className="pos-qa-fields">
+          <label className="pos-qa-field pos-entity-span-2">
+            <span className="pos-qa-field-label">Outcome</span>
+            <textarea
+              value={outcome}
+              onChange={(e) => setOutcome(e.target.value)}
+              rows={3}
+              autoFocus
+              disabled={saving}
+              placeholder="Get a Backend Developer job before the end of November"
+            />
+          </label>
+          <label className="pos-qa-field">
+            <span className="pos-qa-field-label">Deadline (optional)</span>
+            <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} disabled={saving} />
+          </label>
+          <label className="pos-qa-field">
+            <span className="pos-qa-field-label">Focus type</span>
+            <select value={focusType} onChange={(e) => setFocusType(e.target.value as GoalFocusType)} disabled={saving}>
+              <option value="FOCUS">Focus — actively progressing now</option>
+              <option value="MAINTAIN">Maintain — keep healthy</option>
+              <option value="EXPLORE">Explore — investigate without full commitment</option>
+            </select>
+            {focusCount >= 3 && focusType === "FOCUS" && (
+              <p className="pos-qa-for-hint">You already have {focusCount} other Focus goals.</p>
+            )}
+          </label>
+          <label className="pos-qa-field pos-entity-span-2">
+            <span className="pos-qa-field-label">Metric — how will you know it worked?</span>
+            <input value={metric} onChange={(e) => setMetric(e.target.value)} disabled={saving} placeholder="Offer received" />
+          </label>
+          <label className="pos-qa-field pos-entity-span-2">
+            <span className="pos-qa-field-label">Why — why does this matter?</span>
+            <textarea value={why} onChange={(e) => setWhy(e.target.value)} rows={2} disabled={saving} placeholder="Optional" />
+          </label>
+        </div>
+        {error && <p className="pos-entity-form-error">{error}</p>}
+        <div className="pos-entity-form-footer">
+          <div className="pos-entity-form-secondary">
+            <button type="button" className="pos-btn-ghost danger" onClick={remove} disabled={saving}>
+              <Trash2 size={15} /> {confirmDelete ? "Confirm delete" : "Delete"}
+            </button>
+          </div>
+          <div className="pos-entity-form-primary">
+            <button type="button" className="pos-btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="submit" className="pos-btn-primary" disabled={saving}>
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function MilestoneEditorModal({
+  goal,
+  live,
+  onClose,
+  onSaved,
+}: {
+  goal: ApiGoal;
+  live: boolean;
+  onClose: () => void;
+  onSaved: (message: string) => void;
+}) {
+  const [items, setItems] = useState<GoalMilestone[]>(() =>
+    (goal.milestones ?? []).map((m) => ({ ...m })),
+  );
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, saving]);
+
+  const addItem = () => {
+    if (!draft.trim()) return;
+    setItems((current) => [
+      ...current,
+      {
+        id: uid(),
+        title: draft.trim(),
+        status: current.length === 0 ? "current" : "pending",
+      },
+    ]);
+    setDraft("");
+  };
+
+  const setStatus = (id: string, status: GoalMilestone["status"]) => {
+    setItems((current) =>
+      current.map((item) => {
+        if (item.id === id) return { ...item, status };
+        if (status === "current" && item.status === "current") {
+          return { ...item, status: "pending" };
+        }
+        return item;
+      }),
+    );
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (items.some((item) => !item.title.trim())) {
+      setError("Every milestone needs a title.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const normalized = items.map((item) => ({ ...item, title: item.title.trim() }));
+    const currentId = normalized.find((item) => item.status === "current")?.id
+      ?? normalized.find((item) => item.status !== "done")?.id
+      ?? normalized[0]?.id
+      ?? null;
+    const withCurrent = normalized.map((item) => ({
+      ...item,
+      status: item.id === currentId
+        ? ("current" as const)
+        : item.status === "done"
+          ? ("done" as const)
+          : ("pending" as const),
+    }));
+    if (!live) {
+      onSaved("Milestones updated · demo mode");
+      return;
+    }
+    try {
+      await updateGoal(goal.id, { milestones: withCurrent, currentMilestoneId: currentId });
+      onSaved("Milestones updated");
+    } catch {
+      setSaving(false);
+      setError("Could not save milestones.");
+    }
+  };
+
+  return (
+    <div className="pos-qa-backdrop">
+      <button className="pos-qa-dismiss" type="button" aria-label="Close" onClick={onClose} disabled={saving} />
+      <form
+        className="pos-qa-modal pos-entity-form-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Manage milestones"
+        onSubmit={submit}
+      >
+        <div className="pos-qa-header">
+          <span className="pos-qa-eyebrow">Manage milestones</span>
+          <button type="button" className="pos-qa-close" onClick={onClose} aria-label="Close" disabled={saving}>
+            <X size={16} />
+          </button>
+        </div>
+        <div className="pos-qa-fields">
+          <div className="pos-qa-field pos-entity-span-2">
+            <span className="pos-qa-field-label">Goal journey</span>
+            <p className="pos-qa-for-hint">Add, rename, mark done, or remove checkpoints. One milestone is current.</p>
+            <ul className="pos-milestone-edit-list">
+              {items.map((item) => (
+                <li key={item.id}>
+                  <input
+                    value={item.title}
+                    onChange={(e) => {
+                      const title = e.target.value;
+                      setItems((current) => current.map((row) => (row.id === item.id ? { ...row, title } : row)));
+                    }}
+                    disabled={saving}
+                    aria-label="Milestone title"
+                  />
+                  <select
+                    value={item.status}
+                    onChange={(e) => setStatus(item.id, e.target.value as GoalMilestone["status"])}
+                    disabled={saving}
+                    aria-label="Milestone status"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="current">Current</option>
+                    <option value="done">Done</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="pos-btn-ghost danger"
+                    onClick={() => setItems((current) => current.filter((row) => row.id !== item.id))}
+                    disabled={saving}
+                    aria-label={`Remove ${item.title || "milestone"}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="pos-milestone-edit-add">
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="New milestone"
+                disabled={saving}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addItem();
+                  }
+                }}
+              />
+              <button type="button" className="pos-btn-ghost" onClick={addItem} disabled={saving || !draft.trim()}>
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+        {error && <p className="pos-entity-form-error">{error}</p>}
+        <div className="pos-entity-form-footer">
+          <div className="pos-entity-form-primary">
+            <button type="button" className="pos-btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="submit" className="pos-btn-primary" disabled={saving}>
+              {saving ? "Saving…" : "Save milestones"}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function ProjectEditorModal({
