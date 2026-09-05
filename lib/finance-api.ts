@@ -9,6 +9,7 @@ export type FinanceAllocationSettings = {
   safetyPct: number;
   growthPct: number;
   funPct: number;
+  safetyTargetMonths: number;
   currency: string;
   revision: number;
   updatedAt: string;
@@ -27,6 +28,7 @@ export type FinanceExpenseCategory = {
   id: string;
   name: string;
   kind: string;
+  recurrence: string;
   defaultBucket: string;
   active: boolean;
   sortOrder: number;
@@ -146,6 +148,7 @@ export function updateAllocationSettings(input: {
   safetyPct: number;
   growthPct: number;
   funPct: number;
+  safetyTargetMonths?: 3 | 6 | 9 | 12;
   currency?: string;
 }) {
   return requestJson<FinanceAllocationSettings>("/api/finance/allocation-settings", {
@@ -407,6 +410,139 @@ export const BUCKET_LABELS: Record<FinanceBucket, string> = {
 };
 
 export const BUCKET_ORDER: FinanceBucket[] = ["LIVING", "SAFETY", "GROWTH", "FUN"];
+
+export type AnalyticsGrain = "week" | "month" | "quarter" | "year";
+
+export type FinanceAnalytics = {
+  grain: AnalyticsGrain;
+  periodKey: string;
+  label: string;
+  start: string;
+  end: string;
+  previousPeriodKey: string;
+  currency: string;
+  summary: {
+    incomeVnd: number;
+    expensesVnd: number;
+    debtPaidVnd: number;
+    netCashflowVnd: number;
+    livingUsageVnd: number;
+    growthUsageVnd: number;
+    safetyAllocatedVnd: number;
+    funUsageVnd: number;
+  };
+  planVsActual: Array<{
+    bucket: FinanceBucket;
+    targetVnd: number;
+    targetPctOfIncome: number | null;
+    allocatedVnd: number;
+    allocatedPctOfIncome: number | null;
+    usedExpenseVnd: number;
+    usagePctOfIncome: number | null;
+    varianceVsAllocationVnd: number;
+    varianceVsTargetVnd: number;
+    incomeAllocatedVnd: number;
+    reallocInVnd: number;
+    reallocOutVnd: number;
+    debtWithdrawalsVnd: number;
+    netChangeVnd: number;
+    lifetimeBalanceVnd: number;
+  }>;
+  rates: {
+    livingUsageRatePct: number | null;
+    growthAllocationRatePct: number | null;
+    growthUsageRatePct: number | null;
+    safetyAllocationRatePct: number | null;
+    funUsageRatePct: number | null;
+  };
+  spendingByCategory: Array<{
+    categoryId: string;
+    name: string;
+    amountVnd: number;
+    kind: string;
+    recurrence: string;
+    pctOfExpenses: number | null;
+    previousAmountVnd: number;
+    deltaVnd: number;
+    deltaPct: number | null;
+  }>;
+  growthBreakdown: Array<{
+    group: string;
+    amountVnd: number;
+    pctOfGrowthUsage: number | null;
+  }>;
+  incomeBySource: Array<{
+    sourceId: string;
+    name: string;
+    amountVnd: number;
+    pctOfIncome: number | null;
+    previousAmountVnd: number;
+    deltaVnd: number;
+    deltaPct: number | null;
+  }>;
+  incomeConcentrationPct: number | null;
+  cashflowTrend: {
+    seriesGrain: "day" | "month";
+    points: Array<{
+      key: string;
+      label: string;
+      incomeVnd: number;
+      expensesVnd: number;
+      debtPaidVnd: number;
+      netCashflowVnd: number;
+    }>;
+  };
+  debt: {
+    openingOutstandingVnd: number;
+    paymentsVnd: number;
+    closingOutstandingVnd: number;
+    monthlyRequiredVnd: number;
+    remainingRequiredVnd: number;
+    openingAssumption: string;
+    trend: Array<{ key: string; label: string; debtPaidVnd: number }>;
+  };
+  resilience: {
+    coreMonthlyBurnVnd: number;
+    fixedEssentialVnd: number;
+    variableEssentialAvgVnd: number;
+    safetyBalanceVnd: number;
+    safetyTargetMonths: number;
+    safetyTargetAmountVnd: number;
+    safetyRunwayMonths: number | null;
+    safetyTargetProgressPct: number | null;
+    mandatoryObligationsVnd: number;
+    projectedSurplusVnd: number;
+  };
+  comparison: {
+    periodKey: string;
+    previousPeriodKey: string;
+    previousLabel: string;
+    income: { currentVnd: number; previousVnd: number; deltaVnd: number; deltaPct: number | null };
+    expenses: { currentVnd: number; previousVnd: number; deltaVnd: number; deltaPct: number | null };
+    debtPaid: { currentVnd: number; previousVnd: number; deltaVnd: number; deltaPct: number | null };
+    netCashflow: { currentVnd: number; previousVnd: number; deltaVnd: number; deltaPct: number | null };
+    livingUsage: { currentVnd: number; previousVnd: number; deltaVnd: number; deltaPct: number | null };
+    growthAllocated: { currentVnd: number; previousVnd: number; deltaVnd: number; deltaPct: number | null };
+    funUsage: { currentVnd: number; previousVnd: number; deltaVnd: number; deltaPct: number | null };
+  };
+  insights: string[];
+  weekPace: {
+    enclosingMonth: string;
+    monthElapsedPct: number | null;
+    livingUsedOfMonthAllocatedPct: number | null;
+  } | null;
+  navigation: {
+    previousPeriodKey: string;
+    nextPeriodKey: string;
+    currentPeriodKey: string;
+  };
+};
+
+export function fetchFinanceAnalytics(grain: AnalyticsGrain, period?: string) {
+  const params = new URLSearchParams({ grain });
+  if (period) params.set("period", period);
+  return requestJson<FinanceAnalytics>(`/api/finance/analytics?${params.toString()}`);
+}
 
 /** Client-side preview matching backend allocateAmountVnd (remainder → Fun). */
 export function previewAllocationAmounts(

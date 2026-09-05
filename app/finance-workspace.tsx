@@ -35,17 +35,19 @@ import {
   type FinanceSummary,
   type FinanceTransaction,
 } from "@/lib/finance-api";
+import { FinanceAnalyticsPanel } from "@/components/planner/finance/FinanceAnalyticsPanel";
 
 type Props = {
   live: boolean;
   onChanged: (message: string) => void;
 };
 
+type FinanceTab = "overview" | "transactions" | "analytics" | "settings";
+
 type Modal =
   | { kind: "income"; source: FinanceIncomeSource }
   | { kind: "expense" }
   | { kind: "debt-pay" }
-  | { kind: "settings" }
   | { kind: "edit"; tx: FinanceTransaction }
   | null;
 
@@ -64,6 +66,7 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
   const [debts, setDebts] = useState<FinanceDebt[]>([]);
   const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
   const [txFilter, setTxFilter] = useState<"all" | "income" | "expense" | "debt">("all");
+  const [tab, setTab] = useState<FinanceTab>("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<Modal>(null);
@@ -111,35 +114,58 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
   return (
     <section className="gp-workspace gp-workspace-overview pos-finance" aria-label="Finance">
       <div className="pos-finance-toolbar">
-        <div className="pos-finance-month">
-          <button type="button" className="pos-btn-ghost" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month">
-            ‹
+        {(tab === "overview" || tab === "transactions") && (
+          <div className="pos-finance-month">
+            <button type="button" className="pos-btn-ghost" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month">
+              ‹
+            </button>
+            <strong className="pos-mono">{month}</strong>
+            <button type="button" className="pos-btn-ghost" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month">
+              ›
+            </button>
+            <button type="button" className="pos-btn-ghost" onClick={() => setMonth(currentMonthKey())}>
+              This month
+            </button>
+          </div>
+        )}
+        {tab === "overview" && (
+          <div className="pos-finance-actions">
+            <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "expense" })} disabled={!live}>
+              + Expense
+            </button>
+            <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "debt-pay" })} disabled={!live || debts.length === 0}>
+              + Debt payment
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="pos-finance-tabs" role="tablist" aria-label="Finance sections">
+        {([
+          ["overview", "Overview"],
+          ["transactions", "Transactions"],
+          ["analytics", "Analytics"],
+          ["settings", "Settings"],
+        ] as const).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            className={tab === id ? "active" : undefined}
+            onClick={() => setTab(id)}
+          >
+            {label}
           </button>
-          <strong className="pos-mono">{month}</strong>
-          <button type="button" className="pos-btn-ghost" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month">
-            ›
-          </button>
-          <button type="button" className="pos-btn-ghost" onClick={() => setMonth(currentMonthKey())}>
-            This month
-          </button>
-        </div>
-        <div className="pos-finance-actions">
-          <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "expense" })} disabled={!live}>
-            + Expense
-          </button>
-          <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "debt-pay" })} disabled={!live || debts.length === 0}>
-            + Debt payment
-          </button>
-          <button type="button" className="pos-btn-ghost" onClick={() => setModal({ kind: "settings" })}>
-            Settings
-          </button>
-        </div>
+        ))}
       </div>
 
       {error && <p className="pos-entity-form-error">{error}</p>}
-      {loading && !summary && <p className="pos-muted">Loading finance…</p>}
+      {loading && !summary && tab !== "analytics" && <p className="pos-muted">Loading finance…</p>}
 
-      {summary && (
+      {tab === "analytics" && <FinanceAnalyticsPanel live={live} />}
+
+      {tab === "overview" && summary && (
         <>
           {summary.showDeficit && (
             <div className="pos-finance-deficit" role="status">
@@ -273,7 +299,11 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
               </p>
             </div>
           </div>
+        </>
+      )}
 
+      {tab === "transactions" && summary && (
+        <>
           <div className="pos-finance-history-head">
             <h3 className="pos-finance-section-title">Transactions</h3>
             <div className="pos-finance-tx-filters" role="tablist">
@@ -314,6 +344,52 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
             ))}
           </ul>
         </>
+      )}
+
+      {tab === "settings" && summary && (
+        <SettingsPanel
+          settings={summary.settings}
+          sources={sources}
+          debts={debts}
+          saving={saving}
+          live={live}
+          onSaveSettings={async (pcts) => {
+            setSaving(true);
+            try {
+              await updateAllocationSettings(pcts);
+              onChanged("Allocation settings updated");
+              reload();
+            } catch (err) {
+              setError(err instanceof PlannerApiError ? err.message : "Could not save settings");
+            } finally {
+              setSaving(false);
+            }
+          }}
+          onAddSource={async (name) => {
+            setSaving(true);
+            try {
+              await createIncomeSource({ name });
+              onChanged("Income source added");
+              reload();
+            } catch (err) {
+              setError(err instanceof PlannerApiError ? err.message : "Could not add source");
+            } finally {
+              setSaving(false);
+            }
+          }}
+          onAddDebt={async (input) => {
+            setSaving(true);
+            try {
+              await createDebt(input);
+              onChanged("Debt added");
+              reload();
+            } catch (err) {
+              setError(err instanceof PlannerApiError ? err.message : "Could not add debt");
+            } finally {
+              setSaving(false);
+            }
+          }}
+        />
       )}
 
       {modal?.kind === "income" && summary && (
@@ -379,53 +455,6 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
               reload();
             } catch (err) {
               setError(err instanceof PlannerApiError ? err.message : "Could not save payment");
-            } finally {
-              setSaving(false);
-            }
-          }}
-        />
-      )}
-
-      {modal?.kind === "settings" && summary && (
-        <SettingsModal
-          settings={summary.settings}
-          sources={sources}
-          debts={debts}
-          saving={saving}
-          live={live}
-          onClose={() => !saving && setModal(null)}
-          onSaveSettings={async (pcts) => {
-            setSaving(true);
-            try {
-              await updateAllocationSettings(pcts);
-              onChanged("Allocation settings updated");
-              reload();
-            } catch (err) {
-              setError(err instanceof PlannerApiError ? err.message : "Could not save settings");
-            } finally {
-              setSaving(false);
-            }
-          }}
-          onAddSource={async (name) => {
-            setSaving(true);
-            try {
-              await createIncomeSource({ name });
-              onChanged("Income source added");
-              reload();
-            } catch (err) {
-              setError(err instanceof PlannerApiError ? err.message : "Could not add source");
-            } finally {
-              setSaving(false);
-            }
-          }}
-          onAddDebt={async (input) => {
-            setSaving(true);
-            try {
-              await createDebt(input);
-              onChanged("Debt added");
-              reload();
-            } catch (err) {
-              setError(err instanceof PlannerApiError ? err.message : "Could not add debt");
             } finally {
               setSaving(false);
             }
@@ -881,13 +910,12 @@ function DebtPayModal({
   );
 }
 
-function SettingsModal({
+function SettingsPanel({
   settings,
   sources,
   debts,
   saving,
   live,
-  onClose,
   onSaveSettings,
   onAddSource,
   onAddDebt,
@@ -897,12 +925,12 @@ function SettingsModal({
   debts: FinanceDebt[];
   saving: boolean;
   live: boolean;
-  onClose: () => void;
   onSaveSettings: (pcts: {
     livingPct: number;
     safetyPct: number;
     growthPct: number;
     funPct: number;
+    safetyTargetMonths: 3 | 6 | 9 | 12;
   }) => Promise<void>;
   onAddSource: (name: string) => Promise<void>;
   onAddDebt: (input: {
@@ -915,6 +943,7 @@ function SettingsModal({
   const [safety, setSafety] = useState(String(settings.safetyPct));
   const [growth, setGrowth] = useState(String(settings.growthPct));
   const [fun, setFun] = useState(String(settings.funPct));
+  const [safetyMonths, setSafetyMonths] = useState(String(settings.safetyTargetMonths ?? 6));
   const [sourceName, setSourceName] = useState("");
   const [debtName, setDebtName] = useState("");
   const [debtOut, setDebtOut] = useState("");
@@ -923,118 +952,109 @@ function SettingsModal({
   const sum = Number(living) + Number(safety) + Number(growth) + Number(fun);
 
   return (
-    <div className="pos-qa-backdrop">
-      <button type="button" className="pos-qa-dismiss" aria-label="Close" onClick={onClose} disabled={saving} />
-      <div className="pos-qa-modal pos-entity-form-modal pos-finance-settings" role="dialog">
-        <div className="pos-qa-header">
-          <span className="pos-qa-eyebrow">Finance settings</span>
-          <button type="button" className="pos-qa-close" onClick={onClose} disabled={saving}>×</button>
-        </div>
-        <div className="pos-qa-fields">
-          <p className="pos-qa-field-label">Allocation % (must total 100)</p>
-          <div className="pos-entity-form-row">
-            <label className="pos-qa-field">Living &amp; Fixed<input type="number" value={living} onChange={(e) => setLiving(e.target.value)} disabled={saving} /></label>
-            <label className="pos-qa-field">Safety<input type="number" value={safety} onChange={(e) => setSafety(e.target.value)} disabled={saving} /></label>
-          </div>
-          <div className="pos-entity-form-row">
-            <label className="pos-qa-field">Growth<input type="number" value={growth} onChange={(e) => setGrowth(e.target.value)} disabled={saving} /></label>
-            <label className="pos-qa-field">Fun<input type="number" value={fun} onChange={(e) => setFun(e.target.value)} disabled={saving} /></label>
-          </div>
-          <p className={`pos-qa-for-hint ${sum !== 100 ? "warn" : ""}`}>Total: {sum}%{sum !== 100 ? " — must be 100" : ""}</p>
-          <button
-            type="button"
-            className="pos-btn-primary"
-            disabled={saving || !live || sum !== 100}
-            onClick={() => {
-              void onSaveSettings({
-                livingPct: Number(living),
-                safetyPct: Number(safety),
-                growthPct: Number(growth),
-                funPct: Number(fun),
-              });
-            }}
-          >
-            Save allocation
-          </button>
-
-          <hr className="pos-finance-hr" />
-          <p className="pos-qa-field-label">Income sources</p>
-          <ul className="pos-finance-cat-list compact">
-            {sources.map((s) => (
-              <li key={s.id}><span>{s.name}</span><span className="pos-muted">{s.active ? "active" : "off"}</span></li>
-            ))}
-          </ul>
-          <div className="pos-entity-form-row">
-            <label className="pos-qa-field">
-              <span className="pos-qa-field-label">New source</span>
-              <input value={sourceName} onChange={(e) => setSourceName(e.target.value)} disabled={saving || !live} placeholder="Salary" />
-            </label>
-            <button
-              type="button"
-              className="pos-btn-secondary"
-              disabled={saving || !live || !sourceName.trim()}
-              onClick={() => {
-                const name = sourceName.trim();
-                setSourceName("");
-                void onAddSource(name);
-              }}
-            >
-              Add
-            </button>
-          </div>
-
-          <hr className="pos-finance-hr" />
-          <p className="pos-qa-field-label">Debts</p>
-          <ul className="pos-finance-cat-list compact">
-            {debts.map((d) => (
-              <li key={d.id}>
-                <span>{d.name}</span>
-                <strong className="pos-mono">{formatVnd(d.outstandingVnd)}</strong>
-              </li>
-            ))}
-          </ul>
-          <label className="pos-qa-field">
-            <span className="pos-qa-field-label">Debt name</span>
-            <input value={debtName} onChange={(e) => setDebtName(e.target.value)} disabled={saving || !live} />
-          </label>
-          <div className="pos-entity-form-row">
-            <label className="pos-qa-field">
-              <span className="pos-qa-field-label">Outstanding</span>
-              <input value={debtOut} onChange={(e) => setDebtOut(e.target.value)} disabled={saving || !live} inputMode="numeric" />
-            </label>
-            <label className="pos-qa-field">
-              <span className="pos-qa-field-label">Monthly due</span>
-              <input value={debtDue} onChange={(e) => setDebtDue(e.target.value)} disabled={saving || !live} inputMode="numeric" />
-            </label>
-          </div>
-          <button
-            type="button"
-            className="pos-btn-secondary"
-            disabled={saving || !live || !debtName.trim()}
-            onClick={() => {
-              const out = parseAmountInput(debtOut) ?? 0;
-              const due = parseAmountInput(debtDue) ?? 0;
-              if (!debtName.trim()) {
-                setLocalError("Debt name required");
-                return;
-              }
-              const name = debtName.trim();
-              setDebtName("");
-              setDebtOut("");
-              setDebtDue("");
-              void onAddDebt({ name, outstandingVnd: out, monthlyRequiredVnd: due });
-            }}
-          >
-            Add debt
-          </button>
-          {localError && <p className="pos-entity-form-error">{localError}</p>}
-        </div>
-        <div className="pos-entity-form-footer">
-          <div className="pos-entity-form-primary">
-            <button type="button" className="pos-btn-ghost" onClick={onClose} disabled={saving}>Close</button>
-          </div>
-        </div>
+    <div className="pos-finance-settings-panel">
+      <h3 className="pos-finance-section-title">Allocation policy</h3>
+      <p className="pos-muted pos-finance-lede">Percentages must total 100. Changing policy does not rewrite past income snapshots.</p>
+      <div className="pos-entity-form-row">
+        <label className="pos-qa-field">Living &amp; Fixed<input type="number" value={living} onChange={(e) => setLiving(e.target.value)} disabled={saving} /></label>
+        <label className="pos-qa-field">Safety<input type="number" value={safety} onChange={(e) => setSafety(e.target.value)} disabled={saving} /></label>
       </div>
+      <div className="pos-entity-form-row">
+        <label className="pos-qa-field">Growth<input type="number" value={growth} onChange={(e) => setGrowth(e.target.value)} disabled={saving} /></label>
+        <label className="pos-qa-field">Fun<input type="number" value={fun} onChange={(e) => setFun(e.target.value)} disabled={saving} /></label>
+      </div>
+      <label className="pos-qa-field">
+        Safety runway target (months)
+        <select
+          value={safetyMonths}
+          disabled={saving}
+          onChange={(e) => setSafetyMonths(e.target.value)}
+        >
+          {[3, 6, 9, 12].map((n) => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
+      </label>
+      <p className={`pos-qa-for-hint ${sum !== 100 ? "warn" : ""}`}>Total: {sum}%{sum !== 100 ? " — must be 100" : ""}</p>
+      <button
+        type="button"
+        className="pos-btn-primary"
+        disabled={saving || !live || sum !== 100}
+        onClick={() => {
+          void onSaveSettings({
+            livingPct: Number(living),
+            safetyPct: Number(safety),
+            growthPct: Number(growth),
+            funPct: Number(fun),
+            safetyTargetMonths: Number(safetyMonths) as 3 | 6 | 9 | 12,
+          });
+        }}
+      >
+        Save allocation
+      </button>
+
+      <hr className="pos-finance-hr" />
+      <p className="pos-qa-field-label">Income sources</p>
+      <ul className="pos-finance-cat-list compact">
+        {sources.map((s) => (
+          <li key={s.id}><span>{s.name}</span><span className="pos-muted">{s.active ? "active" : "off"}</span></li>
+        ))}
+      </ul>
+      <div className="pos-entity-form-row">
+        <label className="pos-qa-field">
+          <span className="pos-qa-field-label">New source</span>
+          <input value={sourceName} onChange={(e) => setSourceName(e.target.value)} disabled={saving || !live} placeholder="Salary" />
+        </label>
+        <button
+          type="button"
+          className="pos-btn-secondary"
+          disabled={saving || !live || !sourceName.trim()}
+          onClick={() => {
+            const name = sourceName.trim();
+            setSourceName("");
+            void onAddSource(name);
+          }}
+        >
+          Add source
+        </button>
+      </div>
+
+      <hr className="pos-finance-hr" />
+      <p className="pos-qa-field-label">Debts</p>
+      <ul className="pos-finance-cat-list compact">
+        {debts.map((d) => (
+          <li key={d.id}>
+            <span>{d.name}</span>
+            <span className="pos-mono pos-muted">{formatVnd(d.outstandingVnd)}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="pos-entity-form-row">
+        <label className="pos-qa-field">Name<input value={debtName} onChange={(e) => setDebtName(e.target.value)} disabled={saving || !live} /></label>
+        <label className="pos-qa-field">Outstanding<input value={debtOut} onChange={(e) => setDebtOut(e.target.value)} disabled={saving || !live} inputMode="numeric" /></label>
+        <label className="pos-qa-field">Monthly required<input value={debtDue} onChange={(e) => setDebtDue(e.target.value)} disabled={saving || !live} inputMode="numeric" /></label>
+      </div>
+      {localError && <p className="pos-qa-error">{localError}</p>}
+      <button
+        type="button"
+        className="pos-btn-secondary"
+        disabled={saving || !live || !debtName.trim()}
+        onClick={() => {
+          const outstandingVnd = parseAmountInput(debtOut);
+          const monthlyRequiredVnd = parseAmountInput(debtDue);
+          if (outstandingVnd == null || monthlyRequiredVnd == null) {
+            setLocalError("Enter valid debt amounts");
+            return;
+          }
+          setLocalError(null);
+          setDebtName("");
+          setDebtOut("");
+          setDebtDue("");
+          void onAddDebt({ name: debtName.trim(), outstandingVnd, monthlyRequiredVnd });
+        }}
+      >
+        Add debt
+      </button>
     </div>
   );
 }
