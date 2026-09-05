@@ -1,4 +1,4 @@
-export type PlannerSection = "calendar" | "tasks" | "projects" | "goals" | "progress";
+export type PlannerSection = "calendar" | "tasks" | "projects" | "goals" | "progress" | "finance";
 
 const SECTION_PATH: Record<PlannerSection, string> = {
   calendar: "/calendar",
@@ -6,6 +6,7 @@ const SECTION_PATH: Record<PlannerSection, string> = {
   projects: "/projects",
   goals: "/goals",
   progress: "/progress",
+  finance: "/finance",
 };
 
 export function plannerPath(section: PlannerSection, entityId?: string | null) {
@@ -25,5 +26,6 @@ export function parsePlannerPath(pathname: string): {
   if (root === "projects") return { section: "projects", entityId };
   if (root === "goals") return { section: "goals", entityId };
   if (root === "progress") return { section: "progress", entityId };
+  if (root === "finance") return { section: "finance", entityId: null };
   return { section: "calendar", entityId: null };
 }

@@ -5603,3 +5603,46 @@
 .pos-theme-toggle.collapsed span {
   display: none;
 }
+
+
+/* ── Finance workspace ── */
+.pos-finance { padding: 8px 4px 48px; max-width: 1100px; }
+.pos-finance-toolbar { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.pos-finance-month { display: flex; align-items: center; gap: 8px; }
+.pos-finance-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pos-finance-metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 12px 0; }
+.pos-finance-metric { padding: 12px 14px; border: 1px solid var(--pos-border); border-radius: 12px; background: var(--pos-card); }
+.pos-finance-metric-label { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--pos-ink-muted); margin-bottom: 6px; }
+.pos-finance-metric-value { font-size: 18px; font-weight: 650; }
+.pos-finance-metric-value.ok { color: var(--pos-success, #15803d); }
+.pos-finance-metric-value.warn { color: var(--pos-danger, #b91c1c); }
+.pos-finance-deficit { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; margin-bottom: 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, #b91c1c 35%, var(--pos-border)); background: color-mix(in srgb, #b91c1c 8%, var(--pos-card)); }
+.pos-finance-section-title { margin: 20px 0 8px; font-size: 14px; font-weight: 700; }
+.pos-finance-lede { margin: 0 0 10px; font-size: 13px; }
+.pos-finance-buckets { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.pos-finance-bucket-card { padding: 14px; border: 1px solid var(--pos-border); border-radius: 12px; background: var(--pos-card); }
+.pos-finance-bucket-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.pos-finance-bucket-main { font-size: 20px; font-weight: 650; }
+.pos-finance-bucket-sub { font-size: 12px; margin-top: 4px; }
+.pos-finance-sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.pos-finance-source-card { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding: 14px; border: 1px solid var(--pos-border); border-radius: 12px; background: var(--pos-card); cursor: pointer; text-align: left; color: inherit; }
+.pos-finance-source-card:hover:not(:disabled) { border-color: color-mix(in srgb, var(--pos-primary) 40%, var(--pos-border)); }
+.pos-finance-source-card span { font-size: 12px; color: var(--pos-ink-muted); }
+.pos-finance-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 8px; }
+@media (max-width: 800px) { .pos-finance-two-col { grid-template-columns: 1fr; } }
+.pos-finance-cat-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.pos-finance-cat-list li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 10px; background: var(--pos-surface-alt, #f9fafb); font-size: 13px; }
+.pos-finance-cat-list.compact li { background: transparent; border-bottom: 1px solid var(--pos-border); border-radius: 0; }
+.pos-finance-history-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; }
+.pos-finance-tx-filters { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--pos-border); border-radius: 10px; background: var(--pos-surface-alt); }
+.pos-finance-tx-filters button { border: 0; background: transparent; padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--pos-ink-muted); text-transform: capitalize; }
+.pos-finance-tx-filters button.active { background: var(--pos-card); color: var(--pos-ink); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.pos-finance-tx-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
+.pos-finance-tx-row { width: 100%; display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid transparent; border-radius: 10px; background: transparent; cursor: pointer; text-align: left; color: inherit; font: inherit; }
+.pos-finance-tx-row:hover { background: var(--pos-surface-alt); border-color: var(--pos-border); }
+.pos-finance-tx-row .ok { color: var(--pos-success, #15803d); }
+.pos-finance-compare { font-size: 12px; margin-bottom: 4px; }
+.pos-finance-hr { border: 0; border-top: 1px solid var(--pos-border); margin: 16px 0; }
+.pos-finance-settings { max-height: min(90vh, 720px); overflow: auto; }
+.pos-qa-for-hint.warn { color: var(--pos-danger, #b91c1c); }
+

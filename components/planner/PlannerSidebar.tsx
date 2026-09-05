@@ -10,6 +10,7 @@ import {
   ListTodo,
   Target,
   TrendingUp,
+  Wallet,
 } from "lucide-react";
 import { plannerPath, type PlannerSection } from "@/app/planner-routes";
 import { ThemeToggle } from "./ThemeToggle";
@@ -41,6 +42,7 @@ const NAV: Array<{ id: PlannerSection; label: string; icon: typeof CalendarDays 
   { id: "projects", label: "Projects", icon: FolderKanban },
   { id: "goals", label: "Goals", icon: Target },
   { id: "progress", label: "Progress", icon: TrendingUp },
+  { id: "finance", label: "Finance", icon: Wallet },
 ];
 
 export function PlannerSidebar({
@@ -172,7 +174,7 @@ export function PlannerSidebar({
       {!collapsed && (
         <div className="pos-sidebar-hints">
           {[
-            ["1–5", "Navigate"],
+            ["1–6", "Navigate"],
             ["N / ⌘K", "Quick add"],
             ["/", "Search"],
           ].map(([key, label]) => (

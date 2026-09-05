@@ -95,6 +95,7 @@ import {
   writeClockFormat,
 } from "@/lib/clock-format";
 import { GoalsWorkspace, ProgressWorkspace, ProjectsWorkspace, type HorizonScope } from "./planner-workspaces";
+import { FinanceWorkspace } from "./finance-workspace";
 import { parsePlannerPath, plannerPath, type PlannerSection } from "./planner-routes";
 import { aggregateTaskSchedule, formatScheduledMinutes, remainingSessionsAfterRemove } from "@/lib/task-schedule";
 
@@ -1556,6 +1557,7 @@ export function PlannerApp({
       if (event.key === "3") { goTo("projects"); return; }
       if (event.key === "4") { goTo("goals"); return; }
       if (event.key === "5") { goTo("progress"); return; }
+      if (event.key === "6") { goTo("finance"); return; }
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         changePeriod(-1);
@@ -2301,6 +2303,7 @@ export function PlannerApp({
     projects: "Projects",
     goals: "Goals",
     progress: "Progress",
+    finance: "Finance",
   }[activeSection];
 
   return (
@@ -2385,6 +2388,8 @@ export function PlannerApp({
               <h1>Projects <span>{apiProjects.filter((project) => project.active).length} active</span></h1>
             ) : activeSection === "goals" ? (
               <h1>Goals <span>{goals.filter((goal) => goal.status === "ACTIVE").length} active</span></h1>
+            ) : activeSection === "finance" ? (
+              <h1>Finance <span>cashflow</span></h1>
             ) : (
               <h1>Progress</h1>
             )}
@@ -2944,6 +2949,13 @@ export function PlannerApp({
             evidenceEpoch={evidenceEpoch}
             onAddWeekTask={(projectId, title) => {
               void addTask(title, 60, projectId, "p2", "week", startOfWeek(now));
+            }}
+          />
+        ) : activeSection === "finance" ? (
+          <FinanceWorkspace
+            live={connection === "live"}
+            onChanged={(message) => {
+              showToast(message);
             }}
           />
         ) : (

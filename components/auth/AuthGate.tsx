@@ -20,7 +20,7 @@ type AuthState =
   | { status: "disabled"; message: string }
   | { status: "authenticated"; user: AuthUser };
 
-const PLANNER_PREFIXES = ["/calendar", "/tasks", "/projects", "/goals", "/progress"];
+const PLANNER_PREFIXES = ["/calendar", "/tasks", "/projects", "/goals", "/progress", "/finance"];
 
 function isPlannerPath(pathname: string) {
   return PLANNER_PREFIXES.some(
