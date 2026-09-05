@@ -24,6 +24,7 @@ import {
   patchExpenseEntry,
   patchIncomeEntry,
   PlannerApiError,
+  previewAllocationAmounts,
   shiftMonth,
   todayLocalDate,
   updateAllocationSettings,
@@ -175,27 +176,42 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
 
           <h3 className="pos-finance-section-title">Allocation buckets</h3>
           <p className="pos-muted pos-finance-lede">
-            Personal allocation framework — Living &amp; Fixed, Safety, Investing, Opportunity,
-            Learning, Fun. Allocations are not expenses.
+            Live — Protect — Grow — Enjoy. Allocations are not expenses. Bucket ≠ category.
           </p>
           <div className="pos-finance-buckets">
             {BUCKET_ORDER.map((key) => {
               const b = summary.buckets.find((x) => x.bucket === key);
               if (!b) return null;
+              const over = b.lifetimeBalanceVnd < 0;
               return (
-              <div key={b.bucket} className="pos-finance-bucket-card">
-                <div className="pos-finance-bucket-head">
-                  <strong>{BUCKET_LABELS[b.bucket]}</strong>
-                  <span className="pos-muted">{b.pctOfIncome}% of income</span>
+                <div key={b.bucket} className={`pos-finance-bucket-card${over ? " over" : ""}`}>
+                  <div className="pos-finance-bucket-head">
+                    <strong>{BUCKET_LABELS[b.bucket]}</strong>
+                    <span className="pos-muted">Target {b.targetPct}%</span>
+                  </div>
+                  <div className="pos-mono pos-finance-bucket-main">
+                    {formatVnd(b.lifetimeBalanceVnd)}
+                  </div>
+                  <div className="pos-muted pos-finance-bucket-sub">
+                    Available · this month {formatVnd(b.allocatedVnd)} in / {formatVnd(b.spentVnd)} out
+                  </div>
+                  <div className="pos-muted pos-finance-bucket-sub">
+                    Net this month {formatVnd(b.remainingVnd)}
+                    {over
+                      ? ` · ${BUCKET_LABELS[b.bucket]} is ${formatVnd(Math.abs(b.lifetimeBalanceVnd))} over allocation`
+                      : ""}
+                  </div>
+                  {b.bucket === "GROWTH" && summary.growthSpendingByCategory.length > 0 && (
+                    <ul className="pos-finance-growth-breakdown">
+                      {summary.growthSpendingByCategory.map((row) => (
+                        <li key={row.categoryId}>
+                          <span>{row.name}</span>
+                          <span className="pos-mono">{formatVnd(row.amountVnd)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-                <div className="pos-mono pos-finance-bucket-main">{formatVnd(b.remainingVnd)}</div>
-                <div className="pos-muted pos-finance-bucket-sub">
-                  Allocated {formatVnd(b.allocatedVnd)} · Used {formatVnd(b.spentVnd)}
-                </div>
-                <div className="pos-muted pos-finance-bucket-sub">
-                  Lifetime {formatVnd(b.lifetimeBalanceVnd)}
-                </div>
-              </div>
               );
             })}
           </div>
@@ -300,25 +316,13 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
         </>
       )}
 
-      {modal?.kind === "income" && (
-        <QuickAmountModal
-          title={`Income · ${modal.source.name}`}
-          amountLabel="Amount (VND)"
-          dateLabel="Received on"
-          defaultDate={todayLocalDate()}
+      {modal?.kind === "income" && summary && (
+        <IncomeModal
+          sourceName={modal.source.name}
+          settings={summary.settings}
           saving={saving}
-          preview={summary ? (
-            <AllocationPreview
-              livingPct={summary.settings.livingPct}
-              safetyPct={summary.settings.safetyPct}
-              investingPct={summary.settings.investingPct}
-              opportunityPct={summary.settings.opportunityPct}
-              learningPct={summary.settings.learningPct}
-              funPct={summary.settings.funPct}
-            />
-          ) : null}
           onClose={() => !saving && setModal(null)}
-          onSave={async ({ amount, date, note }) => {
+          onSave={async ({ amount, date, note, allocations }) => {
             setSaving(true);
             try {
               await createIncomeEntry({
@@ -326,6 +330,7 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
                 amountVnd: amount,
                 receivedAt: date,
                 note,
+                allocations,
               });
               onChanged("Income recorded");
               setModal(null);
@@ -469,27 +474,155 @@ function Metric({
   );
 }
 
-function AllocationPreview({
-  livingPct,
-  safetyPct,
-  investingPct,
-  opportunityPct,
-  learningPct,
-  funPct,
+function IncomeModal({
+  sourceName,
+  settings,
+  saving,
+  onClose,
+  onSave,
 }: {
-  livingPct: number;
-  safetyPct: number;
-  investingPct: number;
-  opportunityPct: number;
-  learningPct: number;
-  funPct: number;
+  sourceName: string;
+  settings: FinanceSummary["settings"];
+  saving: boolean;
+  onClose: () => void;
+  onSave: (input: {
+    amount: number;
+    date: string;
+    note: string;
+    allocations?: Array<{ bucket: FinanceBucket; amountVnd: number }>;
+  }) => Promise<void>;
 }) {
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(todayLocalDate());
+  const [note, setNote] = useState("");
+  const [adjust, setAdjust] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const parsed = parseAmountInput(amount) ?? 0;
+  const defaults = previewAllocationAmounts(parsed, settings);
+  const [override, setOverride] = useState<Record<FinanceBucket, string>>({
+    LIVING: "",
+    SAFETY: "",
+    GROWTH: "",
+    FUN: "",
+  });
+
+  useEffect(() => {
+    if (!adjust) return;
+    setOverride({
+      LIVING: String(defaults.LIVING),
+      SAFETY: String(defaults.SAFETY),
+      GROWTH: String(defaults.GROWTH),
+      FUN: String(defaults.FUN),
+    });
+    // Only re-seed when entering adjust or amount changes while adjusting.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adjust, parsed]);
+
+  const preview = adjust
+    ? {
+        LIVING: parseAmountInput(override.LIVING) ?? 0,
+        SAFETY: parseAmountInput(override.SAFETY) ?? 0,
+        GROWTH: parseAmountInput(override.GROWTH) ?? 0,
+        FUN: parseAmountInput(override.FUN) ?? 0,
+      }
+    : defaults;
+  const previewSum =
+    preview.LIVING + preview.SAFETY + preview.GROWTH + preview.FUN;
+
   return (
-    <p className="pos-qa-for-hint">
-      Will allocate {livingPct}% Living · {safetyPct}% Safety · {investingPct}% Investing ·{" "}
-      {opportunityPct}% Opportunity · {learningPct}% Learning · {funPct}% Fun
-      (snapshot stored; changing settings later won’t rewrite this).
-    </p>
+    <div className="pos-qa-backdrop">
+      <button type="button" className="pos-qa-dismiss" aria-label="Close" onClick={onClose} disabled={saving} />
+      <form
+        className="pos-qa-modal pos-entity-form-modal"
+        role="dialog"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const n = parseAmountInput(amount);
+          if (n == null) {
+            setLocalError("Enter a valid amount");
+            return;
+          }
+          if (adjust && previewSum !== n) {
+            setLocalError(`Allocations must sum to ${formatVnd(n)}`);
+            return;
+          }
+          setLocalError(null);
+          void onSave({
+            amount: n,
+            date,
+            note,
+            allocations: adjust
+              ? BUCKET_ORDER.map((bucket) => ({ bucket, amountVnd: preview[bucket] }))
+              : undefined,
+          });
+        }}
+      >
+        <div className="pos-qa-header">
+          <span className="pos-qa-eyebrow">Income · {sourceName}</span>
+          <button type="button" className="pos-qa-close" onClick={onClose} disabled={saving}>×</button>
+        </div>
+        <div className="pos-qa-fields">
+          <label className="pos-qa-field">
+            Amount (VND)
+            <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="numeric" autoFocus disabled={saving} />
+          </label>
+          <label className="pos-qa-field">
+            Received on
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={saving} />
+          </label>
+          <label className="pos-qa-field">
+            Note
+            <input value={note} onChange={(e) => setNote(e.target.value)} disabled={saving} />
+          </label>
+
+          <p className="pos-qa-field-label">Allocation preview</p>
+          <ul className="pos-finance-alloc-preview">
+            {BUCKET_ORDER.map((bucket) => (
+              <li key={bucket}>
+                <span>{BUCKET_LABELS[bucket]}</span>
+                {adjust ? (
+                  <input
+                    className="pos-mono"
+                    inputMode="numeric"
+                    value={override[bucket]}
+                    disabled={saving}
+                    onChange={(e) => setOverride((prev) => ({ ...prev, [bucket]: e.target.value }))}
+                  />
+                ) : (
+                  <strong className="pos-mono">{formatVnd(preview[bucket])}</strong>
+                )}
+              </li>
+            ))}
+          </ul>
+          {adjust && (
+            <p className={`pos-qa-for-hint ${previewSum !== parsed ? "warn" : ""}`}>
+              Total allocated: {formatVnd(previewSum)}
+              {previewSum !== parsed ? " — must match income" : ""}
+            </p>
+          )}
+          {!adjust && (
+            <p className="pos-qa-for-hint">
+              Using settings {settings.livingPct}/{settings.safetyPct}/{settings.growthPct}/{settings.funPct}%
+              (snapshot stored; changing settings later won’t rewrite this).
+            </p>
+          )}
+          {localError && <p className="pos-qa-error">{localError}</p>}
+          <div className="pos-entity-form-actions">
+            <button
+              type="button"
+              className="pos-btn-ghost"
+              disabled={saving || parsed <= 0}
+              onClick={() => setAdjust((v) => !v)}
+            >
+              {adjust ? "Use default allocation" : "Adjust this allocation"}
+            </button>
+            <button type="submit" className="pos-btn-primary" disabled={saving || parsed < 0}>
+              {saving ? "Saving…" : "Save income"}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -768,9 +901,7 @@ function SettingsModal({
   onSaveSettings: (pcts: {
     livingPct: number;
     safetyPct: number;
-    investingPct: number;
-    opportunityPct: number;
-    learningPct: number;
+    growthPct: number;
     funPct: number;
   }) => Promise<void>;
   onAddSource: (name: string) => Promise<void>;
@@ -782,22 +913,14 @@ function SettingsModal({
 }) {
   const [living, setLiving] = useState(String(settings.livingPct));
   const [safety, setSafety] = useState(String(settings.safetyPct));
-  const [investing, setInvesting] = useState(String(settings.investingPct));
-  const [opportunity, setOpportunity] = useState(String(settings.opportunityPct));
-  const [learning, setLearning] = useState(String(settings.learningPct));
+  const [growth, setGrowth] = useState(String(settings.growthPct));
   const [fun, setFun] = useState(String(settings.funPct));
   const [sourceName, setSourceName] = useState("");
   const [debtName, setDebtName] = useState("");
   const [debtOut, setDebtOut] = useState("");
   const [debtDue, setDebtDue] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
-  const sum =
-    Number(living) +
-    Number(safety) +
-    Number(investing) +
-    Number(opportunity) +
-    Number(learning) +
-    Number(fun);
+  const sum = Number(living) + Number(safety) + Number(growth) + Number(fun);
 
   return (
     <div className="pos-qa-backdrop">
@@ -814,11 +937,7 @@ function SettingsModal({
             <label className="pos-qa-field">Safety<input type="number" value={safety} onChange={(e) => setSafety(e.target.value)} disabled={saving} /></label>
           </div>
           <div className="pos-entity-form-row">
-            <label className="pos-qa-field">Investing<input type="number" value={investing} onChange={(e) => setInvesting(e.target.value)} disabled={saving} /></label>
-            <label className="pos-qa-field">Opportunity<input type="number" value={opportunity} onChange={(e) => setOpportunity(e.target.value)} disabled={saving} /></label>
-          </div>
-          <div className="pos-entity-form-row">
-            <label className="pos-qa-field">Learning<input type="number" value={learning} onChange={(e) => setLearning(e.target.value)} disabled={saving} /></label>
+            <label className="pos-qa-field">Growth<input type="number" value={growth} onChange={(e) => setGrowth(e.target.value)} disabled={saving} /></label>
             <label className="pos-qa-field">Fun<input type="number" value={fun} onChange={(e) => setFun(e.target.value)} disabled={saving} /></label>
           </div>
           <p className={`pos-qa-for-hint ${sum !== 100 ? "warn" : ""}`}>Total: {sum}%{sum !== 100 ? " — must be 100" : ""}</p>
@@ -830,9 +949,7 @@ function SettingsModal({
               void onSaveSettings({
                 livingPct: Number(living),
                 safetyPct: Number(safety),
-                investingPct: Number(investing),
-                opportunityPct: Number(opportunity),
-                learningPct: Number(learning),
+                growthPct: Number(growth),
                 funPct: Number(fun),
               });
             }}

@@ -5619,17 +5619,29 @@
 .pos-finance-deficit { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; margin-bottom: 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, #b91c1c 35%, var(--pos-border)); background: color-mix(in srgb, #b91c1c 8%, var(--pos-card)); }
 .pos-finance-section-title { margin: 20px 0 8px; font-size: 14px; font-weight: 700; }
 .pos-finance-lede { margin: 0 0 10px; font-size: 13px; }
-.pos-finance-buckets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-@media (max-width: 900px) {
-  .pos-finance-buckets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+.pos-finance-buckets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 560px) {
   .pos-finance-buckets { grid-template-columns: 1fr; }
 }
 .pos-finance-bucket-card { padding: 14px; border: 1px solid var(--pos-border); border-radius: 12px; background: var(--pos-card); }
+.pos-finance-bucket-card.over { border-color: color-mix(in srgb, #b45309 45%, var(--pos-border)); }
 .pos-finance-bucket-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 13px; }
 .pos-finance-bucket-main { font-size: 20px; font-weight: 650; }
 .pos-finance-bucket-sub { font-size: 12px; margin-top: 4px; }
+.pos-finance-growth-breakdown {
+  list-style: none; margin: 10px 0 0; padding: 8px 0 0; border-top: 1px solid var(--pos-border);
+  display: grid; gap: 4px; font-size: 12px;
+}
+.pos-finance-growth-breakdown li { display: flex; justify-content: space-between; gap: 8px; color: var(--pos-ink-muted); }
+.pos-finance-alloc-preview {
+  list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px;
+}
+.pos-finance-alloc-preview li {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px;
+}
+.pos-finance-alloc-preview input {
+  width: 140px; text-align: right; font-variant-numeric: tabular-nums;
+}
 .pos-finance-sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
 .pos-finance-source-card { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding: 14px; border: 1px solid var(--pos-border); border-radius: 12px; background: var(--pos-card); cursor: pointer; text-align: left; color: inherit; }
 .pos-finance-source-card:hover:not(:disabled) { border-color: color-mix(in srgb, var(--pos-primary) 40%, var(--pos-border)); }

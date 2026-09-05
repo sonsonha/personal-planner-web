@@ -1,21 +1,13 @@
 import { PlannerApiError, requestJson } from "@/lib/planner-api";
 
-export type FinanceBucket =
-  | "LIVING"
-  | "SAFETY"
-  | "INVESTING"
-  | "OPPORTUNITY"
-  | "LEARNING"
-  | "FUN";
+export type FinanceBucket = "LIVING" | "SAFETY" | "GROWTH" | "FUN";
 export type ExpenseCategoryKind = "ESSENTIAL" | "FIXED" | "DISCRETIONARY" | "OTHER";
 
 export type FinanceAllocationSettings = {
   id: string;
   livingPct: number;
   safetyPct: number;
-  investingPct: number;
-  opportunityPct: number;
-  learningPct: number;
+  growthPct: number;
   funPct: number;
   currency: string;
   revision: number;
@@ -122,9 +114,11 @@ export type FinanceSummary = {
     spentVnd: number;
     remainingVnd: number;
     pctOfIncome: number;
+    targetPct: number;
     lifetimeBalanceVnd: number;
   }>;
   spendingByCategory: Array<{ categoryId: string; name: string; amountVnd: number }>;
+  growthSpendingByCategory: Array<{ categoryId: string; name: string; amountVnd: number }>;
   previousMonth: {
     month: string;
     incomeVnd: number;
@@ -150,9 +144,7 @@ export function fetchAllocationSettings() {
 export function updateAllocationSettings(input: {
   livingPct: number;
   safetyPct: number;
-  investingPct: number;
-  opportunityPct: number;
-  learningPct: number;
+  growthPct: number;
   funPct: number;
   currency?: string;
 }) {
@@ -195,6 +187,7 @@ export function createIncomeEntry(input: {
   amountVnd: number;
   receivedAt?: string;
   note?: string;
+  allocations?: Array<{ bucket: FinanceBucket; amountVnd: number }>;
 }) {
   return requestJson<FinanceIncomeEntry>("/api/finance/income-entries", {
     method: "POST",
@@ -409,17 +402,24 @@ export function shiftMonth(month: string, delta: number): string {
 export const BUCKET_LABELS: Record<FinanceBucket, string> = {
   LIVING: "Living & Fixed",
   SAFETY: "Safety",
-  INVESTING: "Investing",
-  OPPORTUNITY: "Opportunity",
-  LEARNING: "Learning",
+  GROWTH: "Growth",
   FUN: "Fun",
 };
 
-export const BUCKET_ORDER: FinanceBucket[] = [
-  "LIVING",
-  "SAFETY",
-  "INVESTING",
-  "OPPORTUNITY",
-  "LEARNING",
-  "FUN",
-];
+export const BUCKET_ORDER: FinanceBucket[] = ["LIVING", "SAFETY", "GROWTH", "FUN"];
+
+/** Client-side preview matching backend allocateAmountVnd (remainder → Fun). */
+export function previewAllocationAmounts(
+  amountVnd: number,
+  pcts: { livingPct: number; safetyPct: number; growthPct: number; funPct: number },
+): Record<FinanceBucket, number> {
+  if (!Number.isFinite(amountVnd) || amountVnd < 0) {
+    return { LIVING: 0, SAFETY: 0, GROWTH: 0, FUN: 0 };
+  }
+  const n = Math.floor(amountVnd);
+  const living = Math.floor((n * pcts.livingPct) / 100);
+  const safety = Math.floor((n * pcts.safetyPct) / 100);
+  const growth = Math.floor((n * pcts.growthPct) / 100);
+  const fun = n - living - safety - growth;
+  return { LIVING: living, SAFETY: safety, GROWTH: growth, FUN: fun };
+}
