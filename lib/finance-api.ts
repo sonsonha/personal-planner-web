@@ -1,14 +1,22 @@
 import { PlannerApiError, requestJson } from "@/lib/planner-api";
 
-export type FinanceBucket = "LIVING" | "SAFETY" | "COMPOUND" | "OPPORTUNITY";
+export type FinanceBucket =
+  | "LIVING"
+  | "SAFETY"
+  | "INVESTING"
+  | "OPPORTUNITY"
+  | "LEARNING"
+  | "FUN";
 export type ExpenseCategoryKind = "ESSENTIAL" | "FIXED" | "DISCRETIONARY" | "OTHER";
 
 export type FinanceAllocationSettings = {
   id: string;
   livingPct: number;
   safetyPct: number;
-  compoundPct: number;
+  investingPct: number;
   opportunityPct: number;
+  learningPct: number;
+  funPct: number;
   currency: string;
   revision: number;
   updatedAt: string;
@@ -142,8 +150,10 @@ export function fetchAllocationSettings() {
 export function updateAllocationSettings(input: {
   livingPct: number;
   safetyPct: number;
-  compoundPct: number;
+  investingPct: number;
   opportunityPct: number;
+  learningPct: number;
+  funPct: number;
   currency?: string;
 }) {
   return requestJson<FinanceAllocationSettings>("/api/finance/allocation-settings", {
@@ -397,8 +407,19 @@ export function shiftMonth(month: string, delta: number): string {
 }
 
 export const BUCKET_LABELS: Record<FinanceBucket, string> = {
-  LIVING: "Living",
+  LIVING: "Living & Fixed",
   SAFETY: "Safety",
-  COMPOUND: "Compound",
+  INVESTING: "Investing",
   OPPORTUNITY: "Opportunity",
+  LEARNING: "Learning",
+  FUN: "Fun",
 };
+
+export const BUCKET_ORDER: FinanceBucket[] = [
+  "LIVING",
+  "SAFETY",
+  "INVESTING",
+  "OPPORTUNITY",
+  "LEARNING",
+  "FUN",
+];

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   BUCKET_LABELS,
+  BUCKET_ORDER,
   createDebt,
   createDebtPayment,
   createExpenseEntry,
@@ -174,10 +175,14 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
 
           <h3 className="pos-finance-section-title">Allocation buckets</h3>
           <p className="pos-muted pos-finance-lede">
-            Personal allocation framework — Living, Safety, Compound, Opportunity. Allocations are not expenses.
+            Personal allocation framework — Living &amp; Fixed, Safety, Investing, Opportunity,
+            Learning, Fun. Allocations are not expenses.
           </p>
           <div className="pos-finance-buckets">
-            {summary.buckets.map((b) => (
+            {BUCKET_ORDER.map((key) => {
+              const b = summary.buckets.find((x) => x.bucket === key);
+              if (!b) return null;
+              return (
               <div key={b.bucket} className="pos-finance-bucket-card">
                 <div className="pos-finance-bucket-head">
                   <strong>{BUCKET_LABELS[b.bucket]}</strong>
@@ -191,7 +196,8 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
                   Lifetime {formatVnd(b.lifetimeBalanceVnd)}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <h3 className="pos-finance-section-title">Income sources</h3>
@@ -305,8 +311,10 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
             <AllocationPreview
               livingPct={summary.settings.livingPct}
               safetyPct={summary.settings.safetyPct}
-              compoundPct={summary.settings.compoundPct}
+              investingPct={summary.settings.investingPct}
               opportunityPct={summary.settings.opportunityPct}
+              learningPct={summary.settings.learningPct}
+              funPct={summary.settings.funPct}
             />
           ) : null}
           onClose={() => !saving && setModal(null)}
@@ -464,18 +472,23 @@ function Metric({
 function AllocationPreview({
   livingPct,
   safetyPct,
-  compoundPct,
+  investingPct,
   opportunityPct,
+  learningPct,
+  funPct,
 }: {
   livingPct: number;
   safetyPct: number;
-  compoundPct: number;
+  investingPct: number;
   opportunityPct: number;
+  learningPct: number;
+  funPct: number;
 }) {
   return (
     <p className="pos-qa-for-hint">
-      Will allocate {livingPct}% Living · {safetyPct}% Safety · {compoundPct}% Compound ·{" "}
-      {opportunityPct}% Opportunity (snapshot stored; changing settings later won’t rewrite this).
+      Will allocate {livingPct}% Living · {safetyPct}% Safety · {investingPct}% Investing ·{" "}
+      {opportunityPct}% Opportunity · {learningPct}% Learning · {funPct}% Fun
+      (snapshot stored; changing settings later won’t rewrite this).
     </p>
   );
 }
@@ -626,7 +639,7 @@ function ExpenseModal({
           <label className="pos-qa-field">
             <span className="pos-qa-field-label">Funded from</span>
             <select value={bucket} onChange={(e) => setBucket(e.target.value as FinanceBucket)} disabled={saving}>
-              {(Object.keys(BUCKET_LABELS) as FinanceBucket[]).map((b) => (
+              {BUCKET_ORDER.map((b) => (
                 <option key={b} value={b}>{BUCKET_LABELS[b]}</option>
               ))}
             </select>
@@ -755,8 +768,10 @@ function SettingsModal({
   onSaveSettings: (pcts: {
     livingPct: number;
     safetyPct: number;
-    compoundPct: number;
+    investingPct: number;
     opportunityPct: number;
+    learningPct: number;
+    funPct: number;
   }) => Promise<void>;
   onAddSource: (name: string) => Promise<void>;
   onAddDebt: (input: {
@@ -767,14 +782,22 @@ function SettingsModal({
 }) {
   const [living, setLiving] = useState(String(settings.livingPct));
   const [safety, setSafety] = useState(String(settings.safetyPct));
-  const [compound, setCompound] = useState(String(settings.compoundPct));
+  const [investing, setInvesting] = useState(String(settings.investingPct));
   const [opportunity, setOpportunity] = useState(String(settings.opportunityPct));
+  const [learning, setLearning] = useState(String(settings.learningPct));
+  const [fun, setFun] = useState(String(settings.funPct));
   const [sourceName, setSourceName] = useState("");
   const [debtName, setDebtName] = useState("");
   const [debtOut, setDebtOut] = useState("");
   const [debtDue, setDebtDue] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
-  const sum = Number(living) + Number(safety) + Number(compound) + Number(opportunity);
+  const sum =
+    Number(living) +
+    Number(safety) +
+    Number(investing) +
+    Number(opportunity) +
+    Number(learning) +
+    Number(fun);
 
   return (
     <div className="pos-qa-backdrop">
@@ -787,12 +810,16 @@ function SettingsModal({
         <div className="pos-qa-fields">
           <p className="pos-qa-field-label">Allocation % (must total 100)</p>
           <div className="pos-entity-form-row">
-            <label className="pos-qa-field">Living<input type="number" value={living} onChange={(e) => setLiving(e.target.value)} disabled={saving} /></label>
+            <label className="pos-qa-field">Living &amp; Fixed<input type="number" value={living} onChange={(e) => setLiving(e.target.value)} disabled={saving} /></label>
             <label className="pos-qa-field">Safety<input type="number" value={safety} onChange={(e) => setSafety(e.target.value)} disabled={saving} /></label>
           </div>
           <div className="pos-entity-form-row">
-            <label className="pos-qa-field">Compound<input type="number" value={compound} onChange={(e) => setCompound(e.target.value)} disabled={saving} /></label>
+            <label className="pos-qa-field">Investing<input type="number" value={investing} onChange={(e) => setInvesting(e.target.value)} disabled={saving} /></label>
             <label className="pos-qa-field">Opportunity<input type="number" value={opportunity} onChange={(e) => setOpportunity(e.target.value)} disabled={saving} /></label>
+          </div>
+          <div className="pos-entity-form-row">
+            <label className="pos-qa-field">Learning<input type="number" value={learning} onChange={(e) => setLearning(e.target.value)} disabled={saving} /></label>
+            <label className="pos-qa-field">Fun<input type="number" value={fun} onChange={(e) => setFun(e.target.value)} disabled={saving} /></label>
           </div>
           <p className={`pos-qa-for-hint ${sum !== 100 ? "warn" : ""}`}>Total: {sum}%{sum !== 100 ? " — must be 100" : ""}</p>
           <button
@@ -803,8 +830,10 @@ function SettingsModal({
               void onSaveSettings({
                 livingPct: Number(living),
                 safetyPct: Number(safety),
-                compoundPct: Number(compound),
+                investingPct: Number(investing),
                 opportunityPct: Number(opportunity),
+                learningPct: Number(learning),
+                funPct: Number(fun),
               });
             }}
           >
@@ -988,7 +1017,7 @@ function EditTransactionModal({
               <label className="pos-qa-field">
                 <span className="pos-qa-field-label">Funded from</span>
                 <select value={bucket} onChange={(e) => setBucket(e.target.value as FinanceBucket)} disabled={saving}>
-                  {(Object.keys(BUCKET_LABELS) as FinanceBucket[]).map((b) => (
+                  {BUCKET_ORDER.map((b) => (
                     <option key={b} value={b}>{BUCKET_LABELS[b]}</option>
                   ))}
                 </select>
