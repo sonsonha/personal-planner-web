@@ -14,6 +14,7 @@ import {
   deleteIncomeEntry,
   fetchDebts,
   fetchExpenseCategories,
+  fetchAllocationSettings,
   fetchFinanceSummary,
   fetchFinanceTransactions,
   fetchIncomeSources,
@@ -54,7 +55,7 @@ function parseAmountInput(raw: string): number | null {
 }
 
 export function FinanceWorkspace({ live, onChanged }: Props) {
-  const [month, setMonth] = useState(currentMonthKey);
+  const [month, setMonth] = useState(() => currentMonthKey());
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [sources, setSources] = useState<FinanceIncomeSource[]>([]);
   const [categories, setCategories] = useState<FinanceExpenseCategory[]>([]);
@@ -73,28 +74,33 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([
-      fetchFinanceSummary(month),
-      fetchIncomeSources(),
-      fetchExpenseCategories(),
-      fetchDebts(),
-      fetchFinanceTransactions({ type: txFilter, month, limit: 80 }),
-    ])
-      .then(([sum, src, cats, debtRes, tx]) => {
+
+    void (async () => {
+      try {
+        // Settings/bootstrap once first so parallel GETs don't race-insert settings.
+        await fetchAllocationSettings();
+        if (cancelled) return;
+        const [sum, src, cats, debtRes, tx] = await Promise.all([
+          fetchFinanceSummary(month),
+          fetchIncomeSources(),
+          fetchExpenseCategories(),
+          fetchDebts(),
+          fetchFinanceTransactions({ type: txFilter, month, limit: 80 }),
+        ]);
         if (cancelled) return;
         setSummary(sum);
         setSources(src.sources.filter((s) => s.active));
         setCategories(cats.categories.filter((c) => c.active));
         setDebts(debtRes.debts.filter((d) => d.active));
         setTransactions(tx.transactions);
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return;
         setError(err instanceof PlannerApiError ? err.message : "Could not load finance data");
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
+
     return () => { cancelled = true; };
   }, [month, txFilter, reloadKey]);
 
