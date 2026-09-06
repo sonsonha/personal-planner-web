@@ -26,6 +26,12 @@ export type TaskEditorViewProps = {
   onTitleChange: (value: string) => void;
   notes: string;
   onNotesChange: (value: string) => void;
+  definitionOfDone: string;
+  onDefinitionOfDoneChange: (value: string) => void;
+  dailyFocusDate: string | null;
+  focusPlanningDate: string;
+  onSetDailyFocus: () => void;
+  onClearDailyFocus: () => void;
   status: TaskStatus;
   scheduled: boolean;
   scheduleDisplay?: string | null;
@@ -90,6 +96,12 @@ export function TaskEditorView({
   onTitleChange,
   notes,
   onNotesChange,
+  definitionOfDone,
+  onDefinitionOfDoneChange,
+  dailyFocusDate,
+  focusPlanningDate,
+  onSetDailyFocus,
+  onClearDailyFocus,
   status,
   scheduled,
   scheduleDisplay,
@@ -144,6 +156,7 @@ export function TaskEditorView({
   const processes = (selectedGoal?.processes ?? []).filter((process) => process.active);
   const statusLabel = status === "done" ? "Completed" : scheduled ? "Scheduled" : "Unscheduled";
   const canMarkComplete = status !== "done" && completePolicy === "allow" && Boolean(onComplete);
+  const isFocusToday = dailyFocusDate === focusPlanningDate;
 
   return (
     <div className="pos-te-backdrop">
@@ -467,6 +480,34 @@ export function TaskEditorView({
                   )}
                 </div>
               </div>
+              <div className="pos-te-daily-focus-field">
+                <span className="pos-te-field-label">Daily Focus</span>
+                {isFocusToday ? (
+                  <div className="pos-te-daily-focus-active">
+                    <span>★ Today&apos;s Daily Focus</span>
+                    <button
+                      type="button"
+                      className="pos-btn-ghost"
+                      onClick={onClearDailyFocus}
+                      disabled={saving}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="pos-btn-secondary"
+                    onClick={onSetDailyFocus}
+                    disabled={saving}
+                  >
+                    ★ Set as Daily Focus
+                  </button>
+                )}
+                <p className="pos-te-help">
+                  Separate from priority. At most one Daily Focus per day.
+                </p>
+              </div>
               <label>
                 <span>Estimated effort</span>
                 <select
@@ -483,12 +524,22 @@ export function TaskEditorView({
               </label>
             </div>
             <label className="pos-te-notes">
+              <span>Definition of Done</span>
+              <textarea
+                value={definitionOfDone}
+                onChange={(event) => onDefinitionOfDoneChange(event.target.value)}
+                placeholder="Optional — what concrete result means this Task is finished"
+                rows={3}
+                disabled={saving}
+              />
+            </label>
+            <label className="pos-te-notes">
               <span>Notes</span>
               <textarea
                 value={notes}
                 onChange={(event) => onNotesChange(event.target.value)}
-                placeholder="Context, links, or the definition of done…"
-                rows={4}
+                placeholder="Context, links, constraints…"
+                rows={3}
                 disabled={saving}
               />
             </label>

@@ -19,6 +19,8 @@ export type TaskRowProps = {
   scheduleLabel: string;
   /** Period column — parent owns period-safe labels (never invent WEEK/MONTH due dates). */
   horizonLabel: string | null;
+  isDailyFocus?: boolean;
+  sessionProgressLabel?: string | null;
   onOpen: () => void;
   onToggleComplete: () => void;
   /** When false, incomplete multi/zero-session Tasks cannot use the check control. */
@@ -32,6 +34,8 @@ export function TaskRow({
   isSelected,
   scheduleLabel,
   horizonLabel,
+  isDailyFocus = false,
+  sessionProgressLabel = null,
   onOpen,
   onToggleComplete,
   completeEnabled = true,
@@ -47,9 +51,11 @@ export function TaskRow({
         isSelected && "selected",
         done && "done",
         isOverdue && "overdue",
+        isDailyFocus && "daily-focus",
       )}
       data-task-id={task.id}
       data-priority={task.priority}
+      data-daily-focus={isDailyFocus ? "true" : undefined}
       style={{ "--pos-task-priority-color": priority.color } as CSSProperties}
     >
       <button
@@ -84,11 +90,18 @@ export function TaskRow({
       </button>
 
       <button type="button" className="pos-task-main" onClick={onOpen}>
-        <span className="pos-task-title">{task.title}</span>
+        <span className="pos-task-title-line">
+          {isDailyFocus && <em className="pos-daily-focus-mark" title="Daily Focus">★</em>}
+          <span className="pos-task-title">{task.title}</span>
+        </span>
         <span className="pos-task-project">
           <i style={{ background: task.color }} aria-hidden="true" />
           {task.project}
+          {isDailyFocus && <em className="pos-daily-focus-badge">Daily Focus</em>}
         </span>
+        {!isDailyFocus && sessionProgressLabel && (
+          <span className="pos-task-session-progress pos-mono">{sessionProgressLabel}</span>
+        )}
       </button>
 
       <div className="pos-task-calendar">

@@ -4,7 +4,8 @@ import type { ReactNode, RefObject } from "react";
 import { EmptyState } from "../shared";
 import { cn } from "../utils";
 import { groupTasks } from "@/lib/task-groups";
-import { directTaskCompletePolicy } from "@/lib/session-evidence";
+import { deriveTaskProgressFromSessions, directTaskCompletePolicy } from "@/lib/session-evidence";
+import { isDailyFocusForDate } from "@/lib/daily-focus";
 import { TaskRow } from "./TaskRow";
 import type {
   HorizonScope,
@@ -42,6 +43,9 @@ export type TasksWorkspaceViewProps = {
   projectFilterId: string | "all" | "inbox";
   onProjectFilter: (value: string | "all" | "inbox") => void;
   selectedTaskId?: string | null;
+  /** When set (Today Day view), group Daily Focus vs Supporting. */
+  focusDate?: string | null;
+  onChooseDailyFocus?: () => void;
   onAdd: () => void;
   onOpenTask: (taskId: string) => void;
   onComplete: (taskId: string) => void;
@@ -76,6 +80,8 @@ export function TasksWorkspaceView({
   projectFilterId,
   onProjectFilter,
   selectedTaskId,
+  focusDate = null,
+  onChooseDailyFocus,
   onAdd,
   onOpenTask,
   onComplete,
@@ -92,7 +98,11 @@ export function TasksWorkspaceView({
   getHorizonLabel,
   isOverdue,
 }: TasksWorkspaceViewProps) {
-  const groups = groupTasks(horizon, tasks, blocks, getHorizon, isOverdue);
+  const emphasizeDailyFocus = horizon === "day" && Boolean(focusDate);
+  const groups = groupTasks(horizon, tasks, blocks, getHorizon, isOverdue, {
+    focusDate,
+    emphasizeDailyFocus,
+  });
   const empty = tasks.length === 0;
 
   return (
@@ -234,39 +244,64 @@ export function TasksWorkspaceView({
                 <span>{group.label}</span>
                 <span className="pos-mono">{group.tasks.length}</span>
               </div>
-              <div className="pos-task-group-list">
-                {group.tasks.map((task) => {
-                  const block = blockForTask(task.id, blocks);
-                  const taskBlocks = blocks.filter((candidate) => candidate.taskId === task.id);
-                  const policy = directTaskCompletePolicy(
-                    taskBlocks.map((item) => ({
-                      id: item.id,
-                      status: item.status ?? "PLANNED",
-                    })),
-                  );
-                  return (
-                    <TaskRow
-                      key={task.id}
-                      task={task}
-                      block={block}
-                      isOverdue={isOverdue(task)}
-                      isSelected={selectedTaskId === task.id}
-                      scheduleLabel={getScheduleLabel(task, block)}
-                      horizonLabel={getHorizonLabel(task)}
-                      onOpen={() => onOpenTask(task.id)}
-                      completeEnabled={task.status === "done" || policy.allow}
-                      onToggleComplete={() => {
-                        if (task.status === "done") {
-                          onRestore(task.id);
-                          return;
-                        }
-                        if (!policy.allow) return;
-                        onComplete(task.id);
-                      }}
-                    />
-                  );
-                })}
-              </div>
+              {group.id === "daily-focus" && group.tasks.length === 0 ? (
+                <div className="pos-daily-focus-empty">
+                  <p>No Daily Focus selected.</p>
+                  {onChooseDailyFocus && (
+                    <button type="button" className="pos-btn-secondary" onClick={onChooseDailyFocus}>
+                      Choose Daily Focus
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="pos-task-group-list">
+                  {group.tasks.map((task) => {
+                    const block = blockForTask(task.id, blocks);
+                    const taskBlocks = blocks.filter((candidate) => candidate.taskId === task.id);
+                    const policy = directTaskCompletePolicy(
+                      taskBlocks.map((item) => ({
+                        id: item.id,
+                        status: item.status ?? "PLANNED",
+                      })),
+                    );
+                    const progress = deriveTaskProgressFromSessions(
+                      taskBlocks.map((item) => ({
+                        id: item.id,
+                        status: item.status ?? "PLANNED",
+                      })),
+                    );
+                    const sessionProgressLabel = progress.activeCount > 0
+                      ? `${progress.completedCount} / ${progress.activeCount} sessions · ${progress.progressPercent}%`
+                      : null;
+                    const isFocus = Boolean(
+                      focusDate && isDailyFocusForDate(task, focusDate),
+                    );
+                    return (
+                      <TaskRow
+                        key={task.id}
+                        task={task}
+                        block={block}
+                        isOverdue={isOverdue(task)}
+                        isSelected={selectedTaskId === task.id}
+                        isDailyFocus={isFocus}
+                        sessionProgressLabel={sessionProgressLabel}
+                        scheduleLabel={getScheduleLabel(task, block)}
+                        horizonLabel={getHorizonLabel(task)}
+                        onOpen={() => onOpenTask(task.id)}
+                        completeEnabled={task.status === "done" || policy.allow}
+                        onToggleComplete={() => {
+                          if (task.status === "done") {
+                            onRestore(task.id);
+                            return;
+                          }
+                          if (!policy.allow) return;
+                          onComplete(task.id);
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </section>
           ))
         )}

@@ -87,6 +87,11 @@ import {
 } from "@/lib/session-evidence";
 import { startOfProductWeek } from "@/lib/product-week";
 import {
+  findDailyFocusTask,
+  productDateString,
+  resolveDailyFocusReplacement,
+} from "@/lib/daily-focus";
+import {
   type ClockFormat,
   formatHourGutter,
   formatMinuteRange,
@@ -107,6 +112,8 @@ type PlannerTask = {
   id: string;
   title: string;
   notes: string;
+  definitionOfDone?: string | null;
+  dailyFocusDate?: string | null;
   projectId: string | null;
   goalId?: string | null;
   goalProcessId?: string | null;
@@ -625,6 +632,8 @@ function taskFromApi(task: ApiTask, projects: ProjectOption[]): PlannerTask {
     id: task.id,
     title: task.title,
     notes: task.notes,
+    definitionOfDone: task.definitionOfDone ?? null,
+    dailyFocusDate: task.dailyFocusDate ?? null,
     projectId: task.projectId,
     goalId: task.goalId ?? project.goalId ?? null,
     goalProcessId: task.goalProcessId ?? null,
@@ -2156,7 +2165,35 @@ export function PlannerApp({
     } catch {
       setTasks(previousTasks);
       setBlocks(previousBlocks);
-      showToast("Could not update priority · changes rolled back", "warning");
+      setToast("Could not update priority");
+    }
+  };
+
+  const setTaskDailyFocus = async (taskId: string, date: string | null) => {
+    const previous = tasks;
+    const focusDate = date;
+    setTasks((current) =>
+      current.map((task) => {
+        if (focusDate && task.dailyFocusDate === focusDate && task.id !== taskId) {
+          return { ...task, dailyFocusDate: null };
+        }
+        if (task.id === taskId) {
+          return { ...task, dailyFocusDate: focusDate };
+        }
+        return task;
+      }),
+    );
+    if (!liveDataRef.current) {
+      setToast(focusDate ? "Daily Focus set · demo mode" : "Daily Focus cleared · demo mode");
+      return;
+    }
+    try {
+      await updateTask(taskId, { dailyFocusDate: focusDate });
+      setToast(focusDate ? "Daily Focus updated" : "Daily Focus cleared");
+      setReloadKey((value) => value + 1);
+    } catch {
+      setTasks(previous);
+      setToast("Could not update Daily Focus");
     }
   };
 
@@ -2906,6 +2943,7 @@ export function PlannerApp({
             onOpenTask={setEditingTaskId}
             onComplete={completeTask}
             onRestore={restoreTask}
+            onSetDailyFocus={setTaskDailyFocus}
           />
         ) : activeSection === "projects" ? (
           <ProjectsWorkspace
@@ -3003,10 +3041,12 @@ export function PlannerApp({
           task={editingTask}
           projects={projects}
           goals={goals}
+          allTasks={tasks}
           live={connection === "live"}
           onClose={() => setEditingTaskId(null)}
           onComplete={() => completeTask(editingTask.id)}
           onRestore={() => restoreTask(editingTask.id)}
+          onSetDailyFocus={setTaskDailyFocus}
           onChanged={(message) => {
             setEditingTaskId(null);
             setReloadKey((value) => value + 1);
@@ -4133,6 +4173,7 @@ function TasksWorkspace({
   onOpenTask,
   onComplete,
   onRestore,
+  onSetDailyFocus,
 }: {
   tasks: PlannerTask[];
   blocks: CalendarBlock[];
@@ -4149,12 +4190,16 @@ function TasksWorkspace({
   onOpenTask: (taskId: string) => void;
   onComplete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
+  onSetDailyFocus: (taskId: string, date: string | null) => void;
 }) {
   const [showCompleted, setShowCompleted] = useState(false);
   const [projectFilterId, setProjectFilterId] = useState<string | "all">("all");
   const [query, setQuery] = useState("");
+  const [chooseFocusOpen, setChooseFocusOpen] = useState(false);
+  const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
   const today = startOfDay(now);
   const viewingToday = sameDay(anchor, now);
+  const focusDate = horizon === "day" && viewingToday ? productDateString(now) : null;
   const viewingThisWeek = startOfWeek(anchor).getTime() === startOfWeek(now).getTime();
   const viewingThisMonth = startOfMonth(anchor).getTime() === startOfMonth(now).getTime();
   const normalizedQuery = query.trim().toLowerCase();
@@ -4275,6 +4320,8 @@ function TasksWorkspace({
         projectFilterId={projectFilterId}
         onProjectFilter={setProjectFilterId}
         selectedTaskId={selectedTaskId}
+        focusDate={focusDate}
+        onChooseDailyFocus={focusDate ? () => setChooseFocusOpen(true) : undefined}
         onAdd={onQuickAdd}
         onOpenTask={onOpenTask}
         onComplete={onComplete}
@@ -4299,6 +4346,82 @@ function TasksWorkspace({
           && task.status !== "done",
         )}
       />
+
+      {chooseFocusOpen && focusDate && (
+        <div className="pos-te-backdrop" role="dialog" aria-modal="true" aria-label="Choose Daily Focus">
+          <button type="button" className="pos-te-dismiss" aria-label="Close" onClick={() => setChooseFocusOpen(false)} />
+          <aside className="pos-te-panel pos-daily-focus-picker">
+            <div className="pos-te-header">
+              <h2 className="pos-te-section-title" style={{ margin: 0 }}>Choose Daily Focus</h2>
+              <button type="button" className="pos-te-close" onClick={() => setChooseFocusOpen(false)} aria-label="Close">
+                ×
+              </button>
+            </div>
+            <div className="pos-te-body">
+              <p className="pos-te-help">Pick the one Task whose completion would make today successful.</p>
+              <ul className="pos-daily-focus-picker-list">
+                {visible.filter((task) => task.status !== "done").map((task) => (
+                  <li key={task.id}>
+                    <button
+                      type="button"
+                      className="pos-daily-focus-picker-item"
+                      onClick={() => {
+                        const current = findDailyFocusTask(tasks, focusDate);
+                        const decision = resolveDailyFocusReplacement({
+                          existingFocusTaskId: current?.id ?? null,
+                          nextTaskId: task.id,
+                        });
+                        if (decision.needsConfirm) {
+                          setPendingFocusId(task.id);
+                          return;
+                        }
+                        onSetDailyFocus(task.id, focusDate);
+                        setChooseFocusOpen(false);
+                      }}
+                    >
+                      <strong>{task.title}</strong>
+                      <span>{task.project}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {pendingFocusId && focusDate && (
+        <div className="pos-te-backdrop" role="dialog" aria-modal="true" aria-label="Replace Daily Focus">
+          <button type="button" className="pos-te-dismiss" aria-label="Cancel" onClick={() => setPendingFocusId(null)} />
+          <aside className="pos-te-panel pos-daily-focus-picker">
+            <div className="pos-te-body">
+              <h2 className="pos-te-section-title">Replace today&apos;s Daily Focus?</h2>
+              <p className="pos-te-help">
+                Current: {findDailyFocusTask(tasks, focusDate)?.title ?? "—"}
+              </p>
+              <p className="pos-te-help">
+                New: {tasks.find((task) => task.id === pendingFocusId)?.title ?? "—"}
+              </p>
+              <div className="pos-te-footer-actions" style={{ marginTop: 16 }}>
+                <button type="button" className="pos-btn-secondary" onClick={() => setPendingFocusId(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="pos-btn-primary"
+                  onClick={() => {
+                    onSetDailyFocus(pendingFocusId, focusDate);
+                    setPendingFocusId(null);
+                    setChooseFocusOpen(false);
+                  }}
+                >
+                  Replace
+                </button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }
@@ -4307,24 +4430,32 @@ function TaskEditor({
   task,
   projects,
   goals,
+  allTasks,
   live,
   onClose,
   onComplete,
   onRestore,
+  onSetDailyFocus,
   onChanged,
 }: {
   task: PlannerTask;
   projects: ProjectOption[];
   goals: ApiGoal[];
+  allTasks: PlannerTask[];
   live: boolean;
   onClose: () => void;
   onComplete?: () => void;
   onRestore?: () => void;
+  onSetDailyFocus: (taskId: string, date: string | null) => void;
   onChanged: (message: string) => void;
 }) {
   const suggestedStart = defaultScheduleStart();
+  const focusPlanningDate = productDateString();
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes);
+  const [definitionOfDone, setDefinitionOfDone] = useState(task.definitionOfDone ?? "");
+  const [dailyFocusDate, setDailyFocusDate] = useState(task.dailyFocusDate ?? null);
+  const [replaceFocusOpen, setReplaceFocusOpen] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(task.projectId);
   const [goalId, setGoalId] = useState<string | null>(task.goalId ?? null);
   const [goalProcessId, setGoalProcessId] = useState<string | null>(task.goalProcessId ?? null);
@@ -4425,6 +4556,8 @@ function TaskEditor({
   const taskPayload = (pinDate?: Date) => ({
     title: title.trim(),
     notes: notes.trim(),
+    definitionOfDone: definitionOfDone.trim() || null,
+    dailyFocusDate,
     projectId,
     goalId: effectiveGoalId,
     goalProcessId,
@@ -4572,6 +4705,27 @@ function TaskEditor({
       onTitleChange={setTitle}
       notes={notes}
       onNotesChange={setNotes}
+      definitionOfDone={definitionOfDone}
+      onDefinitionOfDoneChange={setDefinitionOfDone}
+      dailyFocusDate={dailyFocusDate}
+      focusPlanningDate={focusPlanningDate}
+      onSetDailyFocus={() => {
+        const current = findDailyFocusTask(allTasks, focusPlanningDate);
+        const decision = resolveDailyFocusReplacement({
+          existingFocusTaskId: current?.id ?? null,
+          nextTaskId: task.id,
+        });
+        if (decision.needsConfirm) {
+          setReplaceFocusOpen(true);
+          return;
+        }
+        setDailyFocusDate(focusPlanningDate);
+        onSetDailyFocus(task.id, focusPlanningDate);
+      }}
+      onClearDailyFocus={() => {
+        setDailyFocusDate(null);
+        onSetDailyFocus(task.id, null);
+      }}
       status={task.status}
       scheduled={taskBlocks.length > 0}
       scheduleDisplay={scheduleDisplay}
@@ -4729,6 +4883,38 @@ function TaskEditor({
           }
         }}
       />
+    )}
+    {replaceFocusOpen && (
+      <div className="pos-te-backdrop" role="dialog" aria-modal="true" aria-label="Replace Daily Focus">
+        <button type="button" className="pos-te-dismiss" aria-label="Cancel" onClick={() => setReplaceFocusOpen(false)} />
+        <aside className="pos-te-panel pos-daily-focus-picker">
+          <div className="pos-te-body">
+            <h2 className="pos-te-section-title">Replace today&apos;s Daily Focus?</h2>
+            <p className="pos-te-help">
+              Current: {findDailyFocusTask(allTasks, focusPlanningDate)?.title ?? "—"}
+            </p>
+            <p className="pos-te-help">
+              New: {title.trim() || task.title}
+            </p>
+            <div className="pos-te-footer-actions" style={{ marginTop: 16 }}>
+              <button type="button" className="pos-btn-secondary" onClick={() => setReplaceFocusOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="pos-btn-primary"
+                onClick={() => {
+                  setDailyFocusDate(focusPlanningDate);
+                  onSetDailyFocus(task.id, focusPlanningDate);
+                  setReplaceFocusOpen(false);
+                }}
+              >
+                Replace
+              </button>
+            </div>
+          </div>
+        </aside>
+      </div>
     )}
     </>
   );

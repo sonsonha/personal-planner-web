@@ -4,6 +4,7 @@ import type {
   TasksViewBlock,
   TasksViewTask,
 } from "../components/planner/tasks/types.ts";
+import { isDailyFocusForDate } from "./daily-focus.ts";
 
 export type TaskGroup = {
   id: string;
@@ -22,12 +23,15 @@ export function groupTasks(
   blocks: TasksViewBlock[],
   getHorizon: (task: TasksViewTask) => TaskHorizon,
   isOverdue: (task: TasksViewTask) => boolean,
+  opts?: { focusDate?: string | null; emphasizeDailyFocus?: boolean },
 ): TaskGroup[] {
   const buckets: Record<string, TasksViewTask[]> = {};
   const ensure = (id: string) => {
     if (!buckets[id]) buckets[id] = [];
     return buckets[id]!;
   };
+
+  const focusDate = opts?.emphasizeDailyFocus ? opts.focusDate ?? null : null;
 
   for (const task of tasks) {
     if (task.status === "done") {
@@ -43,12 +47,14 @@ export function groupTasks(
     const block = blockForTask(task.id, blocks);
 
     if (horizon === "day") {
-      if (taskHorizon === "day") {
-        ensure("day-due").push(task);
+      if (focusDate && isDailyFocusForDate(task, focusDate)) {
+        ensure("daily-focus").push(task);
+      } else if (taskHorizon === "day") {
+        ensure(focusDate ? "supporting" : "day-due").push(task);
       } else if (block) {
-        ensure("scheduled").push(task);
+        ensure(focusDate ? "supporting" : "scheduled").push(task);
       } else {
-        ensure("scheduled").push(task);
+        ensure(focusDate ? "supporting" : "scheduled").push(task);
       }
       continue;
     }
@@ -85,12 +91,19 @@ export function groupTasks(
 
   const order: Array<{ id: string; label: string }> =
     horizon === "day"
-      ? [
-          { id: "overdue", label: "Overdue" },
-          { id: "day-due", label: "Day due" },
-          { id: "scheduled", label: "Scheduled" },
-          { id: "completed", label: "Completed" },
-        ]
+      ? focusDate
+        ? [
+            { id: "overdue", label: "Overdue" },
+            { id: "daily-focus", label: "Daily Focus" },
+            { id: "supporting", label: "Supporting" },
+            { id: "completed", label: "Completed" },
+          ]
+        : [
+            { id: "overdue", label: "Overdue" },
+            { id: "day-due", label: "Day due" },
+            { id: "scheduled", label: "Scheduled" },
+            { id: "completed", label: "Completed" },
+          ]
       : horizon === "week"
         ? [
             { id: "overdue", label: "Overdue" },
@@ -121,5 +134,8 @@ export function groupTasks(
       label: meta.label,
       tasks: buckets[meta.id] ?? [],
     }))
-    .filter((group) => group.tasks.length > 0);
+    .filter((group) => {
+      if (group.id === "daily-focus") return true; // keep empty Daily Focus so UI can offer Choose
+      return group.tasks.length > 0;
+    });
 }

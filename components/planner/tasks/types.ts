@@ -7,6 +7,8 @@ export type TasksViewTask = {
   id: string;
   title: string;
   notes: string;
+  definitionOfDone?: string | null;
+  dailyFocusDate?: string | null;
   projectId: string | null;
   project: string;
   color: string;

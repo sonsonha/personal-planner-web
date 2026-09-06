@@ -18,6 +18,8 @@ export type ApiTask = {
   id: string;
   title: string;
   notes: string;
+  definitionOfDone?: string | null;
+  dailyFocusDate?: string | null;
   projectId: string | null;
   goalId?: string | null;
   goalProcessId?: string | null;
@@ -304,6 +306,8 @@ export function fetchPlanner(from: string, to: string, signal?: AbortSignal) {
 export function createTask(input: {
   title: string;
   notes?: string;
+  definitionOfDone?: string | null;
+  dailyFocusDate?: string | null;
   projectId: string | null;
   goalId?: string | null;
   goalProcessId?: string | null;
@@ -321,6 +325,8 @@ export function createTask(input: {
 export function updateTask(id: string, input: Partial<{
   title: string;
   notes: string;
+  definitionOfDone: string | null;
+  dailyFocusDate: string | null;
   projectId: string | null;
   goalId: string | null;
   goalProcessId: string | null;
