@@ -12,6 +12,7 @@ export type ApiPriority =
 export type ApiSeriesScope = "THIS_INSTANCE" | "THIS_AND_FUTURE";
 export type ApiTimeBlockStatus = "PLANNED" | "DONE";
 export type ApiProjectType = "STANDARD" | "HABIT";
+export type ApiProjectContext = "PERSONAL" | "WORK";
 
 export type ApiTask = {
   id: string;
@@ -123,6 +124,7 @@ export type ApiProject = {
   targetDate?: string | null;
   active: boolean;
   projectType?: ApiProjectType;
+  projectContext?: ApiProjectContext;
   revision?: number;
 };
 
@@ -496,6 +498,7 @@ export function createProject(input: {
   active?: boolean;
   targetDate?: string | null;
   projectType?: ApiProjectType;
+  projectContext?: ApiProjectContext;
 }) {
   return requestJson<ApiProject>("/api/projects", {
     method: "POST",
@@ -515,6 +518,7 @@ export function updateProject(
     active: boolean;
     targetDate: string | null;
     projectType: ApiProjectType;
+    projectContext: ApiProjectContext;
   }>,
 ) {
   return requestJson<ApiProject>(`/api/projects/${encodeURIComponent(id)}`, {

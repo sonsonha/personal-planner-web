@@ -56,6 +56,7 @@ function ProjectRow({
           <i className="pos-proj-dot" style={{ background: project.color }} />
           <span className="pos-proj-row-title">{project.title}</span>
           {project.projectType === "HABIT" ? <em className="pos-habit-badge">Habit</em> : null}
+          {(project.projectContext ?? "PERSONAL") === "WORK" ? <em className="pos-work-badge">Work</em> : null}
         </div>
         <div className="pos-proj-row-meta">
           {goal && <GoalBadge focus={goal.focusType ?? "FOCUS"} size="xs" />}
@@ -163,6 +164,65 @@ export type ProjectsOverviewViewProps = {
   onGoCalendar: () => void;
 };
 
+type ProjectSection = {
+  key: string;
+  label: string;
+  projects: ApiProject[];
+};
+
+const FOCUS_SECTION_ORDER = ["FOCUS", "MAINTAIN", "EXPLORE"] as const;
+
+function buildProjectSections(projects: ApiProject[], goals: ApiGoal[]): ProjectSection[] {
+  const byTitle = (a: ApiProject, b: ApiProject) => a.title.localeCompare(b.title);
+
+  const work = projects
+    .filter((p) => !p.goalId && (p.projectContext ?? "PERSONAL") === "WORK")
+    .sort(byTitle);
+  const personalUnlinked = projects
+    .filter((p) => !p.goalId && (p.projectContext ?? "PERSONAL") !== "WORK")
+    .sort(byTitle);
+
+  const linkedByGoal = new Map<string, ApiProject[]>();
+  for (const project of projects) {
+    if (!project.goalId) continue;
+    const list = linkedByGoal.get(project.goalId) ?? [];
+    list.push(project);
+    linkedByGoal.set(project.goalId, list);
+  }
+
+  const sections: ProjectSection[] = [];
+  if (work.length > 0) {
+    sections.push({ key: "work", label: "Work", projects: work });
+  }
+  if (personalUnlinked.length > 0) {
+    sections.push({ key: "personal", label: "Personal", projects: personalUnlinked });
+  }
+
+  for (const focus of FOCUS_SECTION_ORDER) {
+    const goalsInFocus = goals
+      .filter((g) => g.status === "ACTIVE" && (g.focusType ?? "FOCUS") === focus)
+      .sort((a, b) => a.title.localeCompare(b.title));
+    for (const goal of goalsInFocus) {
+      const linked = (linkedByGoal.get(goal.id) ?? []).sort(byTitle);
+      if (linked.length === 0) continue;
+      const focusLabel = focus === "FOCUS" ? "Focus" : focus === "MAINTAIN" ? "Maintain" : "Explore";
+      sections.push({
+        key: `goal-${goal.id}`,
+        label: `${focusLabel} · ${goal.title}`,
+        projects: linked,
+      });
+    }
+  }
+
+  const shown = new Set(sections.flatMap((s) => s.projects.map((p) => p.id)));
+  const orphanLinked = projects.filter((p) => p.goalId && !shown.has(p.id)).sort(byTitle);
+  if (orphanLinked.length > 0) {
+    sections.push({ key: "other-linked", label: "Other linked", projects: orphanLinked });
+  }
+
+  return sections;
+}
+
 export function ProjectsOverviewView({
   projects,
   completed,
@@ -178,6 +238,7 @@ export function ProjectsOverviewView({
 }: ProjectsOverviewViewProps) {
   const empty = projects.length === 0 && completed.length === 0;
   const goalById = Object.fromEntries(goals.map((g) => [g.id, g]));
+  const sections = buildProjectSections(projects, goals);
 
   return (
     <div className="pos-proj">
@@ -196,7 +257,7 @@ export function ProjectsOverviewView({
 
       <div className="pos-proj-scroll">
         <div className="pos-proj-week-head">
-          <span className="pos-proj-week-title">Active projects</span>
+          <span className="pos-proj-week-title">Projects</span>
           <span className="pos-muted">· {weekLabel}</span>
         </div>
 
@@ -207,32 +268,35 @@ export function ProjectsOverviewView({
           />
         ) : (
           <>
-            {projects.length > 0 && (
-              <div className="pos-proj-table">
-                <div className="pos-proj-table-head">
-                  <span>Project</span>
-                  <span>This week</span>
-                  <span>Next action</span>
-                  <span>Deadline</span>
+            {sections.map((section) => (
+              <section key={section.key} className="pos-proj-section">
+                <h2 className="pos-proj-section-title">{section.label}</h2>
+                <div className="pos-proj-table">
+                  <div className="pos-proj-table-head">
+                    <span>Project</span>
+                    <span>This week</span>
+                    <span>Next action</span>
+                    <span>Deadline</span>
+                  </div>
+                  {section.projects.map((project) => (
+                    <ProjectRow
+                      key={project.id}
+                      project={project}
+                      goal={project.goalId ? goalById[project.goalId] : undefined}
+                      tasks={tasks}
+                      blocks={blocks}
+                      now={now}
+                      processInfo={processByProjectId[project.id] ?? null}
+                      onOpen={() => onOpen(project.id)}
+                    />
+                  ))}
                 </div>
-                {projects.map((project) => (
-                  <ProjectRow
-                    key={project.id}
-                    project={project}
-                    goal={project.goalId ? goalById[project.goalId] : undefined}
-                    tasks={tasks}
-                    blocks={blocks}
-                    now={now}
-                    processInfo={processByProjectId[project.id] ?? null}
-                    onOpen={() => onOpen(project.id)}
-                  />
-                ))}
-              </div>
-            )}
+              </section>
+            ))}
 
             {completed.length > 0 && (
               <section className="pos-proj-completed">
-                <h2>Completed</h2>
+                <h2>Completed / archived</h2>
                 <ul>
                   {completed.map((project) => (
                     <li key={project.id}>
@@ -240,6 +304,9 @@ export function ProjectsOverviewView({
                         <i className="pos-proj-dot" style={{ background: project.color }} />
                         <span>{project.title}</span>
                         {project.projectType === "HABIT" ? <em className="pos-habit-badge">Habit</em> : null}
+                        {(project.projectContext ?? "PERSONAL") === "WORK" ? (
+                          <em className="pos-work-badge">Work</em>
+                        ) : null}
                       </button>
                     </li>
                   ))}
