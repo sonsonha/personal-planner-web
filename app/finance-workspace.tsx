@@ -134,248 +134,274 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
 
   return (
     <section className="gp-workspace gp-workspace-overview pos-finance" aria-label="Finance">
-      <div className="pos-finance-toolbar">
-        {(tab === "overview" || tab === "transactions") && (
-          <div className="pos-finance-month-picker" role="group" aria-label="Select month">
-            <button
-              type="button"
-              className="pos-finance-month-step"
-              onClick={() => setMonth(shiftMonth(month, -1))}
-              aria-label="Previous month"
-            >
-              <ChevronLeft size={18} aria-hidden />
-            </button>
-            <div className="pos-finance-month-current">
-              <CalendarDays size={16} aria-hidden />
-              <strong>{formatMonthLabel(month)}</strong>
-            </div>
-            <button
-              type="button"
-              className="pos-finance-month-step"
-              onClick={() => setMonth(shiftMonth(month, 1))}
-              aria-label="Next month"
-            >
-              <ChevronRight size={18} aria-hidden />
-            </button>
-            <button
-              type="button"
-              className="pos-finance-month-today"
-              onClick={() => setMonth(currentMonthKey())}
-              disabled={month === currentMonthKey()}
-            >
-              This month
-            </button>
-          </div>
-        )}
-        {tab === "overview" && (
-          <div className="pos-finance-actions">
-            <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "expense" })} disabled={!live}>
-              <Plus size={16} aria-hidden /> Expense
-            </button>
-            <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "debt-pay" })} disabled={!live || debts.length === 0}>
-              <CreditCard size={16} aria-hidden /> Debt payment
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="pos-finance-tabs" role="tablist" aria-label="Finance sections">
-        {([
-          ["overview", "Overview", Wallet],
-          ["transactions", "Transactions", Receipt],
-          ["analytics", "Analytics", ChartColumn],
-          ["settings", "Settings", Settings2],
-        ] as const).map(([id, label, Icon]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            className={tab === id ? "active" : undefined}
-            onClick={() => setTab(id)}
-          >
-            <Icon size={15} aria-hidden />
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {error && <p className="pos-entity-form-error">{error}</p>}
-      {loading && !summary && tab !== "analytics" && <p className="pos-muted">Loading finance…</p>}
-
-      {tab === "analytics" && <FinanceAnalyticsPanel live={live} />}
-
-      {tab === "overview" && summary && (
-        <>
-          {summary.showDeficit && (
-            <div className="pos-finance-deficit" role="status">
-              <strong>Deficit signal</strong>
-              <span>
-                Income {formatVnd(summary.incomeVnd)} is below required debt payments{" "}
-                {formatVnd(summary.monthlyDebtRequiredVnd)}
-                {summary.deficitVnd < 0 ? ` (${formatVnd(summary.deficitVnd)})` : ""}.
-              </span>
-            </div>
-          )}
-
-          <div className="pos-finance-metrics">
-            <Metric label="Income" value={formatVnd(summary.incomeVnd)} icon={<ArrowDownLeft size={18} />} tone="ok" />
-            <Metric label="Spending" value={formatVnd(summary.spendingVnd)} icon={<ArrowUpRight size={18} />} />
-            <Metric label="Debt paid" value={formatVnd(summary.debtPaidVnd)} icon={<CreditCard size={18} />} />
-            <Metric
-              label="Net cashflow"
-              value={formatVnd(summary.netCashflowVnd)}
-              icon={<ArrowLeftRight size={18} />}
-              tone={summary.netCashflowVnd < 0 ? "warn" : "ok"}
-            />
-            <Metric label="Outstanding debt" value={formatVnd(summary.outstandingDebtVnd)} icon={<Landmark size={18} />} />
-            <Metric
-              label="Debt due this month"
-              value={`${formatVnd(summary.debtPaidVnd)} / ${formatVnd(summary.monthlyDebtRequiredVnd)}`}
-              icon={<Banknote size={18} />}
-            />
-          </div>
-
-          <div className="pos-finance-compare" role="note">
-            <span className="pos-finance-compare-tag">vs {formatMonthLabel(summary.previousMonth.month)}</span>
-            <span>Income {formatVnd(summary.previousMonth.incomeVnd)}</span>
-            <span className="pos-finance-compare-sep" aria-hidden>·</span>
-            <span>Spend {formatVnd(summary.previousMonth.spendingVnd)}</span>
-            <span className="pos-finance-compare-sep" aria-hidden>·</span>
-            <span>Net {formatVnd(summary.previousMonth.netCashflowVnd)}</span>
-          </div>
-
-          <section className="pos-finance-section" aria-labelledby="finance-buckets-title">
-            <header className="pos-finance-section-head">
-              <div>
-                <h3 id="finance-buckets-title" className="pos-finance-section-title">Allocation buckets</h3>
-                <p className="pos-muted pos-finance-lede">
-                  Live — Protect — Grow — Enjoy. Allocations are not expenses.
-                </p>
+      <div className="pos-finance-inner">
+        <div className="pos-finance-chrome">
+          <div className="pos-finance-toolbar">
+            {(tab === "overview" || tab === "transactions") && (
+              <div className="pos-finance-month-picker" role="group" aria-label="Select month">
+                <button
+                  type="button"
+                  className="pos-finance-month-step"
+                  onClick={() => setMonth(shiftMonth(month, -1))}
+                  aria-label="Previous month"
+                >
+                  <ChevronLeft size={18} aria-hidden />
+                </button>
+                <div className="pos-finance-month-current">
+                  <CalendarDays size={15} aria-hidden />
+                  <strong>{formatMonthLabel(month)}</strong>
+                </div>
+                <button
+                  type="button"
+                  className="pos-finance-month-step"
+                  onClick={() => setMonth(shiftMonth(month, 1))}
+                  aria-label="Next month"
+                >
+                  <ChevronRight size={18} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className="pos-finance-month-today"
+                  onClick={() => setMonth(currentMonthKey())}
+                  disabled={month === currentMonthKey()}
+                >
+                  This month
+                </button>
               </div>
-            </header>
-            <div className="pos-finance-buckets">
-              {BUCKET_ORDER.map((key) => {
-                const b = summary.buckets.find((x) => x.bucket === key);
-                if (!b) return null;
-                const over = b.lifetimeBalanceVnd < 0;
-                const Icon = BUCKET_ICONS[b.bucket];
-                return (
-                  <div key={b.bucket} className={`pos-finance-bucket-card bucket-${b.bucket.toLowerCase()}${over ? " over" : ""}`}>
-                    <div className="pos-finance-bucket-head">
-                      <span className="pos-finance-bucket-icon" aria-hidden>
-                        <Icon size={18} />
-                      </span>
-                      <div className="pos-finance-bucket-titles">
-                        <strong>{BUCKET_LABELS[b.bucket]}</strong>
-                        <span className="pos-muted">Target {b.targetPct}%</span>
-                      </div>
-                    </div>
-                    <div className="pos-mono pos-finance-bucket-main">
-                      {formatVnd(b.lifetimeBalanceVnd)}
-                    </div>
-                    <div className="pos-finance-bucket-meta">
-                      <span>In {formatVnd(b.allocatedVnd)}</span>
-                      <span>Out {formatVnd(b.spentVnd)}</span>
-                      <span>Net {formatVnd(b.remainingVnd)}</span>
-                    </div>
-                    {over && (
-                      <p className="pos-finance-bucket-warn">
-                        {formatVnd(Math.abs(b.lifetimeBalanceVnd))} over allocation
-                      </p>
-                    )}
-                    {b.bucket === "GROWTH" && summary.growthSpendingByCategory.length > 0 && (
-                      <ul className="pos-finance-growth-breakdown">
-                        {summary.growthSpendingByCategory.map((row) => (
-                          <li key={row.categoryId}>
-                            <span>{row.name}</span>
-                            <span className="pos-mono">{formatVnd(row.amountVnd)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
+            )}
+            {tab === "overview" && (
+              <div className="pos-finance-actions">
+                <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "expense" })} disabled={!live}>
+                  <Plus size={15} aria-hidden /> Expense
+                </button>
+                <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "debt-pay" })} disabled={!live || debts.length === 0}>
+                  <CreditCard size={15} aria-hidden /> Debt payment
+                </button>
+              </div>
+            )}
+          </div>
 
-          <div className="pos-finance-lower">
-            <section className="pos-finance-panel">
-              <header className="pos-finance-panel-head">
-                <Wallet size={18} aria-hidden />
-                <h3>Income sources</h3>
+          <div className="pos-finance-tabs" role="tablist" aria-label="Finance sections">
+            {([
+              ["overview", "Overview", Wallet],
+              ["transactions", "Transactions", Receipt],
+              ["analytics", "Analytics", ChartColumn],
+              ["settings", "Settings", Settings2],
+            ] as const).map(([id, label, Icon]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                className={tab === id ? "active" : undefined}
+                onClick={() => setTab(id)}
+              >
+                <Icon size={14} aria-hidden />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error && <p className="pos-entity-form-error">{error}</p>}
+        {loading && !summary && tab !== "analytics" && <p className="pos-muted">Loading finance…</p>}
+
+        {tab === "analytics" && <FinanceAnalyticsPanel live={live} />}
+
+        {tab === "overview" && summary && (
+          <div className="pos-finance-overview">
+            {summary.showDeficit && (
+              <div className="pos-finance-deficit" role="status">
+                <strong>Deficit signal</strong>
+                <span>
+                  Income {formatVnd(summary.incomeVnd)} is below required debt payments{" "}
+                  {formatVnd(summary.monthlyDebtRequiredVnd)}
+                  {summary.deficitVnd < 0 ? ` (${formatVnd(summary.deficitVnd)})` : ""}.
+                </span>
+              </div>
+            )}
+
+            <section className="pos-finance-block" aria-label="Cashflow summary">
+              <div className="pos-finance-metrics pos-finance-metrics-primary">
+                <Metric
+                  label="Net cashflow"
+                  value={formatVnd(summary.netCashflowVnd)}
+                  icon={<ArrowLeftRight size={16} />}
+                  tone={summary.netCashflowVnd < 0 ? "warn" : "ok"}
+                  emphasis="hero"
+                />
+                <Metric
+                  label="Income"
+                  value={formatVnd(summary.incomeVnd)}
+                  icon={<ArrowDownLeft size={16} />}
+                  tone="ok"
+                  emphasis="primary"
+                />
+                <Metric
+                  label="Spending"
+                  value={formatVnd(summary.spendingVnd)}
+                  icon={<ArrowUpRight size={16} />}
+                  emphasis="primary"
+                />
+              </div>
+              <div className="pos-finance-metrics pos-finance-metrics-secondary">
+                <Metric
+                  label="Debt paid"
+                  value={formatVnd(summary.debtPaidVnd)}
+                  icon={<CreditCard size={14} />}
+                  emphasis="secondary"
+                />
+                <Metric
+                  label="Outstanding debt"
+                  value={formatVnd(summary.outstandingDebtVnd)}
+                  icon={<Landmark size={14} />}
+                  emphasis="secondary"
+                />
+                <Metric
+                  label="Debt due this month"
+                  value={`${formatVnd(summary.debtPaidVnd)} / ${formatVnd(summary.monthlyDebtRequiredVnd)}`}
+                  icon={<Banknote size={14} />}
+                  emphasis="secondary"
+                />
+              </div>
+              <p className="pos-finance-compare">
+                vs {formatMonthLabel(summary.previousMonth.month)}
+                <span aria-hidden>·</span>
+                income {formatVnd(summary.previousMonth.incomeVnd)}
+                <span aria-hidden>·</span>
+                spend {formatVnd(summary.previousMonth.spendingVnd)}
+                <span aria-hidden>·</span>
+                net {formatVnd(summary.previousMonth.netCashflowVnd)}
+              </p>
+            </section>
+
+            <section className="pos-finance-block" aria-labelledby="finance-buckets-title">
+              <header className="pos-finance-section-head">
+                <h3 id="finance-buckets-title" className="pos-finance-section-title">Allocation buckets</h3>
+                <p className="pos-finance-lede">Live — Protect — Grow — Enjoy. Allocations are not expenses.</p>
               </header>
-              <div className="pos-finance-sources">
-                {activeSources.length === 0 ? (
-                  <p className="pos-finance-empty">No income sources yet — add one in Settings.</p>
+              <div className="pos-finance-buckets">
+                {BUCKET_ORDER.map((key) => {
+                  const b = summary.buckets.find((x) => x.bucket === key);
+                  if (!b) return null;
+                  const over = b.lifetimeBalanceVnd < 0;
+                  const Icon = BUCKET_ICONS[b.bucket];
+                  return (
+                    <div key={b.bucket} className={`pos-finance-bucket bucket-${b.bucket.toLowerCase()}${over ? " over" : ""}`}>
+                      <div className="pos-finance-bucket-head">
+                        <span className="pos-finance-bucket-icon" aria-hidden>
+                          <Icon size={15} />
+                        </span>
+                        <div className="pos-finance-bucket-titles">
+                          <strong>{BUCKET_LABELS[b.bucket]}</strong>
+                          <span>Target {b.targetPct}%</span>
+                        </div>
+                      </div>
+                      <div className="pos-mono pos-finance-bucket-main">
+                        {formatVnd(b.lifetimeBalanceVnd)}
+                      </div>
+                      <div className="pos-finance-bucket-meta">
+                        <span>In {formatVnd(b.allocatedVnd)}</span>
+                        <span>Out {formatVnd(b.spentVnd)}</span>
+                        <span>Net {formatVnd(b.remainingVnd)}</span>
+                      </div>
+                      {over && (
+                        <p className="pos-finance-bucket-warn">
+                          {formatVnd(Math.abs(b.lifetimeBalanceVnd))} over allocation
+                        </p>
+                      )}
+                      {b.bucket === "GROWTH" && summary.growthSpendingByCategory.length > 0 && (
+                        <ul className="pos-finance-growth-breakdown">
+                          {summary.growthSpendingByCategory.map((row) => (
+                            <li key={row.categoryId}>
+                              <span>{row.name}</span>
+                              <span className="pos-mono">{formatVnd(row.amountVnd)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="pos-finance-block pos-finance-lower" aria-label="Income, spending, and debts">
+              <div className="pos-finance-panel">
+                <header className="pos-finance-panel-head">
+                  <Wallet size={15} aria-hidden />
+                  <h3>Income sources</h3>
+                </header>
+                <div className="pos-finance-sources">
+                  {activeSources.length === 0 ? (
+                    <p className="pos-finance-empty">No income sources yet — add one in Settings.</p>
+                  ) : (
+                    activeSources.map((source) => (
+                      <button
+                        key={source.id}
+                        type="button"
+                        className="pos-finance-source-card"
+                        disabled={!live}
+                        onClick={() => setModal({ kind: "income", source })}
+                      >
+                        <span className="pos-finance-source-icon" aria-hidden>
+                          <Banknote size={16} />
+                        </span>
+                        <strong>{source.name}</strong>
+                        <span>Record income</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="pos-finance-panel">
+                <header className="pos-finance-panel-head">
+                  <Receipt size={15} aria-hidden />
+                  <h3>Spending by category</h3>
+                </header>
+                {summary.spendingByCategory.length === 0 ? (
+                  <p className="pos-finance-empty">No expenses this month.</p>
                 ) : (
-                  activeSources.map((source) => (
-                    <button
-                      key={source.id}
-                      type="button"
-                      className="pos-finance-source-card"
-                      disabled={!live}
-                      onClick={() => setModal({ kind: "income", source })}
-                    >
-                      <span className="pos-finance-source-icon" aria-hidden>
-                        <Banknote size={18} />
-                      </span>
-                      <strong>{source.name}</strong>
-                      <span>Record income</span>
-                    </button>
-                  ))
+                  <ul className="pos-finance-cat-list">
+                    {summary.spendingByCategory.map((c) => (
+                      <li key={c.categoryId}>
+                        <span>{c.name}</span>
+                        <strong className="pos-mono">{formatVnd(c.amountVnd)}</strong>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
-            </section>
 
-            <section className="pos-finance-panel">
-              <header className="pos-finance-panel-head">
-                <Receipt size={18} aria-hidden />
-                <h3>Spending by category</h3>
-              </header>
-              {summary.spendingByCategory.length === 0 ? (
-                <p className="pos-finance-empty">No expenses this month.</p>
-              ) : (
-                <ul className="pos-finance-cat-list">
-                  {summary.spendingByCategory.map((c) => (
-                    <li key={c.categoryId}>
-                      <span>{c.name}</span>
-                      <strong className="pos-mono">{formatVnd(c.amountVnd)}</strong>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section className="pos-finance-panel">
-              <header className="pos-finance-panel-head">
-                <Landmark size={18} aria-hidden />
-                <h3>Debts</h3>
-              </header>
-              {debts.length === 0 ? (
-                <p className="pos-finance-empty">No debts tracked — add in Settings.</p>
-              ) : (
-                <ul className="pos-finance-cat-list">
-                  {debts.map((d) => (
-                    <li key={d.id}>
-                      <span>
-                        {d.name}
-                        <small className="pos-muted"> · due {formatVnd(d.monthlyRequiredVnd)}/mo</small>
-                      </span>
-                      <strong className="pos-mono">{formatVnd(d.outstandingVnd)}</strong>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="pos-finance-panel-foot">
-                <span>Remaining required this month</span>
-                <strong className="pos-mono">{formatVnd(summary.debtRemainingRequiredVnd)}</strong>
+              <div className="pos-finance-panel">
+                <header className="pos-finance-panel-head">
+                  <Landmark size={15} aria-hidden />
+                  <h3>Debts</h3>
+                </header>
+                {debts.length === 0 ? (
+                  <p className="pos-finance-empty">No debts tracked — add in Settings.</p>
+                ) : (
+                  <ul className="pos-finance-cat-list">
+                    {debts.map((d) => (
+                      <li key={d.id}>
+                        <span>
+                          {d.name}
+                          <small className="pos-muted"> · due {formatVnd(d.monthlyRequiredVnd)}/mo</small>
+                        </span>
+                        <strong className="pos-mono">{formatVnd(d.outstandingVnd)}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="pos-finance-panel-foot">
+                  <span>Remaining required this month</span>
+                  <strong className="pos-mono">{formatVnd(summary.debtRemainingRequiredVnd)}</strong>
+                </div>
               </div>
             </section>
           </div>
-        </>
-      )}
+        )}
 
       {tab === "transactions" && summary && (
         <>
@@ -466,6 +492,7 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
           }}
         />
       )}
+      </div>
 
       {modal?.kind === "income" && summary && (
         <IncomeModal
@@ -573,16 +600,18 @@ function Metric({
   value,
   tone,
   icon,
+  emphasis = "primary",
 }: {
   label: string;
   value: string;
   tone?: "ok" | "warn";
   icon?: ReactNode;
+  emphasis?: "hero" | "primary" | "secondary";
 }) {
   return (
-    <div className={`pos-finance-metric${tone ? ` tone-${tone}` : ""}`}>
+    <div className={`pos-finance-metric emphasis-${emphasis}${tone ? ` tone-${tone}` : ""}`}>
       <div className="pos-finance-metric-top">
-        {icon ? <span className="pos-finance-metric-icon">{icon}</span> : null}
+        {icon ? <span className="pos-finance-metric-icon" aria-hidden>{icon}</span> : null}
         <div className="pos-finance-metric-label">{label}</div>
       </div>
       <div className={`pos-mono pos-finance-metric-value ${tone ?? ""}`}>{value}</div>
