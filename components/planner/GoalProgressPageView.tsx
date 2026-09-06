@@ -24,6 +24,7 @@ import {
   formatShortDate,
   getOutcomeSnapshot,
 } from "@/app/goal-project-workspaces";
+import { isTrackingStatusMetric } from "@/lib/goal-outcome";
 
 type PeriodKey = "thisWeek" | "thisMonth" | "allTime";
 
@@ -209,7 +210,9 @@ export function GoalProgressPageView({
             <div className="pos-gp-outcome-row">
               <div className={cn("pos-gp-card", achieved && "is-achieved")}>
                 <div className="pos-gp-card-head">
-                  <div className="pos-gp-card-label">Outcome</div>
+                  <div className="pos-gp-card-label">
+                    {isTrackingStatusMetric(goal) ? "Tracking status" : "Outcome"}
+                  </div>
                   <div className="pos-gp-card-head-actions">
                     {achieved && <span className="pos-goal-badge status-achieved xs">Achieved</span>}
                     {onLogObservation && !closed && (

@@ -15,6 +15,7 @@ import {
   formatShortDate,
   isRecurringProject,
 } from "@/app/goal-project-workspaces";
+import { buildProjectSections } from "@/lib/project-sections";
 
 function blockForTask(taskId: string, blocks: WorkspaceBlock[]) {
   return blocks.find((block) => block.taskId === taskId && block.type === "task");
@@ -163,65 +164,6 @@ export type ProjectsOverviewViewProps = {
   onCreate: () => void;
   onGoCalendar: () => void;
 };
-
-type ProjectSection = {
-  key: string;
-  label: string;
-  projects: ApiProject[];
-};
-
-const FOCUS_SECTION_ORDER = ["FOCUS", "MAINTAIN", "EXPLORE"] as const;
-
-function buildProjectSections(projects: ApiProject[], goals: ApiGoal[]): ProjectSection[] {
-  const byTitle = (a: ApiProject, b: ApiProject) => a.title.localeCompare(b.title);
-
-  const work = projects
-    .filter((p) => !p.goalId && (p.projectContext ?? "PERSONAL") === "WORK")
-    .sort(byTitle);
-  const personalUnlinked = projects
-    .filter((p) => !p.goalId && (p.projectContext ?? "PERSONAL") !== "WORK")
-    .sort(byTitle);
-
-  const linkedByGoal = new Map<string, ApiProject[]>();
-  for (const project of projects) {
-    if (!project.goalId) continue;
-    const list = linkedByGoal.get(project.goalId) ?? [];
-    list.push(project);
-    linkedByGoal.set(project.goalId, list);
-  }
-
-  const sections: ProjectSection[] = [];
-  if (work.length > 0) {
-    sections.push({ key: "work", label: "Work", projects: work });
-  }
-  if (personalUnlinked.length > 0) {
-    sections.push({ key: "personal", label: "Personal", projects: personalUnlinked });
-  }
-
-  for (const focus of FOCUS_SECTION_ORDER) {
-    const goalsInFocus = goals
-      .filter((g) => g.status === "ACTIVE" && (g.focusType ?? "FOCUS") === focus)
-      .sort((a, b) => a.title.localeCompare(b.title));
-    for (const goal of goalsInFocus) {
-      const linked = (linkedByGoal.get(goal.id) ?? []).sort(byTitle);
-      if (linked.length === 0) continue;
-      const focusLabel = focus === "FOCUS" ? "Focus" : focus === "MAINTAIN" ? "Maintain" : "Explore";
-      sections.push({
-        key: `goal-${goal.id}`,
-        label: `${focusLabel} · ${goal.title}`,
-        projects: linked,
-      });
-    }
-  }
-
-  const shown = new Set(sections.flatMap((s) => s.projects.map((p) => p.id)));
-  const orphanLinked = projects.filter((p) => p.goalId && !shown.has(p.id)).sort(byTitle);
-  if (orphanLinked.length > 0) {
-    sections.push({ key: "other-linked", label: "Other linked", projects: orphanLinked });
-  }
-
-  return sections;
-}
 
 export function ProjectsOverviewView({
   projects,

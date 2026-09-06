@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getOutcomeSnapshot,
+  isTrackingStatusMetric,
   parseTargetNumber,
   withMetricTarget,
 } from "../lib/goal-outcome.ts";
@@ -54,6 +55,33 @@ test("parseTargetNumber defaults offer goals without numbers to 1", () => {
   });
   assert.equal(parseTargetNumber(g), 1);
   assert.equal(getOutcomeSnapshot(g).line, "0 / 1 offers");
+});
+
+test("unknown metric current is not coerced to 0", () => {
+  const g = goal({
+    id: "ielts",
+    title: "Achieve IELTS 7.0",
+    metric: "IELTS Overall Band\nBaseline: Not set\nTarget: 7.0",
+    outcome: "Achieve IELTS Overall Band 7.0.",
+  });
+  const snap = getOutcomeSnapshot(g);
+  assert.equal(snap.current, null);
+  assert.equal(snap.target, 7);
+  assert.equal(snap.line, "— / 7.0");
+  assert.doesNotMatch(snap.line ?? "", /^0\s*\//);
+});
+
+test("finance stale threshold is not an outcome target", () => {
+  const g = goal({
+    id: "finance",
+    title: "Maintain Personal Financial Awareness & Control",
+    metric: "Finance tracking freshness (future: lastFinanceActivity within 5 days)",
+    outcome: "Keep personal finances sufficiently recorded.",
+  });
+  assert.equal(isTrackingStatusMetric(g), true);
+  assert.equal(parseTargetNumber(g), null);
+  assert.equal(getOutcomeSnapshot(g).line, "Integration pending");
+  assert.doesNotMatch(getOutcomeSnapshot(g).line ?? "", /0\s*\/\s*5/);
 });
 
 test("withMetricTarget rewrites Target line", () => {

@@ -662,11 +662,24 @@
   box-shadow: 0 0 0 4px #e0e7ff;
 }
 
+.pos-milestone-node.pending {
+  border-color: #d1d5db;
+  background: #fff;
+}
+
 .pos-milestone-dot {
   width: 8px;
   height: 8px;
   border-radius: 999px;
   background: #fff;
+}
+
+.pos-milestone-pending {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1.5px solid #9ca3af;
+  background: transparent;
 }
 
 .pos-milestone-connector {
@@ -1246,6 +1259,23 @@
   margin: 10px 0 0;
   color: var(--pos-ink-muted);
   font-size: 11px;
+}
+
+.pos-goal-cal-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 16px;
+  border: 1px dashed #e5e7eb;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fafafa 0%, #fff 100%);
+}
+
+.pos-goal-cal-empty-title {
+  margin: 0;
+  font-size: 14px;
+  color: #4b5563;
 }
 
 .pos-journey-card {

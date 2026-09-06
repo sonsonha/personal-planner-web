@@ -21,10 +21,11 @@ import {
   ScheduledBadge,
   SectionLabel,
   UnscheduledBadge,
-  type CalendarStripDay,
 } from "./shared";
 import { formatHoursFromMinutes, processAccent } from "./utils";
 import type { WorkspaceBlock, WorkspaceTask } from "@/app/goal-project-workspaces";
+import { buildGoalCalendarStrip } from "@/lib/goal-calendar-strip";
+import { isTrackingStatusMetric } from "@/lib/goal-outcome";
 
 type DetailBlock = WorkspaceBlock & {
   title?: string;
@@ -72,65 +73,6 @@ function weekRangeLabel(now: Date) {
   const end = new Date(start.getTime() + 6 * 86_400_000);
   const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
   return `${start.toLocaleDateString("en-US", opts)}–${end.toLocaleDateString("en-US", opts)}`;
-}
-
-function buildCalendarStrip(
-  goalTasks: WorkspaceTask[],
-  blocks: DetailBlock[],
-  now: Date,
-): { days: CalendarStripDay[]; protectedMinutes: number; unscheduledCount: number } {
-  const weekStart = startOfProductWeek(now);
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  const goalTaskIds = new Set(goalTasks.map((t) => t.id));
-  const goalProjectIds = new Set(goalTasks.map((t) => t.projectId).filter(Boolean));
-
-  let protectedMinutes = 0;
-  const days: CalendarStripDay[] = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(weekStart.getTime() + index * 86_400_000);
-    const next = new Date(date.getTime() + 86_400_000);
-    const dayBlocks = blocks.filter((block) => {
-      if (!block.startAt) return false;
-      const at = new Date(block.startAt).getTime();
-      if (at < date.getTime() || at >= next.getTime()) return false;
-      if (block.type === "external") return true;
-      return Boolean(block.taskId && goalTaskIds.has(block.taskId));
-    });
-
-    for (const block of dayBlocks) {
-      if (block.type === "task") protectedMinutes += block.duration;
-    }
-
-    const isToday = date.toDateString() === today.toDateString();
-    return {
-      key: date.toISOString(),
-      short: date.toLocaleDateString("en-US", { weekday: "short" }),
-      date: date.getDate(),
-      isToday,
-      blocks: dayBlocks.slice(0, 3).map((block) => {
-        const task = block.taskId ? goalTasks.find((t) => t.id === block.taskId) : null;
-        const hours = Math.round((block.duration / 60) * 10) / 10;
-        return {
-          id: block.id,
-          label: block.title ?? task?.title ?? (block.type === "external" ? "Google" : "Block"),
-          duration: `${hours}h`,
-          color: block.color ?? processAccent(0).color,
-          external: block.type === "external",
-        };
-      }),
-    };
-  });
-
-  const unscheduledCount = goalTasks.filter((task) => {
-    if (task.status === "done") return false;
-    const inWeek = task.dueHorizon === "week"
-      || (task.dueAt && inProductWeek(parseDate(task.dueAt)!, now));
-    if (!inWeek) return false;
-    return !blockForTask(task.id, blocks);
-  }).length;
-
-  void goalProjectIds;
-  return { days, protectedMinutes, unscheduledCount };
 }
 
 export type GoalDetailViewProps = {
@@ -201,8 +143,8 @@ export function GoalDetailView({
   const currentIdx = Math.max(0, milestones.findIndex((m) => m.status === "current"));
   const weekLabel = weekRangeLabel(now);
 
-  const { days, protectedMinutes, unscheduledCount } = useMemo(
-    () => buildCalendarStrip(goalTasks, blocks, now),
+  const { days, protectedMinutes, unscheduledCount, hasGoalSessions } = useMemo(
+    () => buildGoalCalendarStrip(goalTasks, blocks, now),
     [goalTasks, blocks, now],
   );
 
@@ -290,7 +232,7 @@ export function GoalDetailView({
 
         <div className="pos-metric-row">
           <MetricCard
-            label="Outcome"
+            label={isTrackingStatusMetric(goal) ? "Tracking status" : "Outcome"}
             value={
               outcomeParts?.kind === "ratio" ? (
                 <>
@@ -304,7 +246,11 @@ export function GoalDetailView({
                 </span>
               )
             }
-            sub={goal.metric || undefined}
+            sub={
+              isTrackingStatusMetric(goal)
+                ? "Finance tracking may need attention if there has been no expense update or meaningful finance review/activity for more than 5 days."
+                : goal.metric || undefined
+            }
           />
           <MetricCard
             label="Current stage"
@@ -356,23 +302,27 @@ export function GoalDetailView({
             </section>
 
             <section>
-              <SectionLabel
-                right={
-                  <span className="pos-cal-legend">
-                    <span><i className="os" /> Personal OS</span>
-                    <span><i className="gcal" /> Google (read-only)</span>
-                  </span>
-                }
-              >
+              <SectionLabel>
                 Calendar · {weekLabel}
               </SectionLabel>
-              <CalendarStrip days={days} />
-              <p className="pos-cal-footnote">
-                {hoursLabel(protectedMinutes)} protected · {unscheduledCount} unscheduled ·{" "}
-                <button type="button" className="pos-text-link" onClick={onGoCalendar}>
-                  Open Calendar →
-                </button>
-              </p>
+              {hasGoalSessions ? (
+                <>
+                  <CalendarStrip days={days} />
+                  <p className="pos-cal-footnote">
+                    {hoursLabel(protectedMinutes)} protected · {unscheduledCount} unscheduled ·{" "}
+                    <button type="button" className="pos-text-link" onClick={onGoCalendar}>
+                      Open Calendar →
+                    </button>
+                  </p>
+                </>
+              ) : (
+                <div className="pos-goal-cal-empty">
+                  <p className="pos-goal-cal-empty-title">No scheduled work for this Goal this week.</p>
+                  <button type="button" className="pos-btn-secondary indigo" onClick={onGoCalendar}>
+                    Open Calendar
+                  </button>
+                </div>
+              )}
             </section>
 
             <section>

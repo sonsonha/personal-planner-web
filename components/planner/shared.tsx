@@ -193,14 +193,16 @@ export function MilestoneTimeline({
                   <path d="M1 4.5l3 3L10 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               ) : m.status === "current" ? (
-                <span className="pos-milestone-dot" />
-              ) : null}
+                <span className="pos-milestone-dot" title="Current" />
+              ) : (
+                <span className="pos-milestone-pending" title="Pending" aria-hidden="true" />
+              )}
             </button>
             {i < milestones.length - 1 && (
               <div
                 className={cn(
                   "pos-milestone-connector",
-                  milestones[i + 1]?.status !== "pending" && "filled",
+                  m.status === "done" && "filled",
                 )}
               />
             )}

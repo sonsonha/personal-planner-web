@@ -16,6 +16,7 @@ import {
   getOutcomeSnapshot,
   healthLabel,
 } from "@/app/goal-project-workspaces";
+import { isTrackingStatusMetric } from "@/lib/goal-outcome";
 
 export type GoalsYearGroup = {
   year: number | null;
@@ -120,7 +121,9 @@ function GoalCard({
 
       <div className="pos-ov-metrics-strip">
         <div className="pos-ov-metric-cell">
-          <div className="pos-ov-metric-label">Outcome</div>
+          <div className="pos-ov-metric-label">
+            {isTrackingStatusMetric(goal) ? "Tracking" : "Outcome"}
+          </div>
           <span className={cn("pos-mono pos-ov-metric-value", achieved && "achieved")}>{outcome ?? "—"}</span>
         </div>
         <div className="pos-ov-metric-cell">
