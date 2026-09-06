@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   BUCKET_LABELS,
   BUCKET_ORDER,
@@ -100,28 +101,32 @@ export function FinanceAnalyticsPanel({ live }: Props) {
 
       {data && (
         <div className="pos-finance-toolbar">
-          <div className="pos-finance-month-nav">
+          <div className="pos-finance-month-nav" role="group" aria-label="Select period">
             <button
               type="button"
-              className="pos-btn-ghost"
+              className="pos-finance-month-step"
               aria-label="Previous period"
               onClick={() => setPeriod(data.navigation.previousPeriodKey)}
             >
-              ‹
+              <ChevronLeft size={18} aria-hidden />
             </button>
-            <strong>{data.label}</strong>
+            <div className="pos-finance-month-current">
+              <CalendarDays size={16} aria-hidden />
+              <strong>{data.label}</strong>
+            </div>
             <button
               type="button"
-              className="pos-btn-ghost"
+              className="pos-finance-month-step"
               aria-label="Next period"
               onClick={() => setPeriod(data.navigation.nextPeriodKey)}
             >
-              ›
+              <ChevronRight size={18} aria-hidden />
             </button>
             <button
               type="button"
-              className="pos-btn-ghost"
+              className="pos-finance-month-today"
               onClick={() => setPeriod(data.navigation.currentPeriodKey)}
+              disabled={data.periodKey === data.navigation.currentPeriodKey}
             >
               Current
             </button>

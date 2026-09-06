@@ -396,6 +396,16 @@ export function currentMonthKey(): string {
   }).format(new Date());
 }
 
+export function formatMonthLabel(month: string): string {
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  if (!y || !m) return month;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(y, m - 1, 1)));
+}
+
 export function shiftMonth(month: string, delta: number): string {
   const [y, m] = month.split("-").map(Number) as [number, number];
   const d = new Date(Date.UTC(y, m - 1 + delta, 1));

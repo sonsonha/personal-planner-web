@@ -6,7 +6,10 @@ import {
   ArrowLeftRight,
   ArrowUpRight,
   Banknote,
+  CalendarDays,
   ChartColumn,
+  ChevronLeft,
+  ChevronRight,
   CreditCard,
   Home,
   Landmark,
@@ -36,6 +39,7 @@ import {
   fetchFinanceSummary,
   fetchFinanceTransactions,
   fetchIncomeSources,
+  formatMonthLabel,
   formatVnd,
   patchDebtPayment,
   patchExpenseEntry,
@@ -132,15 +136,33 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
     <section className="gp-workspace gp-workspace-overview pos-finance" aria-label="Finance">
       <div className="pos-finance-toolbar">
         {(tab === "overview" || tab === "transactions") && (
-          <div className="pos-finance-month">
-            <button type="button" className="pos-btn-ghost" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month">
-              ‹
+          <div className="pos-finance-month-picker" role="group" aria-label="Select month">
+            <button
+              type="button"
+              className="pos-finance-month-step"
+              onClick={() => setMonth(shiftMonth(month, -1))}
+              aria-label="Previous month"
+            >
+              <ChevronLeft size={18} aria-hidden />
             </button>
-            <strong className="pos-mono">{month}</strong>
-            <button type="button" className="pos-btn-ghost" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month">
-              ›
+            <div className="pos-finance-month-current">
+              <CalendarDays size={16} aria-hidden />
+              <strong>{formatMonthLabel(month)}</strong>
+            </div>
+            <button
+              type="button"
+              className="pos-finance-month-step"
+              onClick={() => setMonth(shiftMonth(month, 1))}
+              aria-label="Next month"
+            >
+              <ChevronRight size={18} aria-hidden />
             </button>
-            <button type="button" className="pos-btn-ghost" onClick={() => setMonth(currentMonthKey())}>
+            <button
+              type="button"
+              className="pos-finance-month-today"
+              onClick={() => setMonth(currentMonthKey())}
+              disabled={month === currentMonthKey()}
+            >
               This month
             </button>
           </div>
@@ -214,64 +236,69 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
             />
           </div>
 
-          <p className="pos-finance-compare pos-muted">
-            vs {summary.previousMonth.month}: income {formatVnd(summary.previousMonth.incomeVnd)} ·
-            spend {formatVnd(summary.previousMonth.spendingVnd)} ·
-            net {formatVnd(summary.previousMonth.netCashflowVnd)}
-          </p>
-
-          <header className="pos-finance-section-head">
-            <div>
-              <h3 className="pos-finance-section-title">Allocation buckets</h3>
-              <p className="pos-muted pos-finance-lede">
-                Live — Protect — Grow — Enjoy. Allocations are not expenses.
-              </p>
-            </div>
-          </header>
-          <div className="pos-finance-buckets">
-            {BUCKET_ORDER.map((key) => {
-              const b = summary.buckets.find((x) => x.bucket === key);
-              if (!b) return null;
-              const over = b.lifetimeBalanceVnd < 0;
-              const Icon = BUCKET_ICONS[b.bucket];
-              return (
-                <div key={b.bucket} className={`pos-finance-bucket-card bucket-${b.bucket.toLowerCase()}${over ? " over" : ""}`}>
-                  <div className="pos-finance-bucket-head">
-                    <span className="pos-finance-bucket-icon" aria-hidden>
-                      <Icon size={18} />
-                    </span>
-                    <div className="pos-finance-bucket-titles">
-                      <strong>{BUCKET_LABELS[b.bucket]}</strong>
-                      <span className="pos-muted">Target {b.targetPct}%</span>
-                    </div>
-                  </div>
-                  <div className="pos-mono pos-finance-bucket-main">
-                    {formatVnd(b.lifetimeBalanceVnd)}
-                  </div>
-                  <div className="pos-finance-bucket-meta">
-                    <span>In {formatVnd(b.allocatedVnd)}</span>
-                    <span>Out {formatVnd(b.spentVnd)}</span>
-                    <span>Net {formatVnd(b.remainingVnd)}</span>
-                  </div>
-                  {over && (
-                    <p className="pos-finance-bucket-warn">
-                      {formatVnd(Math.abs(b.lifetimeBalanceVnd))} over allocation
-                    </p>
-                  )}
-                  {b.bucket === "GROWTH" && summary.growthSpendingByCategory.length > 0 && (
-                    <ul className="pos-finance-growth-breakdown">
-                      {summary.growthSpendingByCategory.map((row) => (
-                        <li key={row.categoryId}>
-                          <span>{row.name}</span>
-                          <span className="pos-mono">{formatVnd(row.amountVnd)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
+          <div className="pos-finance-compare" role="note">
+            <span className="pos-finance-compare-tag">vs {formatMonthLabel(summary.previousMonth.month)}</span>
+            <span>Income {formatVnd(summary.previousMonth.incomeVnd)}</span>
+            <span className="pos-finance-compare-sep" aria-hidden>·</span>
+            <span>Spend {formatVnd(summary.previousMonth.spendingVnd)}</span>
+            <span className="pos-finance-compare-sep" aria-hidden>·</span>
+            <span>Net {formatVnd(summary.previousMonth.netCashflowVnd)}</span>
           </div>
+
+          <section className="pos-finance-section" aria-labelledby="finance-buckets-title">
+            <header className="pos-finance-section-head">
+              <div>
+                <h3 id="finance-buckets-title" className="pos-finance-section-title">Allocation buckets</h3>
+                <p className="pos-muted pos-finance-lede">
+                  Live — Protect — Grow — Enjoy. Allocations are not expenses.
+                </p>
+              </div>
+            </header>
+            <div className="pos-finance-buckets">
+              {BUCKET_ORDER.map((key) => {
+                const b = summary.buckets.find((x) => x.bucket === key);
+                if (!b) return null;
+                const over = b.lifetimeBalanceVnd < 0;
+                const Icon = BUCKET_ICONS[b.bucket];
+                return (
+                  <div key={b.bucket} className={`pos-finance-bucket-card bucket-${b.bucket.toLowerCase()}${over ? " over" : ""}`}>
+                    <div className="pos-finance-bucket-head">
+                      <span className="pos-finance-bucket-icon" aria-hidden>
+                        <Icon size={18} />
+                      </span>
+                      <div className="pos-finance-bucket-titles">
+                        <strong>{BUCKET_LABELS[b.bucket]}</strong>
+                        <span className="pos-muted">Target {b.targetPct}%</span>
+                      </div>
+                    </div>
+                    <div className="pos-mono pos-finance-bucket-main">
+                      {formatVnd(b.lifetimeBalanceVnd)}
+                    </div>
+                    <div className="pos-finance-bucket-meta">
+                      <span>In {formatVnd(b.allocatedVnd)}</span>
+                      <span>Out {formatVnd(b.spentVnd)}</span>
+                      <span>Net {formatVnd(b.remainingVnd)}</span>
+                    </div>
+                    {over && (
+                      <p className="pos-finance-bucket-warn">
+                        {formatVnd(Math.abs(b.lifetimeBalanceVnd))} over allocation
+                      </p>
+                    )}
+                    {b.bucket === "GROWTH" && summary.growthSpendingByCategory.length > 0 && (
+                      <ul className="pos-finance-growth-breakdown">
+                        {summary.growthSpendingByCategory.map((row) => (
+                          <li key={row.categoryId}>
+                            <span>{row.name}</span>
+                            <span className="pos-mono">{formatVnd(row.amountVnd)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
 
           <div className="pos-finance-lower">
             <section className="pos-finance-panel">
@@ -341,9 +368,10 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
                   ))}
                 </ul>
               )}
-              <p className="pos-finance-panel-foot pos-muted">
-                Remaining required this month: {formatVnd(summary.debtRemainingRequiredVnd)}
-              </p>
+              <div className="pos-finance-panel-foot">
+                <span>Remaining required this month</span>
+                <strong className="pos-mono">{formatVnd(summary.debtRemainingRequiredVnd)}</strong>
+              </div>
             </section>
           </div>
         </>
