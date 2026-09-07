@@ -27,6 +27,7 @@ export type CalendarPopoverBlock = {
   status?: string | null;
   repeatSeriesId?: string | null;
   sessionOutcome?: SessionOutcome | null;
+  isDailyFocus?: boolean;
 };
 
 function formatRange(start: number, duration: number, format: ClockFormat = "24h") {
@@ -57,7 +58,7 @@ function PopoverShell({ left, top, onClose, children, className }: PopoverShellP
   );
 }
 
-export function positionPopover(anchor: DOMRect, width = 260, height = 420) {
+export function positionPopover(anchor: DOMRect, width = 400, height = 480) {
   const left = Math.min(anchor.right + 8, Math.max(12, window.innerWidth - width - 12));
   const top = Math.min(anchor.top, Math.max(12, window.innerHeight - height - 12));
   return { left, top };
@@ -97,6 +98,7 @@ export function PersonalOsBlockPopover({
   const [showRepeat, setShowRepeat] = useState(false);
   const outcome = block.sessionOutcome ?? emptySessionOutcome();
   const progress = sessionOutcomeProgressLabel(outcome);
+  const isDailyFocus = Boolean(block.isDailyFocus);
 
   useEffect(() => {
     setNotes(block.notes ?? "");
@@ -104,13 +106,28 @@ export function PersonalOsBlockPopover({
 
   return (
     <PopoverShell left={left} top={top} onClose={onClose}>
-      <div className="pos-cal-popover-head">
-        <p className="pos-cal-popover-title">{block.title}</p>
-        {block.meta && <p className="pos-cal-popover-sub">{block.meta}</p>}
-        <p className="pos-cal-popover-time pos-mono">{formatRange(block.start, block.duration, clockFormat)}</p>
-        {sessionDone && <p className="pos-cal-popover-sub">Session done</p>}
+      <header className="pos-cal-popover-head">
+        <div className="pos-cal-popover-title-row">
+          <p className="pos-cal-popover-title">{block.title}</p>
+          {isDailyFocus && (
+            <span className="pos-cal-popover-focus" title="Daily Focus">
+              ★ Focus
+            </span>
+          )}
+        </div>
+        <div className="pos-cal-popover-meta">
+          {block.meta && <span>{block.meta}</span>}
+          {block.meta && <span className="pos-cal-popover-meta-sep" aria-hidden="true">·</span>}
+          <span className="pos-mono">{formatRange(block.start, block.duration, clockFormat)}</span>
+          {sessionDone && (
+            <>
+              <span className="pos-cal-popover-meta-sep" aria-hidden="true">·</span>
+              <span className="pos-cal-popover-done">Done</span>
+            </>
+          )}
+        </div>
         {progress && (
-          <p className="pos-cal-popover-sub pos-mono">Outcome {progress}</p>
+          <p className="pos-cal-popover-progress pos-mono">{progress}</p>
         )}
         {failed && (
           <div className="pos-cal-popover-sync-fail" role="status">
@@ -118,87 +135,105 @@ export function PersonalOsBlockPopover({
             <span>This block is still on your Personal OS calendar.</span>
           </div>
         )}
-      </div>
+      </header>
 
-      <div className="pos-cal-popover-actions">
-        <label className="pos-cal-popover-notes">
-          <span>Session note</span>
-          <textarea
-            value={notes}
-            rows={2}
-            disabled={saving}
-            placeholder="What happened in this session…"
-            onChange={(event) => setNotes(event.target.value)}
-            onBlur={() => {
-              if ((block.notes ?? "") !== notes) onSaveNotes(notes);
-            }}
-          />
-        </label>
+      <div className="pos-cal-popover-body">
+        <section className="pos-cal-popover-section">
+          <label className="pos-cal-popover-notes">
+            <span className="pos-cal-popover-section-label">Session note</span>
+            <textarea
+              value={notes}
+              rows={2}
+              disabled={saving}
+              placeholder="What happened in this session…"
+              onChange={(event) => setNotes(event.target.value)}
+              onBlur={() => {
+                if ((block.notes ?? "") !== notes) onSaveNotes(notes);
+              }}
+            />
+          </label>
+        </section>
 
         {onSaveOutcome && (
-          <div className="pos-cal-popover-outcome">
-            <span className="pos-cal-popover-outcome-label">Outcome tracking</span>
+          <section className="pos-cal-popover-section pos-cal-popover-outcome">
+            <span className="pos-cal-popover-section-label">Outcome</span>
             <SessionOutcomeEditor
               value={outcome}
               disabled={saving}
               compact
               onChange={onSaveOutcome}
             />
-          </div>
+          </section>
         )}
 
         {failed && onRetrySync && (
-          <button type="button" className="pos-cal-popover-action amber" onClick={() => { onRetrySync(); onClose(); }}>
-            Retry sync
-          </button>
-        )}
-
-        {onRepeatSession && !block.repeatSeriesId && (
-          showRepeat ? (
-            <div className="pos-cal-popover-repeat">
-              <label>
-                <span>Repeat weekly for</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={52}
-                  value={repeatWeeks}
-                  disabled={saving}
-                  onChange={(event) => setRepeatWeeks(event.target.value)}
-                />
-                <span>weeks</span>
-              </label>
-              <button
-                type="button"
-                className="pos-cal-popover-action"
-                disabled={saving}
-                onClick={() => {
-                  const weeks = Math.max(1, Math.min(52, Number(repeatWeeks) || 8));
-                  onRepeatSession(weeks);
-                  onClose();
-                }}
-              >
-                Create repeats
-              </button>
-            </div>
-          ) : (
+          <section className="pos-cal-popover-section">
             <button
               type="button"
-              className="pos-cal-popover-action"
-              disabled={saving}
-              onClick={() => setShowRepeat(true)}
+              className="pos-cal-popover-action amber"
+              onClick={() => { onRetrySync(); onClose(); }}
             >
-              <span>Repeat session</span>
-              <small>Copy this session into future weeks</small>
+              Retry sync
             </button>
-          )
+          </section>
         )}
 
-        <div className="pos-cal-popover-divider" />
-        <button type="button" className="pos-cal-popover-action muted" onClick={() => { onUnschedule(); onClose(); }}>
-          <span>Remove session</span>
-          <small>Drop this TimeBlock · keep the Task</small>
-        </button>
+        <section className="pos-cal-popover-section pos-cal-popover-more">
+          <details className="pos-cal-popover-more-details">
+            <summary className="pos-cal-popover-more-summary">More actions</summary>
+            <div className="pos-cal-popover-more-body">
+              {onRepeatSession && !block.repeatSeriesId && (
+                showRepeat ? (
+                  <div className="pos-cal-popover-repeat">
+                    <label>
+                      <span>Repeat weekly for</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={52}
+                        value={repeatWeeks}
+                        disabled={saving}
+                        onChange={(event) => setRepeatWeeks(event.target.value)}
+                      />
+                      <span>weeks</span>
+                    </label>
+                    <button
+                      type="button"
+                      className="pos-cal-popover-action"
+                      disabled={saving}
+                      onClick={() => {
+                        const weeks = Math.max(1, Math.min(52, Number(repeatWeeks) || 8));
+                        onRepeatSession(weeks);
+                        onClose();
+                      }}
+                    >
+                      Create repeats
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="pos-cal-popover-action"
+                    disabled={saving}
+                    onClick={() => setShowRepeat(true)}
+                  >
+                    <span>Repeat session</span>
+                    <small>Copy this session into future weeks</small>
+                  </button>
+                )
+              )}
+
+              <button
+                type="button"
+                className="pos-cal-popover-action destructive"
+                onClick={() => { onUnschedule(); onClose(); }}
+              >
+                <span>Remove session</span>
+                <small>Drop this TimeBlock · keep the Task</small>
+              </button>
+            </div>
+          </details>
+        </section>
       </div>
     </PopoverShell>
   );
@@ -212,14 +247,17 @@ export type GoogleEventPopoverProps = {
 };
 
 export function GoogleEventPopover({ block, anchor, clockFormat = "24h", onClose }: GoogleEventPopoverProps) {
-  const { left, top } = positionPopover(anchor, 220, 160);
+  const { left, top } = positionPopover(anchor, 280, 160);
   return (
     <PopoverShell left={left} top={top} onClose={onClose} className="google">
-      <div className="pos-cal-popover-head">
+      <header className="pos-cal-popover-head">
         <p className="pos-cal-popover-title">{block.title}</p>
-        <p className="pos-cal-popover-sub">{block.meta ?? "Google Calendar"}</p>
-        <p className="pos-cal-popover-time pos-mono">{formatRange(block.start, block.duration, clockFormat)}</p>
-      </div>
+        <div className="pos-cal-popover-meta">
+          <span>{block.meta ?? "Google Calendar"}</span>
+          <span className="pos-cal-popover-meta-sep" aria-hidden="true">·</span>
+          <span className="pos-mono">{formatRange(block.start, block.duration, clockFormat)}</span>
+        </div>
+      </header>
       <div className="pos-cal-popover-readonly">
         <svg width="10" height="11" viewBox="0 0 10 11" fill="none" aria-hidden="true">
           <rect x="0.5" y="4.5" width="9" height="6" rx="1" stroke="currentColor" strokeWidth="1" />

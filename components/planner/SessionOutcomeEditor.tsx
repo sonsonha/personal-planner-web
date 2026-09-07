@@ -82,12 +82,12 @@ export function SessionOutcomeEditor({
       {draft.type === "CHECKLIST" && (
         <div className="pos-session-outcome-checklist">
           <p className="pos-session-outcome-progress pos-mono">
-            {sessionOutcomeProgressLabel(draft) ?? "0 / 0"}
+            {(sessionOutcomeProgressLabel(draft) ?? "0 / 0")} complete
           </p>
           <ul>
             {draft.items.map((item) => (
               <li key={item.id}>
-                <label>
+                <label className={cn(item.done && "done")}>
                   <input
                     type="checkbox"
                     checked={item.done}
