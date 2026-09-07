@@ -79,6 +79,20 @@ function parseAmountInput(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Live thousand separators while typing (vi-VN: 1.000.000). */
+function formatAmountInput(raw: string | number): string {
+  const n = typeof raw === "number" ? raw : parseAmountInput(raw);
+  if (n == null || !Number.isFinite(n)) return "";
+  return new Intl.NumberFormat("vi-VN").format(Math.trunc(Math.abs(n)));
+}
+
+function onAmountFieldChange(
+  raw: string,
+  setValue: (next: string) => void,
+) {
+  setValue(formatAmountInput(raw));
+}
+
 export function FinanceWorkspace({ live, onChanged }: Props) {
   const [month, setMonth] = useState(() => currentMonthKey());
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
@@ -654,10 +668,10 @@ function IncomeModal({
   useEffect(() => {
     if (!adjust) return;
     setOverride({
-      LIVING: String(defaults.LIVING),
-      SAFETY: String(defaults.SAFETY),
-      GROWTH: String(defaults.GROWTH),
-      FUN: String(defaults.FUN),
+      LIVING: formatAmountInput(defaults.LIVING),
+      SAFETY: formatAmountInput(defaults.SAFETY),
+      GROWTH: formatAmountInput(defaults.GROWTH),
+      FUN: formatAmountInput(defaults.FUN),
     });
     // Only re-seed when entering adjust or amount changes while adjusting.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -709,7 +723,15 @@ function IncomeModal({
         <div className="pos-qa-fields">
           <label className="pos-qa-field">
             Amount (VND)
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="numeric" autoFocus disabled={saving} />
+            <input
+              className="pos-mono"
+              value={amount}
+              onChange={(e) => onAmountFieldChange(e.target.value, setAmount)}
+              inputMode="numeric"
+              autoFocus
+              disabled={saving}
+              placeholder="0"
+            />
           </label>
           <label className="pos-qa-field">
             Received on
@@ -731,7 +753,10 @@ function IncomeModal({
                     inputMode="numeric"
                     value={override[bucket]}
                     disabled={saving}
-                    onChange={(e) => setOverride((prev) => ({ ...prev, [bucket]: e.target.value }))}
+                    onChange={(e) => {
+                      const next = formatAmountInput(e.target.value);
+                      setOverride((prev) => ({ ...prev, [bucket]: next }));
+                    }}
                   />
                 ) : (
                   <strong className="pos-mono">{formatVnd(preview[bucket])}</strong>
@@ -818,7 +843,15 @@ function QuickAmountModal({
         <div className="pos-qa-fields">
           <label className="pos-qa-field">
             <span className="pos-qa-field-label">{amountLabel}</span>
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus disabled={saving} inputMode="numeric" />
+            <input
+              className="pos-mono"
+              value={amount}
+              onChange={(e) => onAmountFieldChange(e.target.value, setAmount)}
+              autoFocus
+              disabled={saving}
+              inputMode="numeric"
+              placeholder="0"
+            />
           </label>
           <label className="pos-qa-field">
             <span className="pos-qa-field-label">{dateLabel}</span>
@@ -904,7 +937,15 @@ function ExpenseModal({
         <div className="pos-qa-fields">
           <label className="pos-qa-field">
             <span className="pos-qa-field-label">Amount (VND)</span>
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus disabled={saving} inputMode="numeric" />
+            <input
+              className="pos-mono"
+              value={amount}
+              onChange={(e) => onAmountFieldChange(e.target.value, setAmount)}
+              autoFocus
+              disabled={saving}
+              inputMode="numeric"
+              placeholder="0"
+            />
           </label>
           <label className="pos-qa-field">
             <span className="pos-qa-field-label">Category</span>
@@ -1000,7 +1041,15 @@ function DebtPayModal({
           </label>
           <label className="pos-qa-field">
             <span className="pos-qa-field-label">Amount (VND)</span>
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus disabled={saving} inputMode="numeric" />
+            <input
+              className="pos-mono"
+              value={amount}
+              onChange={(e) => onAmountFieldChange(e.target.value, setAmount)}
+              autoFocus
+              disabled={saving}
+              inputMode="numeric"
+              placeholder="0"
+            />
           </label>
           {debt && (
             <p className="pos-qa-for-hint">Monthly required: {formatVnd(debt.monthlyRequiredVnd)}</p>
@@ -1147,8 +1196,28 @@ function SettingsPanel({
       </ul>
       <div className="pos-entity-form-row">
         <label className="pos-qa-field">Name<input value={debtName} onChange={(e) => setDebtName(e.target.value)} disabled={saving || !live} /></label>
-        <label className="pos-qa-field">Outstanding<input value={debtOut} onChange={(e) => setDebtOut(e.target.value)} disabled={saving || !live} inputMode="numeric" /></label>
-        <label className="pos-qa-field">Monthly required<input value={debtDue} onChange={(e) => setDebtDue(e.target.value)} disabled={saving || !live} inputMode="numeric" /></label>
+        <label className="pos-qa-field">
+          Outstanding
+          <input
+            className="pos-mono"
+            value={debtOut}
+            onChange={(e) => onAmountFieldChange(e.target.value, setDebtOut)}
+            disabled={saving || !live}
+            inputMode="numeric"
+            placeholder="0"
+          />
+        </label>
+        <label className="pos-qa-field">
+          Monthly required
+          <input
+            className="pos-mono"
+            value={debtDue}
+            onChange={(e) => onAmountFieldChange(e.target.value, setDebtDue)}
+            disabled={saving || !live}
+            inputMode="numeric"
+            placeholder="0"
+          />
+        </label>
       </div>
       {localError && <p className="pos-qa-error">{localError}</p>}
       <button
@@ -1194,7 +1263,7 @@ function EditTransactionModal({
   setSaving: (v: boolean) => void;
   setError: (v: string | null) => void;
 }) {
-  const [amount, setAmount] = useState(String(tx.amountVnd));
+  const [amount, setAmount] = useState(() => formatAmountInput(tx.amountVnd));
   const [date, setDate] = useState(tx.occurredAt);
   const [note, setNote] = useState(tx.note);
   const [bucket, setBucket] = useState<FinanceBucket>(
@@ -1249,7 +1318,14 @@ function EditTransactionModal({
         <div className="pos-qa-fields">
           <label className="pos-qa-field">
             <span className="pos-qa-field-label">Amount (VND)</span>
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} disabled={saving} inputMode="numeric" />
+            <input
+              className="pos-mono"
+              value={amount}
+              onChange={(e) => onAmountFieldChange(e.target.value, setAmount)}
+              disabled={saving}
+              inputMode="numeric"
+              placeholder="0"
+            />
           </label>
           <label className="pos-qa-field">
             <span className="pos-qa-field-label">
