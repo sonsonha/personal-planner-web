@@ -2949,6 +2949,8 @@ button {
 
 .pos-cal .event-time,
 .pos-cal .event-meta,
+.pos-cal .event-outcome,
+.pos-cal .event-past-note,
 .pos-cal .event-sync-note {
   display: block;
   margin-top: 2px;

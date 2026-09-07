@@ -41,6 +41,10 @@ export type TaskEditorViewProps = {
     endAt: string;
     status?: string | null;
     notes?: string | null;
+    isDailyFocus?: boolean;
+    sessionOutcome?: {
+      progressLabel?: string | null;
+    } | null;
   }>;
   sessionProgressLabel?: string | null;
   completePolicy?: "allow" | "zero" | "multi" | "outcome";
@@ -374,6 +378,17 @@ export function TaskEditorView({
                             –
                             {end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
                           </p>
+                          {session.isDailyFocus ? (
+                            <p className="pos-te-help">★ Daily Focus</p>
+                          ) : null}
+                          {session.sessionOutcome?.progressLabel ? (
+                            <p className="pos-te-help pos-mono">
+                              {done ? "DONE · " : ""}
+                              {session.sessionOutcome.progressLabel}
+                            </p>
+                          ) : done ? (
+                            <p className="pos-te-help">DONE</p>
+                          ) : null}
                           {session.notes?.trim() ? (
                             <p className="pos-te-help">{session.notes.trim()}</p>
                           ) : null}

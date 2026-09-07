@@ -6547,3 +6547,92 @@
 
 .pos-qa-for-hint.warn { color: var(--pos-danger, #b91c1c); }
 
+
+/* Session Outcome editor */
+.pos-session-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pos-session-outcome-modes {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--pos-border);
+  border-radius: 10px;
+  background: var(--pos-surface-alt);
+}
+.pos-session-outcome-mode {
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--pos-ink-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pos-session-outcome-mode.active {
+  background: var(--pos-card);
+  color: var(--pos-ink);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+.pos-session-outcome-progress {
+  margin: 0;
+  color: var(--pos-ink-muted);
+  font-size: 12px;
+}
+.pos-session-outcome-checklist ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.pos-session-outcome-checklist label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12px;
+  color: var(--pos-ink);
+}
+.pos-session-outcome-add {
+  display: flex;
+  gap: 6px;
+}
+.pos-session-outcome-add input,
+.pos-session-outcome-quantity input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--pos-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--pos-card);
+  color: var(--pos-ink);
+  font-size: 12px;
+}
+.pos-session-outcome-quantity {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.pos-session-outcome-quantity label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--pos-ink-muted);
+}
+.pos-session-outcome-quantity label:last-of-type {
+  grid-column: 1 / -1;
+}
+.pos-cal-popover-outcome {
+  display: grid;
+  gap: 6px;
+}
+.pos-cal-popover-outcome-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--pos-ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}

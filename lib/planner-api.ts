@@ -11,6 +11,25 @@ export type ApiPriority =
 
 export type ApiSeriesScope = "THIS_INSTANCE" | "THIS_AND_FUTURE";
 export type ApiTimeBlockStatus = "PLANNED" | "DONE";
+
+export type ApiSessionOutcomeType = "NONE" | "CHECKLIST" | "QUANTITY";
+
+export type ApiSessionOutcomeItem = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+
+export type ApiSessionOutcome = {
+  type: ApiSessionOutcomeType;
+  items: ApiSessionOutcomeItem[];
+  target: number | null;
+  actual: number | null;
+  unit: string | null;
+  completedCount: number;
+  totalCount: number;
+  progressLabel: string | null;
+};
 export type ApiProjectType = "STANDARD" | "HABIT";
 export type ApiProjectContext = "PERSONAL" | "WORK";
 
@@ -211,6 +230,7 @@ export type ApiTimeBlock = {
   status?: ApiTimeBlockStatus;
   completedAt?: string | null;
   isDailyFocus?: boolean;
+  sessionOutcome?: ApiSessionOutcome;
   repeatSeriesId?: string | null;
   revision: number;
 };
@@ -418,6 +438,7 @@ export function updateTimeBlock(
     isDailyFocus: boolean;
     replaceDailyFocus: boolean;
     seriesScope: ApiSeriesScope;
+    sessionOutcome: Partial<ApiSessionOutcome> | null;
   }>,
 ) {
   return requestJson<ApiTimeBlock>(`/api/time-blocks/${encodeURIComponent(id)}`, {

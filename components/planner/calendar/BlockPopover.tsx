@@ -7,6 +7,12 @@ import {
   type ClockFormat,
   formatMinuteRange,
 } from "@/lib/clock-format";
+import { SessionOutcomeEditor } from "../SessionOutcomeEditor";
+import {
+  emptySessionOutcome,
+  sessionOutcomeProgressLabel,
+  type SessionOutcome,
+} from "@/lib/session-outcome";
 
 export type CalendarPopoverBlock = {
   id: string;
@@ -20,6 +26,7 @@ export type CalendarPopoverBlock = {
   notes?: string | null;
   status?: string | null;
   repeatSeriesId?: string | null;
+  sessionOutcome?: SessionOutcome | null;
 };
 
 function formatRange(start: number, duration: number, format: ClockFormat = "24h") {
@@ -50,7 +57,7 @@ function PopoverShell({ left, top, onClose, children, className }: PopoverShellP
   );
 }
 
-export function positionPopover(anchor: DOMRect, width = 260, height = 380) {
+export function positionPopover(anchor: DOMRect, width = 260, height = 420) {
   const left = Math.min(anchor.right + 8, Math.max(12, window.innerWidth - width - 12));
   const top = Math.min(anchor.top, Math.max(12, window.innerHeight - height - 12));
   return { left, top };
@@ -58,13 +65,13 @@ export function positionPopover(anchor: DOMRect, width = 260, height = 380) {
 
 export type PersonalOsBlockPopoverProps = {
   block: CalendarPopoverBlock;
-  /** Session done (block.status), not only task done. */
   sessionDone: boolean;
   anchor: DOMRect;
   clockFormat?: ClockFormat;
   saving?: boolean;
   onClose: () => void;
   onSaveNotes: (notes: string) => void;
+  onSaveOutcome?: (outcome: SessionOutcome) => void;
   onRepeatSession?: (weeks: number) => void;
   onUnschedule: () => void;
   onRetrySync?: () => void;
@@ -78,6 +85,7 @@ export function PersonalOsBlockPopover({
   saving = false,
   onClose,
   onSaveNotes,
+  onSaveOutcome,
   onRepeatSession,
   onUnschedule,
   onRetrySync,
@@ -87,6 +95,8 @@ export function PersonalOsBlockPopover({
   const [notes, setNotes] = useState(block.notes ?? "");
   const [repeatWeeks, setRepeatWeeks] = useState("8");
   const [showRepeat, setShowRepeat] = useState(false);
+  const outcome = block.sessionOutcome ?? emptySessionOutcome();
+  const progress = sessionOutcomeProgressLabel(outcome);
 
   useEffect(() => {
     setNotes(block.notes ?? "");
@@ -99,6 +109,9 @@ export function PersonalOsBlockPopover({
         {block.meta && <p className="pos-cal-popover-sub">{block.meta}</p>}
         <p className="pos-cal-popover-time pos-mono">{formatRange(block.start, block.duration, clockFormat)}</p>
         {sessionDone && <p className="pos-cal-popover-sub">Session done</p>}
+        {progress && (
+          <p className="pos-cal-popover-sub pos-mono">Outcome {progress}</p>
+        )}
         {failed && (
           <div className="pos-cal-popover-sync-fail" role="status">
             <strong>Saved locally · Google sync failed</strong>
@@ -121,6 +134,18 @@ export function PersonalOsBlockPopover({
             }}
           />
         </label>
+
+        {onSaveOutcome && (
+          <div className="pos-cal-popover-outcome">
+            <span className="pos-cal-popover-outcome-label">Outcome tracking</span>
+            <SessionOutcomeEditor
+              value={outcome}
+              disabled={saving}
+              compact
+              onChange={onSaveOutcome}
+            />
+          </div>
+        )}
 
         {failed && onRetrySync && (
           <button type="button" className="pos-cal-popover-action amber" onClick={() => { onRetrySync(); onClose(); }}>

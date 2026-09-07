@@ -76,6 +76,11 @@ import {
   type ApiTimeBlock,
 } from "@/lib/planner-api";
 import { shouldApplyPlannerFetch } from "@/lib/planner-fetch-guard";
+import {
+  emptySessionOutcome,
+  sessionOutcomeProgressLabel,
+  type SessionOutcome,
+} from "@/lib/session-outcome";
 import { SeriesScopeModal } from "@/components/planner/SeriesScopeModal";
 import { DestructiveConfirmModal } from "@/components/planner/DestructiveConfirmModal";
 import { CalendarQuickCreatePopover } from "@/components/planner/CalendarQuickCreatePopover";
@@ -155,6 +160,7 @@ type CalendarBlock = {
   status?: "PLANNED" | "DONE" | string | null;
   completedAt?: string | null;
   isDailyFocus?: boolean;
+  sessionOutcome?: SessionOutcome | null;
   repeatSeriesId?: string | null;
 };
 
@@ -682,6 +688,7 @@ function timeBlockFromApi(
     status: block.status ?? "PLANNED",
     completedAt: block.completedAt ?? null,
     isDailyFocus: Boolean(block.isDailyFocus),
+    sessionOutcome: block.sessionOutcome ?? emptySessionOutcome(),
     repeatSeriesId: block.repeatSeriesId ?? null,
   };
 }
@@ -3280,6 +3287,21 @@ export function PlannerApp({
                 }
               })();
             }}
+            onSaveOutcome={(sessionOutcome) => {
+              void (async () => {
+                setBlocks((current) => current.map((block) =>
+                  block.id === popBlock.id ? { ...block, sessionOutcome } : block,
+                ));
+                if (!liveDataRef.current) return;
+                try {
+                  const saved = await updateTimeBlock(popBlock.id, { sessionOutcome });
+                  const mapped = timeBlockFromApi(saved, weekStart, projects);
+                  setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
+                } catch {
+                  showToast("Could not save session outcome", "warning");
+                }
+              })();
+            }}
             onRepeatSession={popBlock.repeatSeriesId ? undefined : (weeks) => {
               void (async () => {
                 if (!liveDataRef.current) {
@@ -3463,6 +3485,10 @@ function CalendarEvent({
   const isDailyFocus = Boolean(block.isDailyFocus) && !isExternal;
   /** large: badge label; compact/tiny: ★ only beside title */
   const showDailyFocusBadge = isDailyFocus && !isCompact && displayDuration >= 40;
+  const outcomeLabel = !isExternal
+    ? sessionOutcomeProgressLabel(block.sessionOutcome)
+    : null;
+  const showOutcome = Boolean(outcomeLabel) && displayDuration >= 35;
 
   useEffect(() => () => {
     if (clickTimerRef.current != null) window.clearTimeout(clickTimerRef.current);
@@ -3744,6 +3770,9 @@ function CalendarEvent({
           {timeRangeLabel(block.start, displayDuration, clockFormat)}
         </span>
       )}
+      {showOutcome && (
+        <span className="event-outcome pos-mono">{outcomeLabel}</span>
+      )}
       {showMeta && block.meta && <span className="event-meta">{block.meta}</span>}
       {isPast && !sessionDone && !isExternal && displayDuration >= 28 && (
         <span className="event-past-note">Not done</span>
@@ -4007,6 +4036,18 @@ function TaskPanel({
                 <span className="task-project"><i style={{ background: task.color }} />{task.project}</span>
                 <span className="pos-mono">Est. {durationLabel(task.duration)}</span>
               </div>
+              {taskBlocks.some((block) => block.isDailyFocus) && (
+                <div className="task-meta pos-mono">★ Daily Focus</div>
+              )}
+              {taskBlocks.map((block) => {
+                const label = sessionOutcomeProgressLabel(block.sessionOutcome);
+                if (!label) return null;
+                return (
+                  <div key={`${block.id}-outcome`} className="task-meta pos-mono">
+                    {label}
+                  </div>
+                );
+              })}
               {progress.activeCount > 0 && (
                 <div className="task-meta pos-cal-side-progress">
                   <span className="pos-mono">
