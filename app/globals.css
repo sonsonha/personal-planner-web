@@ -2742,6 +2742,124 @@ button {
   outline-offset: 2px;
 }
 
+/* Daily Focus — priority color stays; emphasis via ring / elevation / type. */
+.pos-cal .calendar-event.daily-focus {
+  z-index: 3;
+  border-width: 2px;
+  border-color: color-mix(
+    in srgb,
+    var(--priority-strong, var(--event-color)) 35%,
+    var(--pos-daily-focus-ring, var(--pos-ink))
+  );
+  border-left-width: 4px;
+  border-left-color: var(--priority-strong, var(--event-color));
+  box-shadow:
+    0 0 0 1px var(--pos-daily-focus-ring, rgba(15, 23, 42, 0.28)),
+    0 4px 14px var(--pos-daily-focus-glow, rgba(15, 23, 42, 0.16));
+}
+
+.pos-cal .calendar-event.daily-focus .event-title-row strong {
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+
+.pos-cal .calendar-event.daily-focus .event-daily-focus-badge {
+  display: block;
+  margin: 0 0 2px;
+  overflow: hidden;
+  color: var(--pos-daily-focus-mark, var(--pos-ink));
+  font-size: 10px;
+  font-weight: 750;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pos-cal .calendar-event.daily-focus .event-daily-focus-star {
+  display: inline;
+  margin-right: 3px;
+  color: var(--pos-daily-focus-mark, var(--pos-ink));
+  font-style: normal;
+  font-weight: 800;
+}
+
+[data-theme="dark"] .pos-cal .calendar-event.daily-focus:not(.external) {
+  border-color: color-mix(in srgb, var(--priority-on-fill, #fff) 45%, var(--priority-border, transparent));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #fff 28%, transparent),
+    0 5px 16px var(--pos-daily-focus-glow, rgba(0, 0, 0, 0.35));
+}
+
+[data-theme="dark"] .pos-cal .calendar-event.daily-focus .event-daily-focus-badge,
+[data-theme="dark"] .pos-cal .calendar-event.daily-focus .event-daily-focus-star {
+  color: color-mix(in srgb, var(--priority-on-fill, #fff) 94%, transparent);
+}
+
+.pos-cal .calendar-event.daily-focus:hover {
+  z-index: 5;
+  filter: brightness(1.03);
+  box-shadow:
+    0 0 0 1px var(--pos-daily-focus-ring, rgba(15, 23, 42, 0.32)),
+    0 6px 18px var(--pos-daily-focus-glow, rgba(15, 23, 42, 0.2));
+}
+
+[data-theme="dark"] .pos-cal .calendar-event.daily-focus:not(.external):hover {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #fff 34%, transparent),
+    0 7px 20px var(--pos-daily-focus-glow, rgba(0, 0, 0, 0.4));
+}
+
+/* Selected: outer outline + keep Daily Focus ring (no stacked ugly borders). */
+.pos-cal .calendar-event.daily-focus.selected {
+  outline: 2px solid var(--pos-primary-ring, #a5b4fc);
+  outline-offset: 2px;
+  box-shadow:
+    0 0 0 1px var(--pos-daily-focus-ring, rgba(15, 23, 42, 0.28)),
+    0 6px 16px var(--pos-daily-focus-glow, rgba(15, 23, 42, 0.18));
+}
+
+[data-theme="dark"] .pos-cal .calendar-event.daily-focus:not(.external).selected {
+  outline: 2px solid color-mix(in srgb, var(--priority-on-fill, #fff) 50%, var(--pos-primary-ring));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #fff 30%, transparent),
+    0 6px 16px var(--pos-daily-focus-glow, rgba(0, 0, 0, 0.38));
+}
+
+.pos-cal .calendar-event.daily-focus:focus-visible {
+  outline: 2px solid var(--pos-primary-ring, #c7d2fe);
+  outline-offset: 2px;
+}
+
+/* Completed / past: keep ★ + ring identity while allowing subdued convention. */
+.pos-cal .calendar-event.daily-focus.done {
+  opacity: 0.82;
+  filter: saturate(0.85);
+}
+
+.pos-cal .calendar-event.daily-focus.is-past:not(.external) {
+  opacity: 0.72;
+  filter: saturate(0.8);
+}
+
+.pos-cal .calendar-event.daily-focus.is-past.done:not(.external) {
+  opacity: 0.68;
+}
+
+.pos-cal .calendar-event.daily-focus.tiny,
+.pos-cal .calendar-event.daily-focus.compact {
+  /* Keep ring readable on short blocks without padding inflation. */
+  border-width: 2px;
+  border-left-width: 3px;
+}
+
+.pos-cal .month-event-chip.daily-focus {
+  font-weight: 750;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pos-ink) 22%, transparent);
+}
+
 .pos-cal .calendar-event.external {
   border: 1px dashed color-mix(in srgb, var(--event-color, var(--pos-ink-muted)) 45%, var(--pos-border));
   border-left: 3px solid color-mix(in srgb, var(--event-color, var(--pos-ink-muted)) 70%, transparent);
@@ -3264,6 +3382,11 @@ button {
   background: var(--priority-bg, var(--pos-primary-soft));
   color: var(--pos-ink);
   border-left: 3px solid var(--priority-strong, var(--pos-primary));
+}
+
+.pos-cal-month .month-event-chip.daily-focus {
+  font-weight: 750;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pos-ink) 22%, transparent);
 }
 
 .pos-cal-month .month-event-chip.gcal {

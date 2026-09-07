@@ -4324,6 +4324,17 @@
   min-width: 0;
 }
 
+.pos-task-row[data-daily-focus="true"] .pos-daily-focus-mark,
+.pos-task-row[data-daily-focus="true"] .pos-daily-focus-badge {
+  color: var(--pos-ink);
+  font-weight: 700;
+}
+
+[data-theme="dark"] .pos-task-row[data-daily-focus="true"] .pos-daily-focus-mark,
+[data-theme="dark"] .pos-task-row[data-daily-focus="true"] .pos-daily-focus-badge {
+  color: var(--pos-primary-ring, #a5b4fc);
+}
+
 .pos-daily-focus-mark {
   font-style: normal;
   color: var(--pos-primary);

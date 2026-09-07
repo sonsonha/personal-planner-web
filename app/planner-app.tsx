@@ -3456,6 +3456,9 @@ function CalendarEvent({
   const isCompact = displayDuration <= 35;
   const showTime = displayDuration >= 25;
   const showMeta = displayDuration >= 45;
+  const isDailyFocus = Boolean(block.isDailyFocus) && !isExternal;
+  /** large: badge label; compact/tiny: ★ only beside title */
+  const showDailyFocusBadge = isDailyFocus && !isCompact && displayDuration >= 40;
 
   useEffect(() => () => {
     if (clickTimerRef.current != null) window.clearTimeout(clickTimerRef.current);
@@ -3647,26 +3650,32 @@ function CalendarEvent({
         isFailed ? "sync-failed" : "",
         isPending ? "sync-pending" : "",
         selected ? "selected" : "",
+        isDailyFocus ? "daily-focus" : "",
         isTiny ? "tiny" : isCompact ? "compact" : "",
       ].filter(Boolean).join(" ")}
       data-sync={block.syncStatus?.toLowerCase()}
       data-priority={!isExternal ? (block.priority ?? "p2") : undefined}
+      data-daily-focus={isDailyFocus ? "true" : undefined}
       role="button"
       tabIndex={0}
       aria-label={
         isExternal
           ? `${block.title}, Google Calendar, read-only`
-          : done
-            ? `${block.title}, completed`
-            : isPast
-              ? `${block.title}, past, not completed`
-              : block.title
+          : [
+              isDailyFocus ? "Daily Focus" : null,
+              block.title,
+              done ? "completed" : isPast ? "past, not completed" : null,
+            ].filter(Boolean).join(", ")
       }
       title={
         isExternal
           ? "Google Calendar · read-only"
           : isFailed
             ? "Saved in Personal OS; Google Calendar sync failed"
+            : isDailyFocus
+              ? done
+                ? "★ Daily Focus · completed"
+                : "★ Daily Focus"
             : isPast && !sessionDone
               ? "Past session · not marked done"
               : undefined
@@ -3689,6 +3698,11 @@ function CalendarEvent({
         }
       }}
     >
+      {showDailyFocusBadge && (
+        <span className="event-daily-focus-badge" aria-hidden="true">
+          ★ Daily Focus{done ? " ✓" : ""}
+        </span>
+      )}
       <div className={`event-title-row${isTiny ? " inline" : ""}`}>
         {!isExternal && onToggleSessionDone && (
           <button
@@ -3714,7 +3728,12 @@ function CalendarEvent({
         )}
         {isExternal && <LockKeyhole size={10} aria-hidden="true" />}
         {isFailed && <em className="sync-warning" aria-label="Sync failed">!</em>}
-        <strong>{block.isDailyFocus ? `★ ${block.title}` : block.title}</strong>
+        <strong>
+          {isDailyFocus && !showDailyFocusBadge && (
+            <em className="event-daily-focus-star" title="Daily Focus" aria-hidden="true">★</em>
+          )}
+          {block.title}
+        </strong>
       </div>
       {showTime && (
         <span className="event-time pos-mono">
@@ -3787,11 +3806,12 @@ function MonthCalendar({
                 {labels.map((block) => (
                   <span
                     key={block.id}
-                    className="month-event-chip os"
+                    className={`month-event-chip os${block.isDailyFocus ? " daily-focus" : ""}`}
                     data-priority={block.priority ?? "p2"}
-                    title={block.title}
+                    data-daily-focus={block.isDailyFocus ? "true" : undefined}
+                    title={block.isDailyFocus ? `★ Daily Focus · ${block.title}` : block.title}
                   >
-                    {block.title}
+                    {block.isDailyFocus ? `★ ${block.title}` : block.title}
                   </span>
                 ))}
                 {google.length > 0 && labels.length === 0 && (

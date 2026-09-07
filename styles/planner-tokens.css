@@ -75,6 +75,10 @@
   --pos-cal-header: #ffffff;
   --pos-cal-rail: #64748b;
   --pos-cal-track: #ffffff;
+  /* Daily Focus emphasis (not a priority color — ring/ink only) */
+  --pos-daily-focus-ring: color-mix(in srgb, var(--pos-ink) 42%, transparent);
+  --pos-daily-focus-glow: rgba(15, 23, 42, 0.16);
+  --pos-daily-focus-mark: var(--pos-ink);
   --pos-now-line: #ef4444;
 
   /* Type scale */
@@ -239,6 +243,9 @@
   --pos-cal-header: #1a222d;
   --pos-cal-rail: #8b9bb0;
   --pos-cal-track: #141b24;
+  --pos-daily-focus-ring: color-mix(in srgb, #fff 55%, transparent);
+  --pos-daily-focus-glow: rgba(0, 0, 0, 0.35);
+  --pos-daily-focus-mark: color-mix(in srgb, var(--priority-on-fill, #fff) 92%, transparent);
   --pos-now-line: #f87171;
 
   --priority-p1: #f87171;
