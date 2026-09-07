@@ -5,7 +5,7 @@ import { EmptyState } from "../shared";
 import { cn } from "../utils";
 import { groupTasks } from "@/lib/task-groups";
 import { deriveTaskProgressFromSessions, directTaskCompletePolicy } from "@/lib/session-evidence";
-import { isDailyFocusForDate } from "@/lib/daily-focus";
+import { isSessionDailyFocusOnDate } from "@/lib/daily-focus";
 import { TaskRow } from "./TaskRow";
 import type {
   HorizonScope,
@@ -275,7 +275,8 @@ export function TasksWorkspaceView({
                       ? `${progress.completedCount} / ${progress.activeCount} sessions · ${progress.progressPercent}%`
                       : null;
                     const isFocus = Boolean(
-                      focusDate && isDailyFocusForDate(task, focusDate),
+                      focusDate
+                      && taskBlocks.some((item) => isSessionDailyFocusOnDate(item, focusDate)),
                     );
                     return (
                       <TaskRow

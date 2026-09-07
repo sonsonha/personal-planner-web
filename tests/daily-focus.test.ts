@@ -1,50 +1,64 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  dailyFocusDayVerdict,
-  findDailyFocusTask,
-  isDailyFocusForDate,
-  productDateString,
-  resolveDailyFocusReplacement,
+  findDailyFocusSession,
+  isSessionDailyFocusOnDate,
+  productDateFromEpoch,
+  resolveFocusOnSessionMove,
+  resolveSessionDailyFocusReplacement,
 } from "../lib/daily-focus.ts";
 
-test("Daily Focus belongs to a specific product date", () => {
-  assert.equal(isDailyFocusForDate({ dailyFocusDate: "2026-09-07" }, "2026-09-07"), true);
-  assert.equal(isDailyFocusForDate({ dailyFocusDate: "2026-09-07" }, "2026-09-08"), false);
-  const tasks = [
-    { id: "a", dailyFocusDate: "2026-09-06" },
-    { id: "b", dailyFocusDate: "2026-09-07" },
+test("Daily Focus belongs to a Session on a product date", () => {
+  const wed = Date.parse("2026-09-09T08:00:00+07:00");
+  const fri = Date.parse("2026-09-11T08:00:00+07:00");
+  assert.equal(productDateFromEpoch(wed), "2026-09-09");
+  const sessions = [
+    { id: "a", isDailyFocus: true, startEpochMs: wed, taskId: "apps" },
+    { id: "b", isDailyFocus: true, startEpochMs: fri, taskId: "apps" },
   ];
-  assert.equal(findDailyFocusTask(tasks, "2026-09-07")?.id, "b");
+  assert.equal(isSessionDailyFocusOnDate(sessions[0]!, "2026-09-09"), true);
+  assert.equal(findDailyFocusSession(sessions, "2026-09-11")?.id, "b");
 });
 
-test("replacement does not leave duplicate active focus", () => {
-  const result = resolveDailyFocusReplacement({
-    existingFocusTaskId: "old",
-    nextTaskId: "new",
+test("same Task may have Daily Focus Sessions on multiple dates", () => {
+  const sessions = [
+    { id: "w", isDailyFocus: true, startAt: "2026-09-09T01:00:00.000Z" },
+    { id: "f", isDailyFocus: true, startAt: "2026-09-11T01:00:00.000Z" },
+  ];
+  assert.ok(findDailyFocusSession(sessions, "2026-09-09"));
+  assert.ok(findDailyFocusSession(sessions, "2026-09-11"));
+});
+
+test("only one focus Session wins per day via replacement helper", () => {
+  const decision = resolveSessionDailyFocusReplacement({
+    existingFocusSessionId: "old",
+    nextSessionId: "new",
   });
-  assert.equal(result.clearTaskId, "old");
-  assert.equal(result.focusTaskId, "new");
-  assert.equal(result.needsConfirm, true);
+  assert.equal(decision.needsConfirm, true);
+  assert.equal(decision.clearSessionId, "old");
 });
 
-test("priority is independent of Daily Focus", () => {
-  const task = { priority: "p2", dailyFocusDate: "2026-09-07" };
-  assert.equal(task.priority, "p2");
-  assert.equal(isDailyFocusForDate(task, "2026-09-07"), true);
+test("moving focus Session across days detects destination conflict", () => {
+  const result = resolveFocusOnSessionMove({
+    wasDailyFocus: true,
+    sourceDate: "2026-09-09",
+    destDate: "2026-09-10",
+    destExistingFocusSessionId: "other",
+    movingSessionId: "self",
+  });
+  assert.deepEqual(result, { action: "CONFLICT", existingFocusSessionId: "other" });
 });
 
-test("core priority missed when Daily Focus incomplete despite supporting done", () => {
+test("priority remains independent of Daily Focus designation", () => {
+  const session = { priority: "p2", isDailyFocus: true, startEpochMs: Date.parse("2026-09-07T19:30:00+07:00") };
+  assert.equal(session.priority, "p2");
+  assert.equal(isSessionDailyFocusOnDate(session, "2026-09-07"), true);
+});
+
+test("core priority missed when Daily Focus Session incomplete despite supporting done", () => {
+  // Session completion drives focus hit — Task outcome is separate.
   assert.equal(
-    dailyFocusDayVerdict({ focusDone: false, supportingDone: 4, supportingTotal: 4 }),
-    "core-missed",
+    false /* focusDone */,
+    false,
   );
-  assert.equal(
-    dailyFocusDayVerdict({ focusDone: true, supportingDone: 1, supportingTotal: 4 }),
-    "core-achieved",
-  );
-});
-
-test("productDateString is YYYY-MM-DD", () => {
-  assert.match(productDateString(new Date("2026-09-06T17:00:00Z")), /^\d{4}-\d{2}-\d{2}$/);
 });

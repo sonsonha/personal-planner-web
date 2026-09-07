@@ -210,6 +210,7 @@ export type ApiTimeBlock = {
   notes?: string | null;
   status?: ApiTimeBlockStatus;
   completedAt?: string | null;
+  isDailyFocus?: boolean;
   repeatSeriesId?: string | null;
   revision: number;
 };
@@ -392,6 +393,8 @@ export function createTimeBlock(input: {
   color?: string;
   notes?: string | null;
   status?: ApiTimeBlockStatus;
+  isDailyFocus?: boolean;
+  replaceDailyFocus?: boolean;
   seriesScope?: ApiSeriesScope;
 }) {
   return requestJson<ApiTimeBlock>("/api/time-blocks", {
@@ -412,6 +415,8 @@ export function updateTimeBlock(
     reminderMinutes: number | null;
     notes: string | null;
     status: ApiTimeBlockStatus;
+    isDailyFocus: boolean;
+    replaceDailyFocus: boolean;
     seriesScope: ApiSeriesScope;
   }>,
 ) {

@@ -32,6 +32,7 @@ export type TasksViewBlock = {
   syncStatus?: "PENDING" | "SYNCED" | "FAILED";
   status?: string | null;
   notes?: string | null;
+  isDailyFocus?: boolean;
   repeatSeriesId?: string | null;
 };
 

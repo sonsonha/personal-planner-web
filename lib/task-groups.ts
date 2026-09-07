@@ -4,7 +4,7 @@ import type {
   TasksViewBlock,
   TasksViewTask,
 } from "../components/planner/tasks/types.ts";
-import { isDailyFocusForDate } from "./daily-focus.ts";
+import { findDailyFocusSession, isSessionDailyFocusOnDate } from "./daily-focus.ts";
 
 export type TaskGroup = {
   id: string;
@@ -32,6 +32,8 @@ export function groupTasks(
   };
 
   const focusDate = opts?.emphasizeDailyFocus ? opts.focusDate ?? null : null;
+  const focusSession = focusDate ? findDailyFocusSession(blocks, focusDate) : null;
+  const focusTaskId = focusSession?.taskId ?? null;
 
   for (const task of tasks) {
     if (task.status === "done") {
@@ -45,9 +47,16 @@ export function groupTasks(
 
     const taskHorizon = getHorizon(task);
     const block = blockForTask(task.id, blocks);
+    const hasFocusSessionToday = Boolean(
+      focusDate
+      && blocks.some(
+        (candidate) =>
+          candidate.taskId === task.id && isSessionDailyFocusOnDate(candidate, focusDate),
+      ),
+    );
 
     if (horizon === "day") {
-      if (focusDate && isDailyFocusForDate(task, focusDate)) {
+      if (focusDate && (task.id === focusTaskId || hasFocusSessionToday)) {
         ensure("daily-focus").push(task);
       } else if (taskHorizon === "day") {
         ensure(focusDate ? "supporting" : "day-due").push(task);
@@ -135,7 +144,7 @@ export function groupTasks(
       tasks: buckets[meta.id] ?? [],
     }))
     .filter((group) => {
-      if (group.id === "daily-focus") return true; // keep empty Daily Focus so UI can offer Choose
+      if (group.id === "daily-focus") return true;
       return group.tasks.length > 0;
     });
 }

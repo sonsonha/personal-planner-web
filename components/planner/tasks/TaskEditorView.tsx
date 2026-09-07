@@ -519,7 +519,7 @@ export function TaskEditorView({
                   </button>
                 )}
                 <p className="pos-te-help">
-                  Separate from priority. At most one Daily Focus per day.
+                  Separate from priority. Daily Focus is Session-scoped — sets today&apos;s Session when unambiguous.
                 </p>
               </div>
               <label>
