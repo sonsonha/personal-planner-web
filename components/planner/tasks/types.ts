@@ -20,6 +20,8 @@ export type TasksViewTask = {
   dueHorizon?: TaskHorizon;
   goalId?: string | null;
   goalProcessId?: string | null;
+  repeatSeriesId?: string | null;
+  projectType?: "STANDARD" | "HABIT" | null;
 };
 
 export type TasksViewBlock = {
@@ -42,6 +44,7 @@ export type TasksProjectOption = {
   color: string;
   goalId?: string | null;
   defaultGoalProcessId?: string | null;
+  projectType?: "STANDARD" | "HABIT" | null;
 };
 
 export type TasksGoalOption = {

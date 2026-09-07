@@ -4313,9 +4313,44 @@
   font-weight: 600;
 }
 
+.pos-task-group-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .pos-task-group-head .pos-mono {
   color: #9ca3af;
   font-size: 11px;
+}
+
+.pos-task-group-core .pos-task-group-head {
+  color: var(--pos-ink);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pos-task-group-routines .pos-task-group-head {
+  color: #9ca3af;
+  font-weight: 550;
+}
+
+.pos-task-routines-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--pos-ink-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.pos-task-routines-toggle:hover {
+  color: var(--pos-ink);
+  background: var(--pos-surface-alt);
 }
 
 .pos-task-group-list {
@@ -4324,8 +4359,72 @@
   gap: 6px;
 }
 
-.pos-task-row.daily-focus {
+.pos-task-row.daily-focus,
+.pos-task-row.core-work {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--pos-primary) 35%, transparent);
+}
+
+.pos-task-row.core-work {
+  border-left-width: 5px;
+  border-left-color: var(--pos-ink);
+  background: color-mix(in srgb, var(--pos-primary-soft, #eef2ff) 55%, var(--pos-card));
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.pos-task-row.core-work .pos-task-title {
+  font-size: 15.5px;
+  font-weight: 700;
+}
+
+.pos-task-row.routine-row {
+  padding-top: 7px;
+  padding-bottom: 7px;
+  border-left-color: #d1d5db;
+  background: color-mix(in srgb, var(--pos-surface-alt) 40%, var(--pos-card));
+  opacity: 0.92;
+}
+
+.pos-task-row.routine-row .pos-task-title {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--pos-ink-secondary, #4b5563);
+}
+
+.pos-task-row.quiet-priority {
+  border-left-color: color-mix(in srgb, var(--pos-task-priority-color, #9ca3af) 35%, var(--pos-border));
+  background: var(--pos-card);
+}
+
+.pos-task-row.quiet-priority.core-work {
+  border-left-color: var(--pos-ink);
+  background: color-mix(in srgb, var(--pos-primary-soft, #eef2ff) 55%, var(--pos-card));
+}
+
+.pos-task-check-spacer {
+  width: 28px;
+  height: 28px;
+}
+
+.pos-task-priority.quiet {
+  padding: 2px 6px;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.pos-task-priority.quiet i {
+  width: 6px;
+  height: 6px;
+  opacity: 0.55;
+}
+
+.pos-core-focus-dates {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--pos-ink-muted);
+  font-size: 11px;
 }
 
 .pos-task-title-line {

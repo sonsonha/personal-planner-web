@@ -53,12 +53,15 @@ test("Tasks Week lists one card for one WEEK Task with five TimeBlocks", () => {
     duration: 60,
     startAt: `2026-09-0${day + 1}T12:00:00.000Z`,
   }));
+  const weekStartMs = Date.parse("2026-09-01T00:00:00.000Z");
+  const weekEndMs = Date.parse("2026-09-08T00:00:00.000Z");
   const groups = groupTasks(
     "week",
     [task],
     blocks,
     () => "week",
     () => false,
+    { weekStartMs, weekEndMs },
   );
   const listed = groups.flatMap((group) => group.tasks);
   assert.equal(listed.length, 1, "Week view must show one Task card, not five session rows");

@@ -93,6 +93,12 @@ import {
 } from "@/lib/session-evidence";
 import { startOfProductWeek } from "@/lib/product-week";
 import {
+  buildWeekTaskHierarchy,
+  formatWeekHeaderCounts,
+  formatWeekRangeCaption,
+  isRoutineTask,
+} from "@/lib/week-task-hierarchy";
+import {
   findDailyFocusSession,
   findDailyFocusTask,
   productDateString,
@@ -136,6 +142,7 @@ type PlannerTask = {
   completedAt?: string | null;
   updatedAt?: string | null;
   repeatSeriesId?: string | null;
+  projectType?: "STANDARD" | "HABIT" | null;
   carryOverFromTaskId?: string | null;
   carryOverNote?: string | null;
 };
@@ -177,6 +184,7 @@ type ProjectOption = {
   color: string;
   goalId?: string | null;
   defaultGoalProcessId?: string | null;
+  projectType?: "STANDARD" | "HABIT" | null;
 };
 type ConnectionState = "loading" | "syncing" | "live" | "demo" | "error";
 type GoogleConnectionState =
@@ -631,8 +639,9 @@ function projectOptions(projects: ApiProject[]): ProjectOption[] {
         color: project.color,
         goalId: project.goalId,
         defaultGoalProcessId: project.defaultGoalProcessId ?? null,
+        projectType: project.projectType ?? "STANDARD",
       })),
-    { id: null, title: "Inbox", color: COLORS.violet },
+    { id: null, title: "Inbox", color: COLORS.violet, projectType: "STANDARD" },
   ];
 }
 
@@ -658,6 +667,7 @@ function taskFromApi(task: ApiTask, projects: ProjectOption[]): PlannerTask {
     completedAt: task.completedAt ?? null,
     updatedAt: task.updatedAt ?? null,
     repeatSeriesId: task.repeatSeriesId ?? null,
+    projectType: project.projectType ?? "STANDARD",
     carryOverFromTaskId: task.carryOverFromTaskId ?? null,
     carryOverNote: task.carryOverNote ?? null,
   };
@@ -1503,6 +1513,35 @@ export function PlannerApp({
         )?.start ?? Number.MAX_SAFE_INTEGER;
       return startOf(left.id) - startOf(right.id);
     });
+
+  const tasksWeekWindow = useMemo(() => {
+    const start = startOfWeek(taskAnchor);
+    return { start, startMs: start.getTime(), endMs: addDays(start, 7).getTime() };
+  }, [taskAnchor]);
+
+  const tasksWeekHeaderCounts = useMemo(() => {
+    if (activeSection !== "tasks" || taskHorizon !== "week") return null;
+    const scoped = tasks.filter((task) =>
+      taskBelongsToHorizon(task, "week", taskAnchor, blocks, weekStart, now),
+    );
+    const todayStart = startOfDay(now);
+    const hierarchy = buildWeekTaskHierarchy({
+      tasks: scoped,
+      sessions: blocks.filter((block) => block.type === "task"),
+      weekStartMs: tasksWeekWindow.startMs,
+      weekEndMs: tasksWeekWindow.endMs,
+      isOverdue: (task) => Boolean(
+        task.dueAt
+        && taskDueHorizon(task as PlannerTask) === "day"
+        && new Date(task.dueAt).getTime() < todayStart.getTime()
+        && task.status !== "done"
+        && task.status !== "DONE",
+      ),
+      showCompleted: false,
+    });
+    return hierarchy.counts;
+  }, [activeSection, taskHorizon, tasks, blocks, taskAnchor, weekStart, now, tasksWeekWindow]);
+
   const doneTaskIds = new Set(tasks.filter((task) => task.status === "done").map((task) => task.id));
 
   const plannedMinutes = blocks
@@ -2476,7 +2515,16 @@ export function PlannerApp({
                 <span>{(view === "month" ? monthAnchor : weekStart).getFullYear()}</span>
               </h1>
             ) : activeSection === "tasks" ? (
-              <h1>Tasks <span>{tasks.filter((task) => task.status !== "done").length} active</span></h1>
+              <h1>
+                Tasks{" "}
+                <span>
+                  {taskHorizon === "week" && tasksWeekHeaderCounts
+                    ? formatWeekHeaderCounts(tasksWeekHeaderCounts)
+                    : taskHorizon === "all"
+                      ? `${tasks.filter((task) => task.status !== "done").length} active`
+                      : horizonCaption(taskHorizon, taskAnchor)}
+                </span>
+              </h1>
             ) : activeSection === "projects" ? (
               <h1>Projects <span>{apiProjects.filter((project) => project.active).length} active</span></h1>
             ) : activeSection === "goals" ? (
@@ -4320,7 +4368,10 @@ function TasksWorkspace({
   const scoped = tasks.filter((task) => taskBelongsToHorizon(task, horizon, anchor, blocks, weekStart, now));
   const visible = scoped
     .filter((task) => {
-      if (!showCompleted && task.status === "done") return false;
+      // Week hierarchy still needs completed routine instances for 0/7 → 1/7 progress.
+      if (!showCompleted && task.status === "done") {
+        if (!(horizon === "week" && isRoutineTask(task))) return false;
+      }
       if (projectFilterId !== "all") {
         if (projectFilterId === "inbox") {
           if (task.projectId !== null) return false;
@@ -4339,6 +4390,10 @@ function TasksWorkspace({
       return (left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER)
         - (right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER);
     });
+
+  const weekWindow = horizon === "week"
+    ? { startMs: startOfWeek(anchor).getTime(), endMs: addDays(startOfWeek(anchor), 7).getTime() }
+    : null;
 
   const scheduleCopy = (task: PlannerTask, block?: CalendarBlock) => {
     if (task.status === "done") {
@@ -4418,12 +4473,12 @@ function TasksWorkspace({
           horizon === "all"
             ? "All tasks"
             : horizon === "week"
-              ? anchor.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+              ? formatWeekRangeCaption(startOfWeek(anchor))
               : horizonCaption(horizon, anchor)
         }
         onHorizonChange={onHorizonChange}
         tasks={visible}
-        blocks={blocks}
+        blocks={blocks.filter((block) => block.type === "task")}
         projects={projects}
         showCompleted={showCompleted}
         onShowCompleted={setShowCompleted}
@@ -4434,6 +4489,8 @@ function TasksWorkspace({
         onProjectFilter={setProjectFilterId}
         selectedTaskId={selectedTaskId}
         focusDate={focusDate}
+        weekStartMs={weekWindow?.startMs}
+        weekEndMs={weekWindow?.endMs}
         onChooseDailyFocus={focusDate ? () => setChooseFocusOpen(true) : undefined}
         onAdd={onQuickAdd}
         onOpenTask={onOpenTask}

@@ -5,15 +5,57 @@ import type {
   TasksViewTask,
 } from "../components/planner/tasks/types.ts";
 import { findDailyFocusSession, isSessionDailyFocusOnDate } from "./daily-focus.ts";
+import {
+  buildWeekTaskHierarchy,
+  type WeekHierarchyRow,
+  type WeekHierarchySection,
+  type WeekTaskMeta,
+} from "./week-task-hierarchy.ts";
 
 export type TaskGroup = {
   id: string;
   label: string;
   tasks: TasksViewTask[];
+  /** Week hierarchy rows (task or collapsed routine). */
+  rows?: WeekHierarchyRow[];
+  weekMetaByTaskId?: Record<string, WeekTaskMeta>;
+  completedSessions?: number;
+  plannedSessions?: number;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
 };
 
 function blockForTask(taskId: string, blocks: TasksViewBlock[]) {
   return blocks.find((block) => block.taskId === taskId);
+}
+
+function tasksById(tasks: TasksViewTask[]) {
+  return new Map(tasks.map((task) => [task.id, task]));
+}
+
+function flattenWeekSection(
+  section: WeekHierarchySection,
+  byId: Map<string, TasksViewTask>,
+): TasksViewTask[] {
+  const out: TasksViewTask[] = [];
+  for (const row of section.rows) {
+    if (row.kind === "task") {
+      const task = byId.get(row.taskId);
+      if (task) out.push(task);
+      continue;
+    }
+    const representative = byId.get(row.routine.representativeTaskId);
+    if (representative) out.push(representative);
+  }
+  return out;
+}
+
+function weekMetaMap(section: WeekHierarchySection): Record<string, WeekTaskMeta> {
+  const map: Record<string, WeekTaskMeta> = {};
+  for (const row of section.rows) {
+    if (row.kind === "task") map[row.taskId] = row.meta;
+  }
+  return map;
 }
 
 /** Group Tasks for Day/Week/Month lists — one row per Task, never per TimeBlock. */
@@ -23,8 +65,37 @@ export function groupTasks(
   blocks: TasksViewBlock[],
   getHorizon: (task: TasksViewTask) => TaskHorizon,
   isOverdue: (task: TasksViewTask) => boolean,
-  opts?: { focusDate?: string | null; emphasizeDailyFocus?: boolean },
+  opts?: {
+    focusDate?: string | null;
+    emphasizeDailyFocus?: boolean;
+    weekStartMs?: number;
+    weekEndMs?: number;
+    showCompleted?: boolean;
+  },
 ): TaskGroup[] {
+  if (horizon === "week" && opts?.weekStartMs != null && opts.weekEndMs != null) {
+    const hierarchy = buildWeekTaskHierarchy({
+      tasks,
+      sessions: blocks,
+      weekStartMs: opts.weekStartMs,
+      weekEndMs: opts.weekEndMs,
+      isOverdue,
+      showCompleted: opts.showCompleted ?? true,
+    });
+    const byId = tasksById(tasks);
+    return hierarchy.sections.map((section) => ({
+      id: section.id,
+      label: section.label,
+      tasks: flattenWeekSection(section, byId),
+      rows: section.rows,
+      weekMetaByTaskId: weekMetaMap(section),
+      completedSessions: section.completedSessions,
+      plannedSessions: section.plannedSessions,
+      collapsible: section.collapsible,
+      defaultCollapsed: section.defaultCollapsed,
+    }));
+  }
+
   const buckets: Record<string, TasksViewTask[]> = {};
   const ensure = (id: string) => {
     if (!buckets[id]) buckets[id] = [];
@@ -69,6 +140,7 @@ export function groupTasks(
     }
 
     if (horizon === "week") {
+      // Fallback without week window — legacy flat scheduled/open buckets.
       if (block) {
         ensure("scheduled").push(task);
       } else if (task.status === "inbox" && taskHorizon === "week") {
@@ -148,3 +220,5 @@ export function groupTasks(
       return group.tasks.length > 0;
     });
 }
+
+export type { WeekHierarchyRow, WeekTaskMeta };
