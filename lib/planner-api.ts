@@ -20,6 +20,8 @@ export type ApiTask = {
   notes: string;
   definitionOfDone?: string | null;
   dailyFocusDate?: string | null;
+  outcomeAchieved?: boolean;
+  outcomeAchievedAt?: string | null;
   projectId: string | null;
   goalId?: string | null;
   goalProcessId?: string | null;
@@ -327,6 +329,7 @@ export function updateTask(id: string, input: Partial<{
   notes: string;
   definitionOfDone: string | null;
   dailyFocusDate: string | null;
+  outcomeAchieved: boolean;
   projectId: string | null;
   goalId: string | null;
   goalProcessId: string | null;

@@ -4484,10 +4484,13 @@ function TaskEditor({
   );
   const completePolicyRaw = directTaskCompletePolicy(
     taskBlocks.map((block) => ({ id: block.id, status: block.status ?? "PLANNED" })),
+    { definitionOfDone: definitionOfDone || task.definitionOfDone },
   );
   const completePolicy = completePolicyRaw.allow
     ? "allow" as const
-    : completePolicyRaw.reason === "ZERO_SESSIONS"
+    : completePolicyRaw.reason === "REQUIRES_OUTCOME"
+      ? "outcome" as const
+      : completePolicyRaw.reason === "ZERO_SESSIONS"
       ? "zero" as const
       : "multi" as const;
   const selectedProject = projects.find((project) => project.id === projectId);
@@ -4794,6 +4797,18 @@ function TaskEditor({
       saving={saving}
       error={error}
       onComplete={completePolicy === "allow" ? onComplete : undefined}
+      onConfirmOutcome={completePolicy === "outcome" ? async () => {
+        if (!live) {
+          onChanged("Definition of Done confirmed · demo mode");
+          return;
+        }
+        try {
+          await updateTask(task.id, { outcomeAchieved: true });
+          onChanged("Definition of Done achieved");
+        } catch {
+          setError("Could not confirm Definition of Done.");
+        }
+      } : undefined}
       onRestore={onRestore}
       onUnschedule={scheduledBlock ? unscheduleTask : undefined}
       onDelete={() => setConfirmDeleteOpen(true)}

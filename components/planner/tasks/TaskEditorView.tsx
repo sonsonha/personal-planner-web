@@ -43,7 +43,7 @@ export type TaskEditorViewProps = {
     notes?: string | null;
   }>;
   sessionProgressLabel?: string | null;
-  completePolicy?: "allow" | "zero" | "multi";
+  completePolicy?: "allow" | "zero" | "multi" | "outcome";
   showRepeatTask?: boolean;
   repeatWeeks?: string;
   onRepeatWeeksChange?: (value: string) => void;
@@ -83,6 +83,7 @@ export type TaskEditorViewProps = {
   saving?: boolean;
   error?: string | null;
   onComplete?: () => void;
+  onConfirmOutcome?: () => void;
   onRestore?: () => void;
   onUnschedule?: () => void;
   onDelete: () => void;
@@ -145,6 +146,7 @@ export function TaskEditorView({
   saving = false,
   error,
   onComplete,
+  onConfirmOutcome,
   onRestore,
   onUnschedule,
   onDelete,
@@ -156,6 +158,7 @@ export function TaskEditorView({
   const processes = (selectedGoal?.processes ?? []).filter((process) => process.active);
   const statusLabel = status === "done" ? "Completed" : scheduled ? "Scheduled" : "Unscheduled";
   const canMarkComplete = status !== "done" && completePolicy === "allow" && Boolean(onComplete);
+  const canConfirmOutcome = status !== "done" && completePolicy === "outcome" && Boolean(onConfirmOutcome);
   const isFocusToday = dailyFocusDate === focusPlanningDate;
 
   return (
@@ -192,10 +195,21 @@ export function TaskEditorView({
               >
                 Mark complete
               </button>
+            ) : canConfirmOutcome ? (
+              <button
+                type="button"
+                className="pos-te-status-pill complete"
+                onClick={onConfirmOutcome}
+                disabled={saving}
+              >
+                Definition of Done achieved
+              </button>
             ) : completePolicy === "zero" ? (
               <span className="pos-te-schedule-chip unscheduled">Schedule a session to complete</span>
             ) : completePolicy === "multi" ? (
               <span className="pos-te-schedule-chip scheduled">Mark sessions done on Calendar</span>
+            ) : completePolicy === "outcome" ? (
+              <span className="pos-te-schedule-chip scheduled">Confirm Definition of Done when ready</span>
             ) : null}
             <span className={cn("pos-te-schedule-chip", scheduled ? "scheduled" : "unscheduled")}>
               {statusLabel}

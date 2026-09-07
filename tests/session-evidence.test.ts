@@ -8,6 +8,7 @@ import {
   formatSessionProgressLabel,
   futureWeekOffsets,
   resolveRepeatWeekCount,
+  resolveTaskStatusFromEvidence,
   shiftEpochByWeeks,
 } from "../lib/session-evidence.ts";
 
@@ -59,6 +60,47 @@ test("gates direct Task complete: zero / one / many sessions", () => {
       { id: "2", status: "PLANNED" },
     ]).allow,
     false,
+  );
+});
+
+test("Definition of Done: all Sessions done does not force Task outcome DONE", () => {
+  const sessions = deriveTaskProgressFromSessions([
+    { id: "1", status: "DONE" },
+    { id: "2", status: "DONE" },
+  ]);
+  assert.equal(sessions.derivedTaskStatus, "DONE");
+  assert.equal(
+    resolveTaskStatusFromEvidence({
+      definitionOfDone: "- shipped",
+      outcomeAchieved: false,
+      sessionDerived: sessions.derivedTaskStatus,
+    }),
+    "SCHEDULED",
+  );
+  assert.equal(
+    resolveTaskStatusFromEvidence({
+      definitionOfDone: "- shipped",
+      outcomeAchieved: true,
+      sessionDerived: "SCHEDULED",
+    }),
+    "DONE",
+  );
+  assert.deepEqual(
+    directTaskCompletePolicy([{ id: "1", status: "PLANNED" }], {
+      definitionOfDone: "- criteria",
+    }),
+    { allow: false, reason: "REQUIRES_OUTCOME" },
+  );
+});
+
+test("routines without DoD still complete from Sessions", () => {
+  assert.equal(
+    resolveTaskStatusFromEvidence({
+      definitionOfDone: null,
+      outcomeAchieved: false,
+      sessionDerived: "DONE",
+    }),
+    "DONE",
   );
 });
 

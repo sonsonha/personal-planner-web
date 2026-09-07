@@ -263,6 +263,7 @@ export function TasksWorkspaceView({
                         id: item.id,
                         status: item.status ?? "PLANNED",
                       })),
+                      { definitionOfDone: task.definitionOfDone },
                     );
                     const progress = deriveTaskProgressFromSessions(
                       taskBlocks.map((item) => ({

@@ -13,9 +13,7 @@ export type TaskProgressFromSessions = {
   activeCount: number;
   completedCount: number;
   progressPercent: number;
-  /** UI hint; persisted Task status is only DONE when all sessions complete. */
   progressState: "UNSCHEDULED" | "NOT_STARTED" | "PARTIAL" | "DONE";
-  /** Derived DB status for the Task. */
   derivedTaskStatus: "INBOX" | "SCHEDULED" | "DONE";
 };
 
@@ -26,6 +24,23 @@ export function isSessionDone(status: string | null | undefined) {
 
 export function activeSessions(blocks: SessionEvidenceBlock[]) {
   return blocks.filter((block) => !block.deletedAt);
+}
+
+export function taskRequiresOutcomeConfirm(definitionOfDone: string | null | undefined) {
+  return Boolean(definitionOfDone?.trim());
+}
+
+export function resolveTaskStatusFromEvidence(input: {
+  definitionOfDone?: string | null;
+  outcomeAchieved?: boolean;
+  sessionDerived: TaskProgressFromSessions["derivedTaskStatus"];
+}): "INBOX" | "SCHEDULED" | "DONE" {
+  if (input.outcomeAchieved) return "DONE";
+  if (taskRequiresOutcomeConfirm(input.definitionOfDone)) {
+    if (input.sessionDerived === "DONE") return "SCHEDULED";
+    return input.sessionDerived;
+  }
+  return input.sessionDerived;
 }
 
 export function deriveTaskProgressFromSessions(
@@ -71,18 +86,17 @@ export function deriveTaskProgressFromSessions(
   };
 }
 
-/**
- * Direct Mark Task Done is only allowed for exactly one active Session
- * (implementation must still mark that Session DONE first).
- * Zero or many Sessions: reject direct Task completion.
- */
 export type DirectTaskCompletePolicy =
   | { allow: true; mode: "SINGLE_SESSION" }
-  | { allow: false; reason: "ZERO_SESSIONS" | "MULTI_SESSION" };
+  | { allow: false; reason: "ZERO_SESSIONS" | "MULTI_SESSION" | "REQUIRES_OUTCOME" };
 
 export function directTaskCompletePolicy(
   blocks: SessionEvidenceBlock[],
+  opts?: { definitionOfDone?: string | null },
 ): DirectTaskCompletePolicy {
+  if (taskRequiresOutcomeConfirm(opts?.definitionOfDone)) {
+    return { allow: false, reason: "REQUIRES_OUTCOME" };
+  }
   const count = activeSessions(blocks).length;
   if (count === 0) return { allow: false, reason: "ZERO_SESSIONS" };
   if (count === 1) return { allow: true, mode: "SINGLE_SESSION" };
@@ -90,6 +104,7 @@ export function directTaskCompletePolicy(
 }
 
 export const MAX_REPEAT_WEEKS = 52;
+export const MAINTAIN_REPEAT_HORIZON_DAYS = 92;
 
 export function resolveRepeatWeekCount(input: {
   weeks?: number | null;
@@ -108,7 +123,22 @@ export function resolveRepeatWeekCount(input: {
   return 8;
 }
 
-/** Offsets in weeks from the source instance (1 = next week). Includes the range length. */
+export function resolveMaintainRepeatUntilEpochMs(input: {
+  nowEpochMs: number;
+  goalTargetDateEpochMs?: number | null;
+}): number {
+  const threeMonths = input.nowEpochMs + MAINTAIN_REPEAT_HORIZON_DAYS * 86_400_000;
+  if (
+    input.goalTargetDateEpochMs != null
+    && Number.isFinite(input.goalTargetDateEpochMs)
+    && input.goalTargetDateEpochMs > input.nowEpochMs
+    && input.goalTargetDateEpochMs < threeMonths
+  ) {
+    return input.goalTargetDateEpochMs;
+  }
+  return threeMonths;
+}
+
 export function futureWeekOffsets(weekCount: number): number[] {
   const n = Math.max(1, Math.min(MAX_REPEAT_WEEKS, weekCount));
   return Array.from({ length: n }, (_, index) => index + 1);
