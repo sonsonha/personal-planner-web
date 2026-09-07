@@ -1652,7 +1652,7 @@ button {
   grid-template-rows: minmax(0, 1fr);
 }
 
-.tasks-workspace {
+  .tasks-workspace {
   /* Batch 3: visual chrome lives on .pos-task (planner-ui.css). */
   display: flex;
   flex-direction: column;

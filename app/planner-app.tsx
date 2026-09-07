@@ -75,6 +75,7 @@ import {
   type ApiTask,
   type ApiTimeBlock,
 } from "@/lib/planner-api";
+import { shouldApplyPlannerFetch } from "@/lib/planner-fetch-guard";
 import { SeriesScopeModal } from "@/components/planner/SeriesScopeModal";
 import { DestructiveConfirmModal } from "@/components/planner/DestructiveConfirmModal";
 import { CalendarQuickCreatePopover } from "@/components/planner/CalendarQuickCreatePopover";
@@ -1028,6 +1029,7 @@ export function PlannerApp({
   const tasksSearchRef = useRef<HTMLInputElement>(null);
   const savedScrollRef = useRef(0);
   const liveDataRef = useRef(false);
+  const plannerFetchSeqRef = useRef(0);
   const calendarSyncInFlightRef = useRef<Promise<void> | null>(null);
   const lastCalendarSyncAttemptRef = useRef(0);
   const calendarSyncBackoffUntilRef = useRef(0);
@@ -1085,6 +1087,16 @@ export function PlannerApp({
         setGoogleConnection("connected");
         setCalendarUiOverride("SYNCED");
         setPostConnectBanner(null);
+        // Do not reload planner after a pull that removed owned Sessions — that
+        // was the flash→empty path when Cos list missed event ids.
+        if ((summary.ownedRemoved ?? 0) > 0) {
+          if (options.announce) {
+            setToast(
+              `Calendar sync skipped reload · ${summary.ownedRemoved} Personal OS block${summary.ownedRemoved === 1 ? "" : "s"} would have been cleared`,
+            );
+          }
+          return;
+        }
         setReloadKey((value) => value + 1);
         if (options.announce) setToast(calendarSyncMessage(summary));
       })
@@ -1129,6 +1141,7 @@ export function PlannerApp({
 
   useEffect(() => {
     const controller = new AbortController();
+    const requestSeq = ++plannerFetchSeqRef.current;
     // Union range covers calendar + tasks + goals/progress so switching
     // sections does not wait on another planner fetch.
     const taskRangeStart = taskHorizon === "month"
@@ -1168,6 +1181,13 @@ export function PlannerApp({
 
     fetchPlanner(rangeStart.toISOString(), rangeEnd.toISOString(), controller.signal)
       .then((data) => {
+        if (!shouldApplyPlannerFetch({
+          aborted: controller.signal.aborted,
+          requestSeq,
+          latestSeq: plannerFetchSeqRef.current,
+        })) {
+          return;
+        }
         const nextProjects = projectOptions(data.projects);
         setApiProjects(data.projects);
         setGoals(data.goals);
@@ -1183,6 +1203,13 @@ export function PlannerApp({
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
+        if (!shouldApplyPlannerFetch({
+          aborted: false,
+          requestSeq,
+          latestSeq: plannerFetchSeqRef.current,
+        })) {
+          return;
+        }
         if (error instanceof PlannerApiError && error.code === "PLANNER_NOT_CONFIGURED") {
           liveDataRef.current = false;
           setConnection("demo");
@@ -1296,32 +1323,9 @@ export function PlannerApp({
     })();
   }, [runCalendarSync]);
 
-  useEffect(() => {
-    if (connection !== "live" || !hasGoogleIntegration) return;
-    if (googleConnection === "reconnect-required") return;
-
-    const syncWhenActive = () => {
-      if (document.visibilityState !== "visible") return;
-      // Never bypass the min-gap / error backoff on focus — that caused sync spam.
-      void runCalendarSync({ force: false });
-    };
-    const onWindowFocus = () => syncWhenActive();
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") syncWhenActive();
-    };
-
-    const initialSync = window.setTimeout(() => syncWhenActive(), 0);
-    const interval = window.setInterval(() => syncWhenActive(), AUTO_SYNC_INTERVAL_MS);
-    window.addEventListener("focus", onWindowFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      window.clearTimeout(initialSync);
-      window.clearInterval(interval);
-      window.removeEventListener("focus", onWindowFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [connection, hasGoogleIntegration, googleConnection, runCalendarSync]);
+  // Auto Google pull disabled: Cos list misses soft-deleted Personal OS Sessions
+  // (correct first paint → empty after sync reload). Manual Sync remains available;
+  // re-enable focus/interval pull after SoT reconciliation is deployed.
 
   useLayoutEffect(() => {
     if (activeSection !== "calendar" || view === "month") return;

@@ -3865,6 +3865,17 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
+}
+
+/* Flex column so .pos-task-scroll can own overflow with 300+ rows. */
+.pos-task {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .pos-task-toolbar {
