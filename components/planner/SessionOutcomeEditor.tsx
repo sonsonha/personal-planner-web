@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { cn } from "../utils";
+import { cn } from "./utils";
 import {
   emptySessionOutcome,
   newChecklistItem,
