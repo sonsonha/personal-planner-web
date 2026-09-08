@@ -946,7 +946,7 @@ export function PlannerApp({
       router.push(href);
     });
   }, [pathname, router]);
-  const [now] = useState(() => new Date());
+  const [now, setNow] = useState(() => new Date());
   const [clockFormat, setClockFormat] = useState<ClockFormat>("24h");
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [view, setView] = useState<CalendarView>("week");
@@ -1339,6 +1339,31 @@ export function PlannerApp({
       }
     })();
   }, [runCalendarSync]);
+
+  // Keep the now-line live (Google Calendar–like): tick each minute and refresh
+  // immediately when the tab becomes visible again after backgrounding.
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    const msToNextMinute = 60_000 - (Date.now() % 60_000) + 50;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    const timeoutId = window.setTimeout(() => {
+      tick();
+      intervalId = window.setInterval(tick, 60_000);
+    }, msToNextMinute);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", tick);
+    window.addEventListener("pageshow", tick);
+    return () => {
+      window.clearTimeout(timeoutId);
+      if (intervalId !== undefined) window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", tick);
+      window.removeEventListener("pageshow", tick);
+    };
+  }, []);
 
   // Auto Google pull disabled: Cos list misses soft-deleted Personal OS Sessions
   // (correct first paint → empty after sync reload). Manual Sync remains available;
