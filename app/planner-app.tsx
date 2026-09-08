@@ -76,6 +76,7 @@ import {
   type ApiTimeBlock,
 } from "@/lib/planner-api";
 import { shouldApplyPlannerFetch } from "@/lib/planner-fetch-guard";
+import { mergePlannerBlocksPreservingNewerOutcomes } from "@/lib/planner-block-merge";
 import {
   emptySessionOutcome,
   sessionOutcomeProgressLabel,
@@ -169,6 +170,7 @@ type CalendarBlock = {
   isDailyFocus?: boolean;
   sessionOutcome?: SessionOutcome | null;
   repeatSeriesId?: string | null;
+  revision?: number;
 };
 
 type BlockClipboard = {
@@ -700,6 +702,7 @@ function timeBlockFromApi(
     isDailyFocus: Boolean(block.isDailyFocus),
     sessionOutcome: block.sessionOutcome ?? emptySessionOutcome(),
     repeatSeriesId: block.repeatSeriesId ?? null,
+    revision: block.revision ?? 0,
   };
 }
 
@@ -947,6 +950,8 @@ export function PlannerApp({
     });
   }, [pathname, router]);
   const [now, setNow] = useState(() => new Date());
+  /** Product calendar day — refetch planner only when the day rolls, not every minute. */
+  const plannerDayKey = productDateString(now.getTime());
   const [clockFormat, setClockFormat] = useState<ClockFormat>("24h");
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [view, setView] = useState<CalendarView>("week");
@@ -1047,6 +1052,7 @@ export function PlannerApp({
   const savedScrollRef = useRef(0);
   const liveDataRef = useRef(false);
   const plannerFetchSeqRef = useRef(0);
+  const outcomeSaveSeqRef = useRef(new Map<string, number>());
   const calendarSyncInFlightRef = useRef<Promise<void> | null>(null);
   const lastCalendarSyncAttemptRef = useRef(0);
   const calendarSyncBackoffUntilRef = useRef(0);
@@ -1211,10 +1217,11 @@ export function PlannerApp({
         setProjects(nextProjects);
         setTasks(data.tasks.map((task) => taskFromApi(task, nextProjects)));
         const referenceStart = view === "month" ? monthGridDays(monthAnchor)[0]! : weekStart;
-        setBlocks([
+        const incoming = [
           ...data.timeBlocks.map((block) => timeBlockFromApi(block, referenceStart, nextProjects)),
           ...data.externalEvents.map((event) => externalBlockFromApi(event, referenceStart)),
-        ]);
+        ];
+        setBlocks((previous) => mergePlannerBlocksPreservingNewerOutcomes(previous, incoming));
         liveDataRef.current = true;
         setConnection("live");
       })
@@ -1237,7 +1244,8 @@ export function PlannerApp({
       });
 
     return () => controller.abort();
-  }, [reloadKey, weekStart, view, monthAnchor, now, taskAnchor, taskHorizon]);
+    // Day-key only — minute now-line ticks must NOT refetch and clobber Session Outcome.
+  }, [reloadKey, weekStart, view, monthAnchor, plannerDayKey, taskAnchor, taskHorizon]);
 
   const showToast = useCallback((message: string, kind: ToastKind = "info") => {
     setToastKind(kind);
@@ -3361,17 +3369,37 @@ export function PlannerApp({
               })();
             }}
             onSaveOutcome={(sessionOutcome) => {
+              const seq = (outcomeSaveSeqRef.current.get(popBlock.id) ?? 0) + 1;
+              outcomeSaveSeqRef.current.set(popBlock.id, seq);
+              setBlocks((current) => current.map((block) => (
+                block.id === popBlock.id
+                  ? {
+                      ...block,
+                      sessionOutcome,
+                      revision: Math.max((block.revision ?? 0) + 1, block.revision ?? 0),
+                    }
+                  : block
+              )));
               void (async () => {
-                setBlocks((current) => current.map((block) =>
-                  block.id === popBlock.id ? { ...block, sessionOutcome } : block,
-                ));
                 if (!liveDataRef.current) return;
                 try {
                   const saved = await updateTimeBlock(popBlock.id, { sessionOutcome });
+                  if (outcomeSaveSeqRef.current.get(popBlock.id) !== seq) return;
                   const mapped = timeBlockFromApi(saved, weekStart, projects);
-                  setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
+                  setBlocks((current) => current.map((block) => (
+                    block.id === saved.id
+                      ? {
+                          ...mapped,
+                          // Prefer server revision; never drop a newer optimistic tick.
+                          revision: Math.max(mapped.revision ?? 0, block.revision ?? 0),
+                          sessionOutcome: mapped.sessionOutcome,
+                        }
+                      : block
+                  )));
                 } catch {
-                  showToast("Could not save session outcome", "warning");
+                  if (outcomeSaveSeqRef.current.get(popBlock.id) === seq) {
+                    showToast("Could not save session outcome", "warning");
+                  }
                 }
               })();
             }}

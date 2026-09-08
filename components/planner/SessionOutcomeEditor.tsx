@@ -16,6 +16,16 @@ const MODES: Array<{ id: SessionOutcomeType; label: string }> = [
   { id: "QUANTITY", label: "Quantity" },
 ];
 
+function outcomeFingerprint(outcome: SessionOutcome): string {
+  if (outcome.type === "CHECKLIST") {
+    return `CHECKLIST:${outcome.items.map((item) => `${item.id}:${item.done ? 1 : 0}:${item.text}`).join("|")}`;
+  }
+  if (outcome.type === "QUANTITY") {
+    return `QUANTITY:${outcome.actual ?? 0}/${outcome.target ?? 0}:${outcome.unit ?? ""}`;
+  }
+  return "NONE";
+}
+
 export type SessionOutcomeEditorProps = {
   value?: SessionOutcome | null;
   disabled?: boolean;
@@ -33,7 +43,10 @@ export function SessionOutcomeEditor({
   const [newItem, setNewItem] = useState("");
 
   useEffect(() => {
-    setDraft(value ?? emptySessionOutcome());
+    const next = value ?? emptySessionOutcome();
+    setDraft((current) => (
+      outcomeFingerprint(current) === outcomeFingerprint(next) ? current : next
+    ));
   }, [value]);
 
   const commit = (next: SessionOutcome) => {
