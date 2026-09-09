@@ -1575,8 +1575,6 @@ export function PlannerApp({
     return hierarchy.counts;
   }, [activeSection, taskHorizon, tasks, blocks, taskAnchor, weekStart, now, tasksWeekWindow]);
 
-  const doneTaskIds = new Set(tasks.filter((task) => task.status === "done").map((task) => task.id));
-
   const plannedMinutes = blocks
     .filter((block) => block.type === "task" && (view === "day" ? block.day === activeDay : true))
     .reduce((total, block) => total + block.duration, 0);
@@ -2997,7 +2995,6 @@ export function PlannerApp({
                     {laidOut.map((block) => {
                       const geometry = overlapGeometry(block.col, block.numCols);
                       const sessionDone = isSessionDone(block.status);
-                      const taskDone = Boolean(block.taskId && doneTaskIds.has(block.taskId));
                       const blockEnd = slotDate(weekStart, block.day, block.start + block.duration);
                       const isPast = blockEnd.getTime() < now.getTime();
                       return (
@@ -3005,7 +3002,7 @@ export function PlannerApp({
                           key={block.id}
                           block={block}
                           clockFormat={clockFormat}
-                          done={sessionDone || taskDone}
+                          done={sessionDone}
                           sessionDone={sessionDone}
                           isPast={isPast}
                           layout={geometry}
