@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "./utils";
 import {
   emptySessionOutcome,
@@ -41,6 +41,8 @@ export function SessionOutcomeEditor({
 }: SessionOutcomeEditorProps) {
   const [draft, setDraft] = useState<SessionOutcome>(value ?? emptySessionOutcome());
   const [newItem, setNewItem] = useState("");
+  const [saveHint, setSaveHint] = useState<"idle" | "saved">("idle");
+  const saveHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const next = value ?? emptySessionOutcome();
@@ -49,13 +51,23 @@ export function SessionOutcomeEditor({
     ));
   }, [value]);
 
+  useEffect(() => () => {
+    if (saveHintTimer.current) clearTimeout(saveHintTimer.current);
+  }, []);
+
   const commit = (next: SessionOutcome) => {
     setDraft(next);
     onChange(next);
+    setSaveHint("saved");
+    if (saveHintTimer.current) clearTimeout(saveHintTimer.current);
+    saveHintTimer.current = setTimeout(() => setSaveHint("idle"), 1600);
   };
 
   return (
     <div className={cn("pos-session-outcome", compact && "compact")}>
+      <p className="pos-session-outcome-autosave-hint">
+        {saveHint === "saved" ? "Saved" : "Changes save automatically"}
+      </p>
       <div className="pos-session-outcome-modes" role="tablist" aria-label="Outcome tracking">
         {MODES.map((mode) => (
           <button
