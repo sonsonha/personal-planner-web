@@ -6665,6 +6665,12 @@
 .pos-session-outcome.compact {
   gap: 8px;
 }
+.pos-session-outcome-autosave-hint {
+  margin: 0;
+  color: var(--pos-ink-muted, #9ca3af);
+  font-size: 11px;
+  font-weight: 500;
+}
 .pos-session-outcome-modes {
   display: inline-flex;
   align-self: flex-start;
