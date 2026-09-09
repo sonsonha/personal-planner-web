@@ -3396,6 +3396,9 @@ export function PlannerApp({
                         }
                       : block
                   )));
+                  if (mapped.syncStatus === "FAILED") {
+                    showToast("Outcome saved in Personal OS · Google sync still needs retry", "warning");
+                  }
                 } catch {
                   if (outcomeSaveSeqRef.current.get(popBlock.id) === seq) {
                     showToast("Could not save session outcome", "warning");

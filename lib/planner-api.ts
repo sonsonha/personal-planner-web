@@ -663,10 +663,29 @@ export function getGoogleAuthUrl() {
 }
 
 export function syncGoogleCalendar() {
+  const controller = new AbortController();
+  const timeoutMs = 45_000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   return requestJson<{ ok: boolean; summary: CalendarSyncSummary }>(
     "/api/calendar/sync",
-    { method: "POST", body: JSON.stringify({}) },
-  );
+    { method: "POST", body: JSON.stringify({}), signal: controller.signal },
+  ).finally(() => clearTimeout(timer)).catch((error: unknown) => {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new PlannerApiError(
+        "Calendar sync timed out — tap Sync now to retry.",
+        504,
+        "PLANNER_UNAVAILABLE",
+      );
+    }
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new PlannerApiError(
+        "Calendar sync timed out — tap Sync now to retry.",
+        504,
+        "PLANNER_UNAVAILABLE",
+      );
+    }
+    throw error;
+  });
 }
 
 export function disconnectGoogleCalendar() {

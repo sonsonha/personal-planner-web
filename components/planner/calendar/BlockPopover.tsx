@@ -131,8 +131,10 @@ export function PersonalOsBlockPopover({
         )}
         {failed && (
           <div className="pos-cal-popover-sync-fail" role="status">
-            <strong>Saved locally · Google sync failed</strong>
-            <span>This block is still on your Personal OS calendar.</span>
+            <strong>Earlier Google sync failed for this session</strong>
+            <span>
+              Outcome / notes still save in Personal OS. Retry sync only if you need Google updated.
+            </span>
           </div>
         )}
       </header>
