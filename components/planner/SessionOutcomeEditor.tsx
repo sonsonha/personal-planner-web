@@ -168,30 +168,53 @@ export function SessionOutcomeEditor({
 
       {draft.type === "QUANTITY" && (
         <div className="pos-session-outcome-quantity">
+          <div className="pos-session-outcome-actual">
+            <span>Actual (done)</span>
+            <div className="pos-session-outcome-stepper">
+              <button
+                type="button"
+                aria-label="Decrease actual"
+                disabled={disabled || (draft.actual ?? 0) <= 0}
+                onClick={() => {
+                  commit({
+                    ...draft,
+                    actual: Math.max(0, (draft.actual ?? 0) - 1),
+                  });
+                }}
+              >
+                −
+              </button>
+              <strong className="pos-mono">{draft.actual ?? 0}</strong>
+              <button
+                type="button"
+                aria-label="Increase actual"
+                disabled={disabled}
+                onClick={() => {
+                  commit({
+                    ...draft,
+                    actual: (draft.actual ?? 0) + 1,
+                  });
+                }}
+              >
+                +
+              </button>
+            </div>
+          </div>
           <label>
-            <span>Actual</span>
-            <input
-              type="number"
-              min={0}
-              value={draft.actual ?? 0}
-              disabled={disabled}
-              onChange={(event) => {
-                commit({
-                  ...draft,
-                  actual: Math.max(0, Math.floor(Number(event.target.value) || 0)),
-                });
-              }}
-            />
-          </label>
-          <label>
-            <span>Target</span>
+            <span>Target (goal)</span>
             <input
               type="number"
               min={0}
               value={draft.target ?? 0}
               disabled={disabled}
+              onBlur={(event) => {
+                const next = Math.max(0, Math.floor(Number(event.target.value) || 0));
+                if (next === (draft.target ?? 0)) return;
+                commit({ ...draft, target: next });
+              }}
               onChange={(event) => {
-                commit({
+                // Local only while typing — commit on blur so "2" → "1" → "12" does not save Target=1.
+                setDraft({
                   ...draft,
                   target: Math.max(0, Math.floor(Number(event.target.value) || 0)),
                 });
