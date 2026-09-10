@@ -102,6 +102,7 @@ import {
 import {
   findDailyFocusSession,
   findDailyFocusTask,
+  productDateFromEpoch,
   productDateString,
   resolveDailyFocusReplacement,
   resolveSessionDailyFocusReplacement,
@@ -1736,6 +1737,11 @@ export function PlannerApp({
     day: number,
     start: number,
   ) => {
+    const rollback = () => {
+      setBlocks((current) => current.map((block) =>
+        block.id === previous.id ? previous : block,
+      ));
+    };
     const candidate = { ...previous, day, start };
     setBlocks((current) =>
       current.map((block) => (block.id === previous.id ? candidate : block)),
@@ -1762,11 +1768,14 @@ export function PlannerApp({
         await carryOverSession(previous.id, startAt.toISOString());
         setReloadKey((value) => value + 1);
         setToast("Session carried over to a new task for that week");
-      } catch {
-        setBlocks((current) => current.map((block) =>
-          block.id === previous.id ? previous : block,
-        ));
-        setToast("Could not carry over session");
+      } catch (error) {
+        rollback();
+        showToast(
+          error instanceof PlannerApiError
+            ? `Could not carry over · ${error.message}`
+            : "Could not carry over session",
+          "warning",
+        );
       }
       return;
     }
@@ -1781,29 +1790,82 @@ export function PlannerApp({
         kind: "session",
         id: previous.id,
         payload,
-        onCancel: () => {
-          setBlocks((current) => current.map((block) =>
-            block.id === previous.id ? previous : block,
-          ));
-        },
+        onCancel: rollback,
       });
       return;
+    }
+
+    // Moving Daily Focus onto a day that already has one needs an explicit replace.
+    let replaceDailyFocus = false;
+    if (previous.isDailyFocus) {
+      const destDate = productDateFromEpoch(startAt.getTime());
+      const existing = findDailyFocusSession(
+        blocks.filter((block) => block.id !== previous.id && block.type !== "external"),
+        destDate,
+      );
+      if (existing) {
+        const ok = window.confirm(
+          `"${existing.title}" is already Daily Focus on that day. Replace it with this session?`,
+        );
+        if (!ok) {
+          rollback();
+          showToast("Move cancelled · destination already has Daily Focus", "warning");
+          return;
+        }
+        replaceDailyFocus = true;
+      }
     }
 
     showToast(liveDataRef.current ? "Moving time block…" : "Time block moved · demo mode");
     if (!liveDataRef.current) return;
     try {
-      const saved = await updateTimeBlock(previous.id, payload);
+      const saved = await updateTimeBlock(previous.id, {
+        ...payload,
+        ...(replaceDailyFocus ? { replaceDailyFocus: true } : {}),
+      });
       const mapped = timeBlockFromApi(saved, weekStart, projects);
       setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
       setToast(saved.syncStatus === "FAILED"
         ? "Block saved · Google sync needs attention"
         : "Time block moved · calendar synced");
-    } catch {
-      setBlocks((current) => current.map((block) =>
-        block.id === previous.id ? previous : block,
-      ));
-      showToast("Could not move block · changes rolled back", "warning");
+    } catch (error) {
+      if (
+        error instanceof PlannerApiError
+        && error.code === "DAILY_FOCUS_CONFLICT"
+        && previous.isDailyFocus
+      ) {
+        const ok = window.confirm(
+          "That day already has a Daily Focus. Replace it with this session?",
+        );
+        if (ok) {
+          try {
+            const saved = await updateTimeBlock(previous.id, {
+              ...payload,
+              replaceDailyFocus: true,
+            });
+            const mapped = timeBlockFromApi(saved, weekStart, projects);
+            setBlocks((current) => current.map((block) => block.id === saved.id ? mapped : block));
+            setToast("Time block moved · Daily Focus replaced");
+            return;
+          } catch (retryError) {
+            rollback();
+            showToast(
+              retryError instanceof PlannerApiError
+                ? `Could not move block · ${retryError.message}`
+                : "Could not move block · changes rolled back",
+              "warning",
+            );
+            return;
+          }
+        }
+      }
+      rollback();
+      showToast(
+        error instanceof PlannerApiError
+          ? `Could not move block · ${error.message}`
+          : "Could not move block · changes rolled back",
+        "warning",
+      );
     }
   };
 
@@ -3007,6 +3069,7 @@ export function PlannerApp({
                           isPast={isPast}
                           layout={geometry}
                           selected={blockPopover?.blockId === block.id}
+                          isDragging={blockDragPreview?.id === block.id}
                           onOpenTask={(taskId) => {
                             setBlockPopover(null);
                             setEditingTaskId(taskId);
@@ -3538,6 +3601,7 @@ function CalendarEvent({
   onMoveCommit,
   onMovePreview,
   onToggleSessionDone,
+  isDragging = false,
 }: {
   block: CalendarBlock;
   clockFormat?: ClockFormat;
@@ -3547,6 +3611,7 @@ function CalendarEvent({
   isPast?: boolean;
   layout: { left: string; right: string };
   selected?: boolean;
+  isDragging?: boolean;
   onOpenTask: (taskId: string) => void;
   onResize: (blockId: string, duration: number) => void;
   onSelect: (rect: DOMRect) => void;
@@ -3603,12 +3668,20 @@ function CalendarEvent({
     );
   };
 
-  const dayFromPoint = (clientX: number, clientY: number) => {
-    const el = document.elementFromPoint(clientX, clientY);
-    const track = el?.closest?.("[data-day-index]") as HTMLElement | null;
-    if (!track) return null;
-    const day = Number(track.dataset.dayIndex);
-    return Number.isFinite(day) ? day : null;
+  const dayFromPoint = (clientX: number, _clientY: number) => {
+    // Hit-test by column geometry (not elementFromPoint). While dragging, the
+    // event sits under the cursor and would otherwise pin the day to itself.
+    const tracks = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-day-index]"),
+    );
+    for (const track of tracks) {
+      const rect = track.getBoundingClientRect();
+      if (clientX >= rect.left && clientX < rect.right) {
+        const day = Number(track.dataset.dayIndex);
+        if (Number.isFinite(day)) return day;
+      }
+    }
+    return null;
   };
 
   const onResizePointerDown = (event: React.PointerEvent) => {
@@ -3782,6 +3855,7 @@ function CalendarEvent({
         isPending ? "sync-pending" : "",
         selected ? "selected" : "",
         isDailyFocus ? "daily-focus" : "",
+        isDragging ? "is-dragging" : "",
         isTiny ? "tiny" : isCompact ? "compact" : "",
       ].filter(Boolean).join(" ")}
       data-sync={block.syncStatus?.toLowerCase()}

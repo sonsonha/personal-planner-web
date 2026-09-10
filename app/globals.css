@@ -2732,6 +2732,13 @@ button {
   box-shadow: 0 0 0 1px var(--priority-border), 0 6px 16px rgba(15, 23, 42, 0.12);
 }
 
+.pos-cal .calendar-event.is-dragging {
+  pointer-events: none;
+  opacity: 0.92;
+  z-index: 30;
+  cursor: grabbing;
+}
+
 [data-theme="dark"] .pos-cal .calendar-event:not(.external).selected {
   outline: 2px solid color-mix(in srgb, var(--priority-on-fill, #fff) 55%, var(--priority-border));
   box-shadow: 0 0 0 1px var(--priority-border), 0 6px 16px rgba(15, 23, 42, 0.2);
