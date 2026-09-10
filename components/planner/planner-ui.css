@@ -6344,11 +6344,43 @@
   color: var(--pos-ink-muted);
 }
 .pos-finance-panel-head h3 {
+  flex: 1;
   margin: 0;
   font-size: 13px;
   font-weight: 700;
   color: var(--pos-ink);
   letter-spacing: -0.01em;
+}
+.pos-finance-panel-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--pos-border);
+  background: var(--pos-card);
+  color: var(--pos-ink);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pos-finance-panel-add:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--pos-ink) 6%, var(--pos-card));
+}
+.pos-finance-panel-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pos-finance-empty-cta {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+.pos-finance-empty-cta .pos-finance-empty {
+  width: 100%;
+}
+.pos-finance-panel-actions {
+  margin-top: 4px;
 }
 .pos-finance-empty {
   margin: 0;

@@ -69,6 +69,8 @@ type Modal =
   | { kind: "income"; source: FinanceIncomeSource }
   | { kind: "expense" }
   | { kind: "debt-pay" }
+  | { kind: "add-source" }
+  | { kind: "add-debt" }
   | { kind: "edit"; tx: FinanceTransaction }
   | null;
 
@@ -185,10 +187,22 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
             )}
             {tab === "overview" && (
               <div className="pos-finance-actions">
+                <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "add-source" })} disabled={!live}>
+                  <Plus size={15} aria-hidden /> Source
+                </button>
+                <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "add-debt" })} disabled={!live}>
+                  <Plus size={15} aria-hidden /> Debt
+                </button>
                 <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "expense" })} disabled={!live}>
                   <Plus size={15} aria-hidden /> Expense
                 </button>
-                <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "debt-pay" })} disabled={!live || debts.length === 0}>
+                <button
+                  type="button"
+                  className="pos-btn-secondary"
+                  onClick={() => setModal({ kind: debts.length === 0 ? "add-debt" : "debt-pay" })}
+                  disabled={!live}
+                  title={debts.length === 0 ? "Add a debt first" : "Record a debt payment"}
+                >
                   <CreditCard size={15} aria-hidden /> Debt payment
                 </button>
               </div>
@@ -345,10 +359,28 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
                 <header className="pos-finance-panel-head">
                   <Wallet size={15} aria-hidden />
                   <h3>Income sources</h3>
+                  <button
+                    type="button"
+                    className="pos-finance-panel-add"
+                    disabled={!live}
+                    onClick={() => setModal({ kind: "add-source" })}
+                  >
+                    <Plus size={14} aria-hidden /> Add
+                  </button>
                 </header>
                 <div className="pos-finance-sources">
                   {activeSources.length === 0 ? (
-                    <p className="pos-finance-empty">No income sources yet — add one in Settings.</p>
+                    <div className="pos-finance-empty-cta">
+                      <p className="pos-finance-empty">No income sources yet.</p>
+                      <button
+                        type="button"
+                        className="pos-btn-secondary"
+                        disabled={!live}
+                        onClick={() => setModal({ kind: "add-source" })}
+                      >
+                        <Plus size={15} aria-hidden /> Add income source
+                      </button>
+                    </div>
                   ) : (
                     activeSources.map((source) => (
                       <button
@@ -392,21 +424,51 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
                 <header className="pos-finance-panel-head">
                   <Landmark size={15} aria-hidden />
                   <h3>Debts</h3>
+                  <button
+                    type="button"
+                    className="pos-finance-panel-add"
+                    disabled={!live}
+                    onClick={() => setModal({ kind: "add-debt" })}
+                  >
+                    <Plus size={14} aria-hidden /> Add
+                  </button>
                 </header>
                 {debts.length === 0 ? (
-                  <p className="pos-finance-empty">No debts tracked — add in Settings.</p>
+                  <div className="pos-finance-empty-cta">
+                    <p className="pos-finance-empty">No debts tracked yet.</p>
+                    <button
+                      type="button"
+                      className="pos-btn-secondary"
+                      disabled={!live}
+                      onClick={() => setModal({ kind: "add-debt" })}
+                    >
+                      <Plus size={15} aria-hidden /> Add debt
+                    </button>
+                  </div>
                 ) : (
-                  <ul className="pos-finance-cat-list">
-                    {debts.map((d) => (
-                      <li key={d.id}>
-                        <span>
-                          {d.name}
-                          <small className="pos-muted"> · due {formatVnd(d.monthlyRequiredVnd)}/mo</small>
-                        </span>
-                        <strong className="pos-mono">{formatVnd(d.outstandingVnd)}</strong>
-                      </li>
-                    ))}
-                  </ul>
+                  <>
+                    <ul className="pos-finance-cat-list">
+                      {debts.map((d) => (
+                        <li key={d.id}>
+                          <span>
+                            {d.name}
+                            <small className="pos-muted"> · due {formatVnd(d.monthlyRequiredVnd)}/mo</small>
+                          </span>
+                          <strong className="pos-mono">{formatVnd(d.outstandingVnd)}</strong>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="pos-finance-panel-actions">
+                      <button
+                        type="button"
+                        className="pos-btn-secondary"
+                        disabled={!live}
+                        onClick={() => setModal({ kind: "debt-pay" })}
+                      >
+                        <CreditCard size={14} aria-hidden /> Pay debt
+                      </button>
+                    </div>
+                  </>
                 )}
                 <div className="pos-finance-panel-foot">
                   <span>Remaining required this month</span>
@@ -571,6 +633,46 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
               reload();
             } catch (err) {
               setError(err instanceof PlannerApiError ? err.message : "Could not save payment");
+            } finally {
+              setSaving(false);
+            }
+          }}
+        />
+      )}
+
+      {modal?.kind === "add-source" && (
+        <AddSourceModal
+          saving={saving}
+          onClose={() => !saving && setModal(null)}
+          onSave={async (name) => {
+            setSaving(true);
+            try {
+              await createIncomeSource({ name });
+              onChanged("Income source added");
+              setModal(null);
+              reload();
+            } catch (err) {
+              setError(err instanceof PlannerApiError ? err.message : "Could not add source");
+            } finally {
+              setSaving(false);
+            }
+          }}
+        />
+      )}
+
+      {modal?.kind === "add-debt" && (
+        <AddDebtModal
+          saving={saving}
+          onClose={() => !saving && setModal(null)}
+          onSave={async (input) => {
+            setSaving(true);
+            try {
+              await createDebt(input);
+              onChanged("Debt added");
+              setModal(null);
+              reload();
+            } catch (err) {
+              setError(err instanceof PlannerApiError ? err.message : "Could not add debt");
             } finally {
               setSaving(false);
             }
@@ -1028,47 +1130,195 @@ function DebtPayModal({
         <p className="pos-entity-form-lede">
           Mandatory obligation — funded from Living. Not counted as category spending.
         </p>
-        <div className="pos-qa-fields">
+        <div className="pos-entity-form-body">
           <label className="pos-qa-field">
-            <span className="pos-qa-field-label">Debt</span>
+            Debt
             <select value={debtId} onChange={(e) => setDebtId(e.target.value)} disabled={saving}>
               {debts.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} ({formatVnd(d.outstandingVnd)} left)
-                </option>
+                <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
           </label>
           <label className="pos-qa-field">
-            <span className="pos-qa-field-label">Amount (VND)</span>
+            Amount (VND)
             <input
               className="pos-mono"
               value={amount}
               onChange={(e) => onAmountFieldChange(e.target.value, setAmount)}
+              disabled={saving}
+              inputMode="numeric"
+              placeholder="0"
               autoFocus
+            />
+          </label>
+          <label className="pos-qa-field">
+            Paid on
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={saving} />
+          </label>
+          <label className="pos-qa-field">
+            Note
+            <input value={note} onChange={(e) => setNote(e.target.value)} disabled={saving} placeholder="Optional" />
+          </label>
+          {debt && (
+            <p className="pos-qa-for-hint">Monthly required: {formatVnd(debt.monthlyRequiredVnd)}</p>
+          )}
+          {localError && <p className="pos-qa-error">{localError}</p>}
+        </div>
+        <div className="pos-qa-footer">
+          <button type="button" className="pos-btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
+          <button type="submit" className="pos-btn-primary" disabled={saving}>
+            {saving ? "Saving…" : "Save payment"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function AddSourceModal({
+  saving,
+  onClose,
+  onSave,
+}: {
+  saving: boolean;
+  onClose: () => void;
+  onSave: (name: string) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  return (
+    <div className="pos-qa-backdrop">
+      <button type="button" className="pos-qa-dismiss" aria-label="Close" onClick={onClose} disabled={saving} />
+      <form
+        className="pos-qa-modal pos-entity-form-modal"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const trimmed = name.trim();
+          if (!trimmed) {
+            setLocalError("Enter a source name");
+            return;
+          }
+          void onSave(trimmed);
+        }}
+      >
+        <div className="pos-qa-header">
+          <span className="pos-qa-eyebrow">Add income source</span>
+          <button type="button" className="pos-qa-close" onClick={onClose} disabled={saving}>×</button>
+        </div>
+        <p className="pos-entity-form-lede">
+          Salary, freelance, family support — tap the source later to record income.
+        </p>
+        <div className="pos-entity-form-body">
+          <label className="pos-qa-field">
+            Name
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={saving}
+              placeholder="Salary"
+              autoFocus
+            />
+          </label>
+          {localError && <p className="pos-qa-error">{localError}</p>}
+        </div>
+        <div className="pos-qa-footer">
+          <button type="button" className="pos-btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
+          <button type="submit" className="pos-btn-primary" disabled={saving || !name.trim()}>
+            {saving ? "Saving…" : "Add source"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function AddDebtModal({
+  saving,
+  onClose,
+  onSave,
+}: {
+  saving: boolean;
+  onClose: () => void;
+  onSave: (input: {
+    name: string;
+    outstandingVnd: number;
+    monthlyRequiredVnd: number;
+  }) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [outstanding, setOutstanding] = useState("");
+  const [monthly, setMonthly] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  return (
+    <div className="pos-qa-backdrop">
+      <button type="button" className="pos-qa-dismiss" aria-label="Close" onClick={onClose} disabled={saving} />
+      <form
+        className="pos-qa-modal pos-entity-form-modal"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const trimmed = name.trim();
+          const outstandingVnd = parseAmountInput(outstanding);
+          const monthlyRequiredVnd = parseAmountInput(monthly);
+          if (!trimmed) {
+            setLocalError("Enter a debt name");
+            return;
+          }
+          if (outstandingVnd == null || monthlyRequiredVnd == null) {
+            setLocalError("Enter valid amounts");
+            return;
+          }
+          void onSave({ name: trimmed, outstandingVnd, monthlyRequiredVnd });
+        }}
+      >
+        <div className="pos-qa-header">
+          <span className="pos-qa-eyebrow">Add debt</span>
+          <button type="button" className="pos-qa-close" onClick={onClose} disabled={saving}>×</button>
+        </div>
+        <p className="pos-entity-form-lede">
+          Track outstanding balance and the monthly amount you need to pay.
+        </p>
+        <div className="pos-entity-form-body">
+          <label className="pos-qa-field">
+            Name
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={saving}
+              placeholder="Student loan"
+              autoFocus
+            />
+          </label>
+          <label className="pos-qa-field">
+            Outstanding (VND)
+            <input
+              className="pos-mono"
+              value={outstanding}
+              onChange={(e) => onAmountFieldChange(e.target.value, setOutstanding)}
               disabled={saving}
               inputMode="numeric"
               placeholder="0"
             />
           </label>
-          {debt && (
-            <p className="pos-qa-for-hint">Monthly required: {formatVnd(debt.monthlyRequiredVnd)}</p>
-          )}
           <label className="pos-qa-field">
-            <span className="pos-qa-field-label">Paid on</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={saving} />
+            Monthly required (VND)
+            <input
+              className="pos-mono"
+              value={monthly}
+              onChange={(e) => onAmountFieldChange(e.target.value, setMonthly)}
+              disabled={saving}
+              inputMode="numeric"
+              placeholder="0"
+            />
           </label>
-          <label className="pos-qa-field">
-            <span className="pos-qa-field-label">Note (optional)</span>
-            <input value={note} onChange={(e) => setNote(e.target.value)} disabled={saving} />
-          </label>
+          {localError && <p className="pos-qa-error">{localError}</p>}
         </div>
-        {localError && <p className="pos-entity-form-error">{localError}</p>}
-        <div className="pos-entity-form-footer">
-          <div className="pos-entity-form-primary">
-            <button type="button" className="pos-btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
-            <button type="submit" className="pos-btn-primary" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
-          </div>
+        <div className="pos-qa-footer">
+          <button type="button" className="pos-btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
+          <button type="submit" className="pos-btn-primary" disabled={saving || !name.trim()}>
+            {saving ? "Saving…" : "Add debt"}
+          </button>
         </div>
       </form>
     </div>
@@ -1159,7 +1409,8 @@ function SettingsPanel({
       </button>
 
       <hr className="pos-finance-hr" />
-      <p className="pos-qa-field-label">Income sources</p>
+      <h3 className="pos-finance-section-title">Income sources</h3>
+      <p className="pos-muted pos-finance-lede">Add sources here, or from Overview with the Source button.</p>
       <ul className="pos-finance-cat-list compact">
         {sources.map((s) => (
           <li key={s.id}><span>{s.name}</span><span className="pos-muted">{s.active ? "active" : "off"}</span></li>
@@ -1185,7 +1436,8 @@ function SettingsPanel({
       </div>
 
       <hr className="pos-finance-hr" />
-      <p className="pos-qa-field-label">Debts</p>
+      <h3 className="pos-finance-section-title">Debts</h3>
+      <p className="pos-muted pos-finance-lede">Track balances and monthly required payments.</p>
       <ul className="pos-finance-cat-list compact">
         {debts.map((d) => (
           <li key={d.id}>
