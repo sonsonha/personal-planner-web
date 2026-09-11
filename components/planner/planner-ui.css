@@ -6471,6 +6471,41 @@
   font-size: 13px;
 }
 .pos-finance-cat-list li:last-child { border-bottom: 0; }
+.pos-finance-debt-list li {
+  padding: 0;
+}
+.pos-finance-debt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 10px 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pos-finance-debt-row:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--pos-ink) 4%, transparent);
+}
+.pos-finance-debt-row:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.pos-finance-debt-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.pos-finance-debt-main strong {
+  font-size: 13px;
+}
+.pos-finance-debt-main small {
+  font-size: 11px;
+  line-height: 1.35;
+}
 .pos-finance-cat-list.compact li {
   background: transparent;
   border-bottom: 1px solid var(--pos-border);

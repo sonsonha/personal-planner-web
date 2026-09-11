@@ -42,6 +42,8 @@ export type FinanceDebt = {
   name: string;
   outstandingVnd: number;
   monthlyRequiredVnd: number;
+  borrowedAt: string | null;
+  lastPaidAt: string | null;
   active: boolean;
   revision: number;
   updatedAt: string;
@@ -298,6 +300,8 @@ export function createDebt(input: {
   name: string;
   outstandingVnd: number;
   monthlyRequiredVnd: number;
+  borrowedAt?: string | null;
+  lastPaidAt?: string | null;
 }) {
   return requestJson<FinanceDebt>("/api/finance/debts", {
     method: "POST",
@@ -311,6 +315,8 @@ export function patchDebt(
     name: string;
     outstandingVnd: number;
     monthlyRequiredVnd: number;
+    borrowedAt: string | null;
+    lastPaidAt: string | null;
     active: boolean;
   }>,
 ) {

@@ -41,6 +41,7 @@ import {
   fetchIncomeSources,
   formatMonthLabel,
   formatVnd,
+  patchDebt,
   patchDebtPayment,
   patchExpenseEntry,
   patchIncomeEntry,
@@ -71,6 +72,7 @@ type Modal =
   | { kind: "debt-pay" }
   | { kind: "add-source" }
   | { kind: "add-debt" }
+  | { kind: "edit-debt"; debt: FinanceDebt }
   | { kind: "edit"; tx: FinanceTransaction }
   | null;
 
@@ -447,14 +449,25 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
                   </div>
                 ) : (
                   <>
-                    <ul className="pos-finance-cat-list">
+                    <ul className="pos-finance-cat-list pos-finance-debt-list">
                       {debts.map((d) => (
                         <li key={d.id}>
-                          <span>
-                            {d.name}
-                            <small className="pos-muted"> · due {formatVnd(d.monthlyRequiredVnd)}/mo</small>
-                          </span>
-                          <strong className="pos-mono">{formatVnd(d.outstandingVnd)}</strong>
+                          <button
+                            type="button"
+                            className="pos-finance-debt-row"
+                            disabled={!live}
+                            onClick={() => setModal({ kind: "edit-debt", debt: d })}
+                          >
+                            <span className="pos-finance-debt-main">
+                              <strong>{d.name}</strong>
+                              <small className="pos-muted">
+                                due {formatVnd(d.monthlyRequiredVnd)}/mo
+                                {d.borrowedAt ? ` · borrowed ${d.borrowedAt}` : ""}
+                                {d.lastPaidAt ? ` · last paid ${d.lastPaidAt}` : ""}
+                              </small>
+                            </span>
+                            <strong className="pos-mono">{formatVnd(d.outstandingVnd)}</strong>
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -673,6 +686,27 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
               reload();
             } catch (err) {
               setError(err instanceof PlannerApiError ? err.message : "Could not add debt");
+            } finally {
+              setSaving(false);
+            }
+          }}
+        />
+      )}
+
+      {modal?.kind === "edit-debt" && (
+        <EditDebtModal
+          debt={modal.debt}
+          saving={saving}
+          onClose={() => !saving && setModal(null)}
+          onSave={async (input) => {
+            setSaving(true);
+            try {
+              await patchDebt(modal.debt.id, input);
+              onChanged("Debt updated");
+              setModal(null);
+              reload();
+            } catch (err) {
+              setError(err instanceof PlannerApiError ? err.message : "Could not update debt");
             } finally {
               setSaving(false);
             }
@@ -1244,11 +1278,15 @@ function AddDebtModal({
     name: string;
     outstandingVnd: number;
     monthlyRequiredVnd: number;
+    borrowedAt?: string | null;
+    lastPaidAt?: string | null;
   }) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [outstanding, setOutstanding] = useState("");
   const [monthly, setMonthly] = useState("");
+  const [borrowedAt, setBorrowedAt] = useState("");
+  const [lastPaidAt, setLastPaidAt] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
   return (
@@ -1269,7 +1307,13 @@ function AddDebtModal({
             setLocalError("Enter valid amounts");
             return;
           }
-          void onSave({ name: trimmed, outstandingVnd, monthlyRequiredVnd });
+          void onSave({
+            name: trimmed,
+            outstandingVnd,
+            monthlyRequiredVnd,
+            borrowedAt: borrowedAt || null,
+            lastPaidAt: lastPaidAt || null,
+          });
         }}
       >
         <div className="pos-qa-header">
@@ -1277,7 +1321,7 @@ function AddDebtModal({
           <button type="button" className="pos-qa-close" onClick={onClose} disabled={saving}>×</button>
         </div>
         <p className="pos-entity-form-lede">
-          Track outstanding balance and the monthly amount you need to pay.
+          Track balance, monthly due, borrow date, and last payment date.
         </p>
         <div className="pos-entity-form-body">
           <label className="pos-qa-field">
@@ -1291,7 +1335,7 @@ function AddDebtModal({
             />
           </label>
           <label className="pos-qa-field">
-            Outstanding (VND)
+            Outstanding balance (VND)
             <input
               className="pos-mono"
               value={outstanding}
@@ -1312,12 +1356,131 @@ function AddDebtModal({
               placeholder="0"
             />
           </label>
+          <label className="pos-qa-field">
+            Borrowed on
+            <input type="date" value={borrowedAt} onChange={(e) => setBorrowedAt(e.target.value)} disabled={saving} />
+          </label>
+          <label className="pos-qa-field">
+            Last paid on
+            <input type="date" value={lastPaidAt} onChange={(e) => setLastPaidAt(e.target.value)} disabled={saving} />
+          </label>
           {localError && <p className="pos-qa-error">{localError}</p>}
         </div>
         <div className="pos-qa-footer">
           <button type="button" className="pos-btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
           <button type="submit" className="pos-btn-primary" disabled={saving || !name.trim()}>
             {saving ? "Saving…" : "Add debt"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function EditDebtModal({
+  debt,
+  saving,
+  onClose,
+  onSave,
+}: {
+  debt: FinanceDebt;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (input: {
+    name: string;
+    outstandingVnd: number;
+    monthlyRequiredVnd: number;
+    borrowedAt: string | null;
+    lastPaidAt: string | null;
+  }) => Promise<void>;
+}) {
+  const [name, setName] = useState(debt.name);
+  const [outstanding, setOutstanding] = useState(formatAmountInput(debt.outstandingVnd));
+  const [monthly, setMonthly] = useState(formatAmountInput(debt.monthlyRequiredVnd));
+  const [borrowedAt, setBorrowedAt] = useState(debt.borrowedAt ?? "");
+  const [lastPaidAt, setLastPaidAt] = useState(debt.lastPaidAt ?? "");
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  return (
+    <div className="pos-qa-backdrop">
+      <button type="button" className="pos-qa-dismiss" aria-label="Close" onClick={onClose} disabled={saving} />
+      <form
+        className="pos-qa-modal pos-entity-form-modal"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const trimmed = name.trim();
+          const outstandingVnd = parseAmountInput(outstanding);
+          const monthlyRequiredVnd = parseAmountInput(monthly);
+          if (!trimmed) {
+            setLocalError("Enter a debt name");
+            return;
+          }
+          if (outstandingVnd == null || monthlyRequiredVnd == null) {
+            setLocalError("Enter valid amounts");
+            return;
+          }
+          void onSave({
+            name: trimmed,
+            outstandingVnd,
+            monthlyRequiredVnd,
+            borrowedAt: borrowedAt || null,
+            lastPaidAt: lastPaidAt || null,
+          });
+        }}
+      >
+        <div className="pos-qa-header">
+          <span className="pos-qa-eyebrow">Edit debt</span>
+          <button type="button" className="pos-qa-close" onClick={onClose} disabled={saving}>×</button>
+        </div>
+        <p className="pos-entity-form-lede">
+          Update outstanding balance, borrow date, and last payment date.
+        </p>
+        <div className="pos-entity-form-body">
+          <label className="pos-qa-field">
+            Name
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={saving}
+              autoFocus
+            />
+          </label>
+          <label className="pos-qa-field">
+            Outstanding balance (VND)
+            <input
+              className="pos-mono"
+              value={outstanding}
+              onChange={(e) => onAmountFieldChange(e.target.value, setOutstanding)}
+              disabled={saving}
+              inputMode="numeric"
+              placeholder="0"
+            />
+          </label>
+          <label className="pos-qa-field">
+            Monthly required (VND)
+            <input
+              className="pos-mono"
+              value={monthly}
+              onChange={(e) => onAmountFieldChange(e.target.value, setMonthly)}
+              disabled={saving}
+              inputMode="numeric"
+              placeholder="0"
+            />
+          </label>
+          <label className="pos-qa-field">
+            Borrowed on
+            <input type="date" value={borrowedAt} onChange={(e) => setBorrowedAt(e.target.value)} disabled={saving} />
+          </label>
+          <label className="pos-qa-field">
+            Last paid on
+            <input type="date" value={lastPaidAt} onChange={(e) => setLastPaidAt(e.target.value)} disabled={saving} />
+          </label>
+          {localError && <p className="pos-qa-error">{localError}</p>}
+        </div>
+        <div className="pos-qa-footer">
+          <button type="button" className="pos-btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
+          <button type="submit" className="pos-btn-primary" disabled={saving || !name.trim()}>
+            {saving ? "Saving…" : "Save changes"}
           </button>
         </div>
       </form>
@@ -1352,6 +1515,8 @@ function SettingsPanel({
     name: string;
     outstandingVnd: number;
     monthlyRequiredVnd: number;
+    borrowedAt?: string | null;
+    lastPaidAt?: string | null;
   }) => Promise<void>;
 }) {
   const [living, setLiving] = useState(String(settings.livingPct));
