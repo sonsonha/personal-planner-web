@@ -6,7 +6,6 @@ import {
   ArrowLeftRight,
   ArrowUpRight,
   Banknote,
-  CalendarDays,
   ChartColumn,
   ChevronLeft,
   ChevronRight,
@@ -62,6 +61,7 @@ import {
   type TransactionsGrain,
 } from "@/lib/finance-api";
 import { FinanceAnalyticsPanel } from "@/components/planner/finance/FinanceAnalyticsPanel";
+import { FinancePeriodControl } from "@/components/planner/finance/FinancePeriodControl";
 
 type Props = {
   live: boolean;
@@ -174,116 +174,6 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
     <section className="gp-workspace gp-workspace-overview pos-finance" aria-label="Finance">
       <div className="pos-finance-inner">
         <div className="pos-finance-chrome">
-          <div className="pos-finance-toolbar">
-            {tab === "overview" && (
-              <div className="pos-finance-month-picker" role="group" aria-label="Select month">
-                <button
-                  type="button"
-                  className="pos-finance-month-step"
-                  onClick={() => setMonth(shiftMonth(month, -1))}
-                  aria-label="Previous month"
-                >
-                  <ChevronLeft size={18} aria-hidden />
-                </button>
-                <div className="pos-finance-month-current">
-                  <CalendarDays size={15} aria-hidden />
-                  <strong>{formatMonthLabel(month)}</strong>
-                </div>
-                <button
-                  type="button"
-                  className="pos-finance-month-step"
-                  onClick={() => setMonth(shiftMonth(month, 1))}
-                  aria-label="Next month"
-                >
-                  <ChevronRight size={18} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className="pos-finance-month-today"
-                  onClick={() => setMonth(currentMonthKey())}
-                  disabled={month === currentMonthKey()}
-                >
-                  This month
-                </button>
-              </div>
-            )}
-            {tab === "transactions" && (
-              <div className="pos-finance-tx-period" role="group" aria-label="Transaction period">
-                <div className="pos-finance-grain-tabs" role="tablist" aria-label="Period grain">
-                  {([
-                    ["day", "Day"],
-                    ["week", "Week"],
-                    ["month", "Month"],
-                    ["year", "Year"],
-                  ] as const).map(([id, label]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      role="tab"
-                      aria-selected={txGrain === id}
-                      className={txGrain === id ? "active" : undefined}
-                      onClick={() => setTransactionsGrain(id)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="pos-finance-month-picker" role="group" aria-label="Select period">
-                  <button
-                    type="button"
-                    className="pos-finance-month-step"
-                    onClick={() => setTxPeriod(shiftTransactionsPeriod(txGrain, txRange.periodKey, -1))}
-                    aria-label="Previous period"
-                  >
-                    <ChevronLeft size={18} aria-hidden />
-                  </button>
-                  <div className="pos-finance-month-current">
-                    <CalendarDays size={15} aria-hidden />
-                    <strong>{txRange.label}</strong>
-                  </div>
-                  <button
-                    type="button"
-                    className="pos-finance-month-step"
-                    onClick={() => setTxPeriod(shiftTransactionsPeriod(txGrain, txRange.periodKey, 1))}
-                    aria-label="Next period"
-                  >
-                    <ChevronRight size={18} aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    className="pos-finance-month-today"
-                    onClick={() => setTxPeriod(currentTransactionsPeriodKey(txGrain))}
-                    disabled={txRange.periodKey === currentTransactionsPeriodKey(txGrain)}
-                  >
-                    Current
-                  </button>
-                </div>
-              </div>
-            )}
-            {tab === "overview" && (
-              <div className="pos-finance-actions">
-                <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "add-source" })} disabled={!live}>
-                  <Plus size={15} aria-hidden /> Source
-                </button>
-                <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "add-debt" })} disabled={!live}>
-                  <Plus size={15} aria-hidden /> Debt
-                </button>
-                <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "expense" })} disabled={!live}>
-                  <Plus size={15} aria-hidden /> Expense
-                </button>
-                <button
-                  type="button"
-                  className="pos-btn-secondary"
-                  onClick={() => setModal({ kind: debts.length === 0 ? "add-debt" : "debt-pay" })}
-                  disabled={!live}
-                  title={debts.length === 0 ? "Add a debt first" : "Record a debt payment"}
-                >
-                  <CreditCard size={15} aria-hidden /> Debt payment
-                </button>
-              </div>
-            )}
-          </div>
-
           <div className="pos-finance-tabs" role="tablist" aria-label="Finance sections">
             {([
               ["overview", "Overview", Wallet],
@@ -304,6 +194,131 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
               </button>
             ))}
           </div>
+
+          {tab === "overview" && (
+            <div className="pos-finance-toolbar">
+              <div className="pos-finance-month-picker pos-finance-period-nav" role="group" aria-label="Select month">
+                <button
+                  type="button"
+                  className="pos-finance-month-step"
+                  onClick={() => setMonth(shiftMonth(month, -1))}
+                  aria-label="Previous month"
+                >
+                  <ChevronLeft size={18} aria-hidden />
+                </button>
+                <label className="pos-finance-period-field">
+                  <span className="sr-only">Month</span>
+                  <input
+                    type="month"
+                    value={month}
+                    onChange={(event) => {
+                      if (!event.target.value) return;
+                      setMonth(event.target.value);
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="pos-finance-month-step"
+                  onClick={() => setMonth(shiftMonth(month, 1))}
+                  aria-label="Next month"
+                >
+                  <ChevronRight size={18} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className="pos-finance-month-today"
+                  onClick={() => setMonth(currentMonthKey())}
+                  disabled={month === currentMonthKey()}
+                >
+                  This month
+                </button>
+              </div>
+              <div className="pos-finance-actions">
+                <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "add-source" })} disabled={!live}>
+                  <Plus size={15} aria-hidden /> Source
+                </button>
+                <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "add-debt" })} disabled={!live}>
+                  <Plus size={15} aria-hidden /> Debt
+                </button>
+                <button type="button" className="pos-btn-secondary" onClick={() => setModal({ kind: "expense" })} disabled={!live}>
+                  <Plus size={15} aria-hidden /> Expense
+                </button>
+                <button
+                  type="button"
+                  className="pos-btn-secondary"
+                  onClick={() => setModal({ kind: debts.length === 0 ? "add-debt" : "debt-pay" })}
+                  disabled={!live}
+                  title={debts.length === 0 ? "Add a debt first" : "Record a debt payment"}
+                >
+                  <CreditCard size={15} aria-hidden /> Debt payment
+                </button>
+              </div>
+            </div>
+          )}
+
+          {tab === "transactions" && (
+            <div className="pos-finance-toolbar">
+              <div className="pos-finance-tx-period" role="group" aria-label="Transaction period">
+                <div className="pos-finance-grain-tabs" role="tablist" aria-label="Period grain">
+                  {([
+                    ["day", "Day"],
+                    ["week", "Week"],
+                    ["month", "Month"],
+                    ["year", "Year"],
+                  ] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      aria-selected={txGrain === id}
+                      className={txGrain === id ? "active" : undefined}
+                      onClick={() => setTransactionsGrain(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="pos-finance-month-picker pos-finance-period-nav" role="group" aria-label="Select period">
+                  <button
+                    type="button"
+                    className="pos-finance-month-step"
+                    onClick={() => setTxPeriod(shiftTransactionsPeriod(txGrain, txRange.periodKey, -1))}
+                    aria-label="Previous period"
+                  >
+                    <ChevronLeft size={18} aria-hidden />
+                  </button>
+                  <FinancePeriodControl
+                    grain={txGrain}
+                    periodKey={txRange.periodKey}
+                    onChange={setTxPeriod}
+                  />
+                  <button
+                    type="button"
+                    className="pos-finance-month-step"
+                    onClick={() => setTxPeriod(shiftTransactionsPeriod(txGrain, txRange.periodKey, 1))}
+                    aria-label="Next period"
+                  >
+                    <ChevronRight size={18} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="pos-finance-month-today"
+                    onClick={() => setTxPeriod(currentTransactionsPeriodKey(txGrain))}
+                    disabled={txRange.periodKey === currentTransactionsPeriodKey(txGrain)}
+                  >
+                    {txGrain === "day"
+                      ? "Today"
+                      : txGrain === "week"
+                        ? "This week"
+                        : txGrain === "month"
+                          ? "This month"
+                          : "This year"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {error && <p className="pos-entity-form-error">{error}</p>}

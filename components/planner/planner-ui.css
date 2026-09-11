@@ -6021,6 +6021,41 @@
   font-size: 12px;
   color: var(--pos-ink-muted);
 }
+.pos-finance-period-nav {
+  gap: 8px;
+}
+.pos-finance-period-field {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+}
+.pos-finance-period-field input[type="date"],
+.pos-finance-period-field input[type="month"],
+.pos-finance-period-field select {
+  min-width: 9.5rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--pos-ink);
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.pos-finance-period-field input[type="date"]:focus,
+.pos-finance-period-field input[type="month"]:focus,
+.pos-finance-period-field select:focus {
+  outline: 2px solid var(--pos-primary-ring, #c7d2fe);
+  outline-offset: 1px;
+}
+.pos-finance-period-nav .week-range-field {
+  margin: 0;
+}
+.pos-finance-period-nav .week-range-control {
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
 
 .pos-finance-tabs,
 .pos-finance-grain-tabs {
