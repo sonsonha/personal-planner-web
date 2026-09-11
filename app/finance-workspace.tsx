@@ -165,6 +165,18 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
 
   const activeSources = useMemo(() => sources, [sources]);
 
+  const transactionTotals = useMemo(() => {
+    let incomeVnd = 0;
+    let expenseVnd = 0;
+    let debtVnd = 0;
+    for (const tx of transactions) {
+      if (tx.type === "income") incomeVnd += tx.amountVnd;
+      else if (tx.type === "expense") expenseVnd += tx.amountVnd;
+      else if (tx.type === "debt") debtVnd += tx.amountVnd;
+    }
+    return { incomeVnd, expenseVnd, debtVnd };
+  }, [transactions]);
+
   const setTransactionsGrain = (grain: TransactionsGrain) => {
     setTxGrain(grain);
     setTxPeriod(currentTransactionsPeriodKey(grain));
@@ -628,6 +640,30 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
               </li>
             ))}
           </ul>
+          {(transactionTotals.incomeVnd > 0
+            || transactionTotals.expenseVnd > 0
+            || transactionTotals.debtVnd > 0) && (
+            <div className="pos-finance-tx-totals" aria-label="Period totals">
+              {transactionTotals.incomeVnd > 0 && (
+                <div className="pos-finance-tx-total-row">
+                  <span>Total income</span>
+                  <strong className="pos-mono ok">+{formatVnd(transactionTotals.incomeVnd)}</strong>
+                </div>
+              )}
+              {transactionTotals.expenseVnd > 0 && (
+                <div className="pos-finance-tx-total-row">
+                  <span>Total expense</span>
+                  <strong className="pos-mono">−{formatVnd(transactionTotals.expenseVnd)}</strong>
+                </div>
+              )}
+              {transactionTotals.debtVnd > 0 && (
+                <div className="pos-finance-tx-total-row">
+                  <span>Total debt paid</span>
+                  <strong className="pos-mono">−{formatVnd(transactionTotals.debtVnd)}</strong>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 

@@ -6768,6 +6768,26 @@
   border-color: var(--pos-border-light);
 }
 .pos-finance-tx-row .ok { color: var(--pos-emerald); }
+.pos-finance-tx-totals {
+  margin-top: 4px;
+  padding: 12px 4px 4px;
+  border-top: 1px solid var(--pos-border);
+  display: grid;
+  gap: 8px;
+}
+.pos-finance-tx-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--pos-ink-secondary);
+}
+.pos-finance-tx-total-row strong {
+  font-size: 14px;
+  color: var(--pos-ink);
+}
+.pos-finance-tx-total-row .ok { color: var(--pos-emerald); }
 .pos-finance-hr { border: 0; border-top: 1px solid var(--pos-border); margin: 16px 0; }
 .pos-finance-settings { max-height: min(90vh, 720px); overflow: auto; }
 
