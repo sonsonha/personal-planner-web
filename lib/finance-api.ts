@@ -365,6 +365,8 @@ export function deleteDebtPayment(id: string) {
 export function fetchFinanceTransactions(opts: {
   type?: "all" | "income" | "expense" | "debt";
   month?: string;
+  from?: string;
+  to?: string;
   sourceId?: string;
   categoryId?: string;
   limit?: number;
@@ -372,6 +374,8 @@ export function fetchFinanceTransactions(opts: {
   const params = new URLSearchParams();
   if (opts.type) params.set("type", opts.type);
   if (opts.month) params.set("month", opts.month);
+  if (opts.from) params.set("from", opts.from);
+  if (opts.to) params.set("to", opts.to);
   if (opts.sourceId) params.set("sourceId", opts.sourceId);
   if (opts.categoryId) params.set("categoryId", opts.categoryId);
   if (opts.limit) params.set("limit", String(opts.limit));
@@ -416,6 +420,90 @@ export function shiftMonth(month: string, delta: number): string {
   const [y, m] = month.split("-").map(Number) as [number, number];
   const d = new Date(Date.UTC(y, m - 1 + delta, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export type TransactionsGrain = "day" | "week" | "month" | "year";
+
+function addIsoDays(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split("-").map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return dt.toISOString().slice(0, 10);
+}
+
+function monthDateBounds(month: string): { start: string; end: string } {
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  const start = `${month}-01`;
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const end = `${month}-${String(lastDay).padStart(2, "0")}`;
+  return { start, end };
+}
+
+function weekDateBounds(anchorDate: string): { start: string; end: string } {
+  const [y, m, d] = anchorDate.split("-").map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const dow = dt.getUTCDay();
+  const offsetToMon = dow === 0 ? -6 : 1 - dow;
+  const start = addIsoDays(anchorDate, offsetToMon);
+  return { start, end: addIsoDays(start, 6) };
+}
+
+export function resolveTransactionsPeriod(
+  grain: TransactionsGrain,
+  periodKey?: string,
+): { grain: TransactionsGrain; periodKey: string; label: string; start: string; end: string } {
+  const today = todayLocalDate();
+  if (grain === "day") {
+    const key = periodKey && /^\d{4}-\d{2}-\d{2}$/.test(periodKey) ? periodKey : today;
+    const label = new Intl.DateTimeFormat("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(`${key}T00:00:00Z`));
+    return { grain, periodKey: key, label, start: key, end: key };
+  }
+  if (grain === "week") {
+    const anchor = periodKey && /^\d{4}-\d{2}-\d{2}$/.test(periodKey) ? periodKey : today;
+    const b = weekDateBounds(anchor);
+    return {
+      grain,
+      periodKey: b.start,
+      label: `${b.start} – ${b.end}`,
+      start: b.start,
+      end: b.end,
+    };
+  }
+  if (grain === "month") {
+    const key = periodKey && /^\d{4}-\d{2}$/.test(periodKey) ? periodKey : today.slice(0, 7);
+    const b = monthDateBounds(key);
+    return {
+      grain,
+      periodKey: key,
+      label: formatMonthLabel(key),
+      start: b.start,
+      end: b.end,
+    };
+  }
+  const key = periodKey && /^\d{4}$/.test(periodKey) ? periodKey : today.slice(0, 4);
+  return {
+    grain,
+    periodKey: key,
+    label: key,
+    start: `${key}-01-01`,
+    end: `${key}-12-31`,
+  };
+}
+
+export function shiftTransactionsPeriod(grain: TransactionsGrain, periodKey: string, delta: number): string {
+  if (grain === "day") return addIsoDays(periodKey, delta);
+  if (grain === "week") return addIsoDays(periodKey, delta * 7);
+  if (grain === "month") return shiftMonth(periodKey, delta);
+  return String(Number(periodKey) + delta);
+}
+
+export function currentTransactionsPeriodKey(grain: TransactionsGrain): string {
+  return resolveTransactionsPeriod(grain).periodKey;
 }
 
 export const BUCKET_LABELS: Record<FinanceBucket, string> = {

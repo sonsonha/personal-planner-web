@@ -41,13 +41,16 @@ import {
   fetchIncomeSources,
   formatMonthLabel,
   formatVnd,
+  currentTransactionsPeriodKey,
   patchDebt,
   patchDebtPayment,
   patchExpenseEntry,
   patchIncomeEntry,
   PlannerApiError,
   previewAllocationAmounts,
+  resolveTransactionsPeriod,
   shiftMonth,
+  shiftTransactionsPeriod,
   todayLocalDate,
   updateAllocationSettings,
   type FinanceBucket,
@@ -56,6 +59,7 @@ import {
   type FinanceIncomeSource,
   type FinanceSummary,
   type FinanceTransaction,
+  type TransactionsGrain,
 } from "@/lib/finance-api";
 import { FinanceAnalyticsPanel } from "@/components/planner/finance/FinanceAnalyticsPanel";
 
@@ -99,6 +103,8 @@ function onAmountFieldChange(
 
 export function FinanceWorkspace({ live, onChanged }: Props) {
   const [month, setMonth] = useState(() => currentMonthKey());
+  const [txGrain, setTxGrain] = useState<TransactionsGrain>("month");
+  const [txPeriod, setTxPeriod] = useState(() => currentTransactionsPeriodKey("month"));
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [sources, setSources] = useState<FinanceIncomeSource[]>([]);
   const [categories, setCategories] = useState<FinanceExpenseCategory[]>([]);
@@ -113,6 +119,10 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
   const [reloadKey, setReloadKey] = useState(0);
 
   const reload = useCallback(() => setReloadKey((v) => v + 1), []);
+  const txRange = useMemo(
+    () => resolveTransactionsPeriod(txGrain, txPeriod),
+    [txGrain, txPeriod],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -129,7 +139,12 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
           fetchIncomeSources(),
           fetchExpenseCategories(),
           fetchDebts(),
-          fetchFinanceTransactions({ type: txFilter, month, limit: 80 }),
+          fetchFinanceTransactions({
+            type: txFilter,
+            from: txRange.start,
+            to: txRange.end,
+            limit: txGrain === "year" ? 300 : 120,
+          }),
         ]);
         if (cancelled) return;
         setSummary(sum);
@@ -146,16 +161,21 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
     })();
 
     return () => { cancelled = true; };
-  }, [month, txFilter, reloadKey]);
+  }, [month, txFilter, txGrain, txRange.start, txRange.end, reloadKey]);
 
   const activeSources = useMemo(() => sources, [sources]);
+
+  const setTransactionsGrain = (grain: TransactionsGrain) => {
+    setTxGrain(grain);
+    setTxPeriod(currentTransactionsPeriodKey(grain));
+  };
 
   return (
     <section className="gp-workspace gp-workspace-overview pos-finance" aria-label="Finance">
       <div className="pos-finance-inner">
         <div className="pos-finance-chrome">
           <div className="pos-finance-toolbar">
-            {(tab === "overview" || tab === "transactions") && (
+            {tab === "overview" && (
               <div className="pos-finance-month-picker" role="group" aria-label="Select month">
                 <button
                   type="button"
@@ -185,6 +205,59 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
                 >
                   This month
                 </button>
+              </div>
+            )}
+            {tab === "transactions" && (
+              <div className="pos-finance-tx-period" role="group" aria-label="Transaction period">
+                <div className="pos-finance-grain-tabs" role="tablist" aria-label="Period grain">
+                  {([
+                    ["day", "Day"],
+                    ["week", "Week"],
+                    ["month", "Month"],
+                    ["year", "Year"],
+                  ] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      aria-selected={txGrain === id}
+                      className={txGrain === id ? "active" : undefined}
+                      onClick={() => setTransactionsGrain(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="pos-finance-month-picker" role="group" aria-label="Select period">
+                  <button
+                    type="button"
+                    className="pos-finance-month-step"
+                    onClick={() => setTxPeriod(shiftTransactionsPeriod(txGrain, txRange.periodKey, -1))}
+                    aria-label="Previous period"
+                  >
+                    <ChevronLeft size={18} aria-hidden />
+                  </button>
+                  <div className="pos-finance-month-current">
+                    <CalendarDays size={15} aria-hidden />
+                    <strong>{txRange.label}</strong>
+                  </div>
+                  <button
+                    type="button"
+                    className="pos-finance-month-step"
+                    onClick={() => setTxPeriod(shiftTransactionsPeriod(txGrain, txRange.periodKey, 1))}
+                    aria-label="Next period"
+                  >
+                    <ChevronRight size={18} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="pos-finance-month-today"
+                    onClick={() => setTxPeriod(currentTransactionsPeriodKey(txGrain))}
+                    disabled={txRange.periodKey === currentTransactionsPeriodKey(txGrain)}
+                  >
+                    Current
+                  </button>
+                </div>
               </div>
             )}
             {tab === "overview" && (
@@ -495,7 +568,14 @@ export function FinanceWorkspace({ live, onChanged }: Props) {
       {tab === "transactions" && summary && (
         <>
           <div className="pos-finance-history-head">
-            <h3 className="pos-finance-section-title">Transactions</h3>
+            <div>
+              <h3 className="pos-finance-section-title">Transactions</h3>
+              <p className="pos-finance-tx-range pos-mono">
+                {txRange.start === txRange.end
+                  ? txRange.start
+                  : `${txRange.start} → ${txRange.end}`}
+              </p>
+            </div>
             <div className="pos-finance-tx-filters" role="tablist">
               {(["all", "income", "expense", "debt"] as const).map((f) => (
                 <button

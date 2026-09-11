@@ -6005,6 +6005,22 @@
   gap: 6px;
   border-radius: 10px;
 }
+.pos-finance-tx-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  min-width: 0;
+  flex: 1;
+}
+.pos-finance-tx-period .pos-finance-grain-tabs {
+  margin: 0;
+}
+.pos-finance-tx-range {
+  margin: 0;
+  font-size: 12px;
+  color: var(--pos-ink-muted);
+}
 
 .pos-finance-tabs,
 .pos-finance-grain-tabs {
