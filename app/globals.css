@@ -1313,7 +1313,7 @@ button {
   right: 0;
   bottom: 0;
   left: 0;
-  height: 12px;
+  height: 8px;
   border: 0;
   background: transparent;
   cursor: ns-resize;
@@ -1321,15 +1321,7 @@ button {
 }
 
 .event-resize-handle::after {
-  content: "";
-  position: absolute;
-  right: 8px;
-  bottom: 3px;
-  left: 8px;
-  height: 2px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--event-color), #111525 35%);
-  opacity: 0.55;
+  content: none;
 }
 
 .month-calendar {
@@ -2931,8 +2923,7 @@ button {
 }
 
 .pos-cal .calendar-event.tiny {
-  padding: 4px 6px;
-  min-height: 32px;
+  padding: 2px 5px;
 }
 
 .pos-cal .event-title-row {
@@ -3042,7 +3033,7 @@ button {
 }
 
 .pos-cal .event-resize-handle {
-  opacity: 0;
+  opacity: 1;
 }
 
 .pos-cal .calendar-event:hover .event-resize-handle,

@@ -3918,7 +3918,7 @@ function CalendarEvent({
       }
       style={{
         top: block.start - START_HOUR * 60 + 1,
-        height: Math.max(isTiny ? 28 : 32, displayDuration - 2),
+        height: Math.max(isTiny ? 18 : 28, displayDuration - 2),
         left: layout.left,
         right: layout.right,
         "--event-color": block.color,
