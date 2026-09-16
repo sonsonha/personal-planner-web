@@ -135,6 +135,7 @@ import {
   getTasksWorkspacePrefs,
   patchTasksWorkspacePrefs,
 } from "@/lib/tasks-workspace-prefs";
+import { collapseForAllView, countUnscheduledTaskBadge } from "@/lib/task-inventory";
 
 type TaskStatus = "inbox" | "scheduled" | "done";
 type CalendarDrawerFilter = "today" | "week" | "inbox";
@@ -1629,6 +1630,17 @@ export function PlannerApp({
     return { start, startMs: start.getTime(), endMs: addDays(start, 7).getTime() };
   }, [taskAnchor]);
 
+  const tasksAllActiveCount = useMemo(() => {
+    if (activeSection !== "tasks" || taskHorizon !== "all") return null;
+    const scoped = tasks.filter((task) =>
+      taskBelongsToHorizon(task, "all", taskAnchor, blocks, weekStart, now),
+    );
+    return collapseForAllView(
+      scoped.filter((task) => task.status !== "done"),
+      { showCompleted: false, nowMs: now.getTime() },
+    ).length;
+  }, [activeSection, taskHorizon, tasks, blocks, taskAnchor, weekStart, now]);
+
   const tasksWeekHeaderCounts = useMemo(() => {
     if (activeSection !== "tasks" || taskHorizon !== "week") return null;
     const scoped = tasks.filter((task) =>
@@ -2807,7 +2819,7 @@ export function PlannerApp({
   return (
     <div className="app-shell">
       <PlannerSidebar
-        inboxCount={tasks.filter((task) => task.status === "inbox").length}
+        inboxCount={countUnscheduledTaskBadge(tasks, blocks)}
         activeSection={activeSection}
         showPlannerBlocks={showPlannerBlocks}
         showExternalEvents={showExternalEvents}
@@ -2887,7 +2899,7 @@ export function PlannerApp({
                   {taskHorizon === "week" && tasksWeekHeaderCounts
                     ? formatWeekHeaderCounts(tasksWeekHeaderCounts)
                     : taskHorizon === "all"
-                      ? `${tasks.filter((task) => task.status !== "done").length} active`
+                      ? `${tasksAllActiveCount ?? 0} active`
                       : horizonCaption(taskHorizon, taskAnchor)}
                 </span>
               </h1>
@@ -4831,10 +4843,13 @@ function TasksWorkspace({
   const normalizedQuery = query.trim().toLowerCase();
 
   const scoped = tasks.filter((task) => taskBelongsToHorizon(task, horizon, anchor, blocks, weekStart, now));
+  const inventory = horizon === "all"
+    ? collapseForAllView(scoped, { showCompleted, nowMs: now.getTime() })
+    : scoped;
   const weekWindow = horizon === "week"
     ? { startMs: startOfWeek(anchor).getTime(), endMs: addDays(startOfWeek(anchor), 7).getTime() }
     : null;
-  const visible = scoped
+  const visible = inventory
     .filter((task) => {
       // Week hierarchy still needs completed routine instances for 0/7 → 1/7 progress,
       // and completed work that had Sessions this week (Calendar history → Tasks Week).

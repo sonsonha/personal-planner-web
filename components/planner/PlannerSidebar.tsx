@@ -140,7 +140,12 @@ export function PlannerSidebar({
                   <>
                     <span>{item.label}</span>
                     {item.id === "tasks" && inboxCount > 0 && (
-                      <em className="pos-sidebar-badge pos-mono">{inboxCount}</em>
+                      <em
+                        className="pos-sidebar-badge pos-mono"
+                        title="Open tasks without calendar sessions"
+                      >
+                        {inboxCount}
+                      </em>
                     )}
                   </>
                 )}
