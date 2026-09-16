@@ -4785,7 +4785,7 @@ function TasksWorkspace({
   onSetDailyFocus: (taskId: string, date: string | null) => void;
   onSetSessionDailyFocus: (sessionId: string, enabled: boolean, opts?: { replaceDailyFocus?: boolean }) => void;
 }) {
-  const [showCompleted, setShowCompleted] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(true);
   const [projectFilterId, setProjectFilterId] = useState<string | "all">("all");
   const [query, setQuery] = useState("");
   const [chooseFocusOpen, setChooseFocusOpen] = useState(false);
