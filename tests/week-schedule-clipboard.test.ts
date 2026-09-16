@@ -6,6 +6,7 @@ import {
   occupiedSlotsForWeekPaste,
   planWeekSchedulePaste,
   resolveTaskIdForWeekPaste,
+  sessionOutcomeForWeekPaste,
   slotConflictsWithOccupied,
   weekSlotsOverlap,
 } from "../lib/week-schedule-clipboard.ts";
@@ -278,6 +279,43 @@ test("later copies cannot stack onto earlier accepted paste slots", () => {
   assert.equal(plan.create[0]!.taskId, "a");
   assert.equal(plan.skippedConflict.length, 1);
   assert.equal(plan.skippedConflict[0]!.taskId, "b");
+});
+
+test("clipboard copies session outcome template and paste resets progress", () => {
+  const clipboard = buildWeekScheduleClipboard({
+    weekStart: WEEK,
+    label: "w",
+    blocks: [
+      {
+        id: "real",
+        type: "task",
+        day: 0,
+        start: 8 * 60,
+        duration: 120,
+        taskId: "apps",
+        title: "Applications",
+        isDailyFocus: true,
+        sessionOutcome: {
+          type: "QUANTITY",
+          items: [],
+          target: 2,
+          actual: 1,
+          unit: "applications",
+        },
+      },
+    ],
+    tasks: [{ id: "apps", title: "Applications", status: "scheduled", projectId: null }],
+  });
+  assert.equal(clipboard.sessions.length, 1);
+  assert.equal(clipboard.sessions[0]!.isDailyFocus, true);
+  assert.equal(clipboard.sessions[0]!.sessionOutcome?.type, "QUANTITY");
+  assert.equal(clipboard.sessions[0]!.sessionOutcome?.actual, 1);
+
+  const pasted = sessionOutcomeForWeekPaste(clipboard.sessions[0]!);
+  assert.equal(pasted?.type, "QUANTITY");
+  assert.equal(pasted?.target, 2);
+  assert.equal(pasted?.actual, 0);
+  assert.equal(pasted?.unit, "applications");
 });
 
 test("pending blocks occupy time; clipboard ignores pending sources", () => {

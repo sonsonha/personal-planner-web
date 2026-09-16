@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   emptySessionOutcome,
   newChecklistItem,
+  resetSessionOutcomeForPaste,
   sessionOutcomeProgressLabel,
 } from "../lib/session-outcome.ts";
 
@@ -33,4 +34,33 @@ test("checklist progress and quantity exceed-target remain visible", () => {
     unit: "applications",
   };
   assert.equal(sessionOutcomeProgressLabel(quantity), "3 / 2 applications");
+});
+
+test("resetSessionOutcomeForPaste keeps template but clears progress", () => {
+  assert.equal(resetSessionOutcomeForPaste(emptySessionOutcome()), null);
+  assert.deepEqual(
+    resetSessionOutcomeForPaste({
+      type: "QUANTITY",
+      items: [],
+      target: 2,
+      actual: 1,
+      unit: "applications",
+    }),
+    {
+      type: "QUANTITY",
+      items: [],
+      target: 2,
+      actual: 0,
+      unit: "applications",
+    },
+  );
+  const reset = resetSessionOutcomeForPaste({
+    type: "CHECKLIST",
+    items: [{ id: "1", text: "A", done: true }],
+    target: null,
+    actual: null,
+    unit: null,
+  });
+  assert.equal(reset?.type, "CHECKLIST");
+  assert.equal(reset?.items[0]?.done, false);
 });

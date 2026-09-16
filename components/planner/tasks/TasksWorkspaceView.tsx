@@ -4,7 +4,11 @@ import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "re
 import { EmptyState } from "../shared";
 import { cn } from "../utils";
 import { groupTasks } from "@/lib/task-groups";
-import { deriveTaskProgressFromSessions, directTaskCompletePolicy } from "@/lib/session-evidence";
+import {
+  deriveTaskProgressFromSessions,
+  directTaskCompletePolicy,
+  isTaskCompletedForListView,
+} from "@/lib/session-evidence";
 import { isSessionDailyFocusOnDate } from "@/lib/daily-focus";
 import { type WeekRoutineRow } from "@/lib/week-task-hierarchy";
 import { TaskRow } from "./TaskRow";
@@ -394,11 +398,13 @@ export function TasksWorkspaceView({
                           const meta = row.meta;
                           const block = blockForTask(task.id, blocks);
                           const taskBlocks = blocks.filter((candidate) => candidate.taskId === task.id);
+                          const evidenceBlocks = taskBlocks.map((item) => ({
+                            id: item.id,
+                            status: item.status ?? "PLANNED",
+                          }));
+                          const listCompleted = isTaskCompletedForListView(task, evidenceBlocks);
                           const policy = directTaskCompletePolicy(
-                            taskBlocks.map((item) => ({
-                              id: item.id,
-                              status: item.status ?? "PLANNED",
-                            })),
+                            evidenceBlocks,
                             { definitionOfDone: task.definitionOfDone },
                           );
                           const isCore = group.id === "core";
@@ -425,10 +431,11 @@ export function TasksWorkspaceView({
                               sessionProgressLabel={sessionProgressLabel}
                               scheduleLabel={scheduleLabel}
                               horizonLabel={getHorizonLabel(task)}
-                              completeEnabled={task.status === "done" || policy.allow}
+                              displayCompleted={listCompleted}
+                              completeEnabled={listCompleted || policy.allow}
                               onOpen={() => onOpenTask(task.id)}
                               onToggleComplete={() => {
-                                if (task.status === "done") {
+                                if (listCompleted) {
                                   onRestore(task.id);
                                   return;
                                 }
@@ -441,19 +448,16 @@ export function TasksWorkspaceView({
                       : group.tasks.map((task) => {
                           const block = blockForTask(task.id, blocks);
                           const taskBlocks = blocks.filter((candidate) => candidate.taskId === task.id);
+                          const evidenceBlocks = taskBlocks.map((item) => ({
+                            id: item.id,
+                            status: item.status ?? "PLANNED",
+                          }));
+                          const listCompleted = isTaskCompletedForListView(task, evidenceBlocks);
                           const policy = directTaskCompletePolicy(
-                            taskBlocks.map((item) => ({
-                              id: item.id,
-                              status: item.status ?? "PLANNED",
-                            })),
+                            evidenceBlocks,
                             { definitionOfDone: task.definitionOfDone },
                           );
-                          const progress = deriveTaskProgressFromSessions(
-                            taskBlocks.map((item) => ({
-                              id: item.id,
-                              status: item.status ?? "PLANNED",
-                            })),
-                          );
+                          const progress = deriveTaskProgressFromSessions(evidenceBlocks);
                           const sessionProgressLabel = progress.activeCount > 0
                             ? `${progress.completedCount} / ${progress.activeCount} sessions · ${progress.progressPercent}%`
                             : null;
@@ -477,9 +481,10 @@ export function TasksWorkspaceView({
                                 group.id === "routines" ? "Routine" : getHorizonLabel(task)
                               }
                               onOpen={() => onOpenTask(task.id)}
-                              completeEnabled={task.status === "done" || policy.allow}
+                              displayCompleted={listCompleted}
+                              completeEnabled={listCompleted || policy.allow}
                               onToggleComplete={() => {
-                                if (task.status === "done") {
+                                if (listCompleted) {
                                   onRestore(task.id);
                                   return;
                                 }

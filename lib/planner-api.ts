@@ -416,6 +416,7 @@ export function createTimeBlock(input: {
   isDailyFocus?: boolean;
   replaceDailyFocus?: boolean;
   seriesScope?: ApiSeriesScope;
+  sessionOutcome?: Partial<ApiSessionOutcome> | null;
 }) {
   return requestJson<ApiTimeBlock>("/api/time-blocks", {
     method: "POST",

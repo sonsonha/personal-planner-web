@@ -22,6 +22,7 @@ export type TasksViewTask = {
   goalProcessId?: string | null;
   repeatSeriesId?: string | null;
   projectType?: "STANDARD" | "HABIT" | null;
+  outcomeAchieved?: boolean;
 };
 
 export type TasksViewBlock = {

@@ -47,6 +47,27 @@ export function sessionOutcomeProgressLabel(outcome?: SessionOutcome | null): st
   return `${actual} / ${target}${unit}`;
 }
 
+/** Copy outcome structure for a new week; clear progress (actual / checklist ticks). */
+export function resetSessionOutcomeForPaste(outcome?: SessionOutcome | null): SessionOutcome | null {
+  if (!outcome || outcome.type === "NONE") return null;
+  if (outcome.type === "CHECKLIST") {
+    return {
+      type: "CHECKLIST",
+      items: outcome.items.map((item) => ({ ...item, done: false })),
+      target: null,
+      actual: null,
+      unit: null,
+    };
+  }
+  return {
+    type: "QUANTITY",
+    items: [],
+    target: outcome.target ?? 0,
+    actual: 0,
+    unit: outcome.unit ?? null,
+  };
+}
+
 export function newChecklistItem(text: string): SessionOutcomeChecklistItem {
   const id = typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()

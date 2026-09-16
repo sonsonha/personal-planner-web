@@ -5,6 +5,7 @@ import type {
   TasksViewTask,
 } from "../components/planner/tasks/types.ts";
 import { findDailyFocusSession, isSessionDailyFocusOnDate } from "./daily-focus.ts";
+import { isTaskCompletedForListView } from "./session-evidence.ts";
 import {
   buildWeekTaskHierarchy,
   isRoutineTask,
@@ -108,7 +109,8 @@ export function groupTasks(
   const focusTaskId = focusSession?.taskId ?? null;
 
   for (const task of tasks) {
-    if (task.status === "done") {
+    const taskBlocks = blocks.filter((block) => block.taskId === task.id);
+    if (isTaskCompletedForListView(task, taskBlocks)) {
       ensure("completed").push(task);
       continue;
     }

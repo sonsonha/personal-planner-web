@@ -1,4 +1,8 @@
 import { productDateFromEpoch } from "./daily-focus.ts";
+import {
+  resetSessionOutcomeForPaste,
+  type SessionOutcome,
+} from "./session-outcome.ts";
 
 /** Timed occupancy on a week grid (day 0–6, minutes from midnight). */
 export type WeekSlot = {
@@ -15,6 +19,9 @@ export type WeekClipboardSession = WeekSlot & {
   color: string;
   /** Source series, if any — used to rematch habit instances on the target week. */
   repeatSeriesId?: string | null;
+  isDailyFocus?: boolean;
+  /** Outcome template — actual / checklist progress reset on paste. */
+  sessionOutcome?: SessionOutcome | null;
 };
 
 export type WeekScheduleClipboard = {
@@ -144,6 +151,8 @@ export function buildWeekScheduleClipboard(input: {
     projectId?: string | null;
     color?: string;
     repeatSeriesId?: string | null;
+    isDailyFocus?: boolean;
+    sessionOutcome?: SessionOutcome | null;
   }>;
   tasks: WeekPasteTask[];
 }): WeekScheduleClipboard {
@@ -165,6 +174,8 @@ export function buildWeekScheduleClipboard(input: {
       projectId: block.projectId ?? task?.projectId ?? null,
       color: block.color ?? task?.color ?? "#3478F6",
       repeatSeriesId: block.repeatSeriesId ?? task?.repeatSeriesId ?? null,
+      isDailyFocus: Boolean(block.isDailyFocus),
+      sessionOutcome: block.sessionOutcome ?? null,
     });
   }
 
@@ -217,6 +228,13 @@ export function planWeekSchedulePaste(input: {
   }
 
   return { create, skippedConflict, skippedMissingTask };
+}
+
+/** Outcome payload for createTimeBlock — structure only, no prior-week progress. */
+export function sessionOutcomeForWeekPaste(
+  session: Pick<WeekClipboardSession, "sessionOutcome">,
+): SessionOutcome | null {
+  return resetSessionOutcomeForPaste(session.sessionOutcome);
 }
 
 export function formatWeekPasteToast(plan: WeekPastePlan): {

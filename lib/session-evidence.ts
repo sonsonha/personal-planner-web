@@ -90,6 +90,18 @@ export type DirectTaskCompletePolicy =
   | { allow: true; mode: "SINGLE_SESSION" }
   | { allow: false; reason: "ZERO_SESSIONS" | "MULTI_SESSION" | "REQUIRES_OUTCOME" };
 
+/** True when a task belongs in the Completed list — ignores stale DONE with open sessions. */
+export function isTaskCompletedForListView(
+  task: { status: string; outcomeAchieved?: boolean },
+  taskBlocks: SessionEvidenceBlock[],
+): boolean {
+  if ((task.status ?? "").toLowerCase() !== "done") return false;
+  if (task.outcomeAchieved) return true;
+  const progress = deriveTaskProgressFromSessions(taskBlocks);
+  if (progress.activeCount > 1 && progress.progressState !== "DONE") return false;
+  return true;
+}
+
 export function directTaskCompletePolicy(
   blocks: SessionEvidenceBlock[],
   opts?: { definitionOfDone?: string | null },

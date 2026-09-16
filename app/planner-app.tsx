@@ -126,6 +126,7 @@ import { CALENDAR_SNAP_MINUTES, snapMinutesForCreate } from "@/lib/calendar-snap
 import { goalsInOwnerPriorityOrder, projectsInOwnerPriorityOrder } from "@/lib/project-sections";
 import {
   buildWeekScheduleClipboard,
+  sessionOutcomeForWeekPaste,
   formatWeekPasteToast,
   planWeekSchedulePaste,
   type WeekScheduleClipboard,
@@ -158,6 +159,7 @@ type PlannerTask = {
   projectType?: "STANDARD" | "HABIT" | null;
   carryOverFromTaskId?: string | null;
   carryOverNote?: string | null;
+  outcomeAchieved?: boolean;
 };
 
 type CalendarBlock = {
@@ -683,6 +685,7 @@ function taskFromApi(task: ApiTask, projects: ProjectOption[]): PlannerTask {
     projectType: project.projectType ?? "STANDARD",
     carryOverFromTaskId: task.carryOverFromTaskId ?? null,
     carryOverNote: task.carryOverNote ?? null,
+    outcomeAchieved: task.outcomeAchieved ?? false,
   };
 }
 
@@ -1755,6 +1758,8 @@ export function PlannerApp({
         projectId: block.projectId ?? null,
         color: block.color,
         repeatSeriesId: block.repeatSeriesId,
+        isDailyFocus: block.isDailyFocus,
+        sessionOutcome: block.sessionOutcome,
       })),
       tasks: tasks.map((task) => ({
         id: task.id,
@@ -1833,6 +1838,8 @@ export function PlannerApp({
         syncStatus: "PENDING" as const,
         notes: item.notes,
         status: "PLANNED",
+        isDailyFocus: item.isDailyFocus,
+        sessionOutcome: sessionOutcomeForWeekPaste(item) ?? undefined,
       };
     });
 
@@ -1840,7 +1847,7 @@ export function PlannerApp({
     setTasks((current) => current.map((task) => {
       const touched = plan.create.some((item) => item.resolvedTaskId === task.id);
       if (!touched) return task;
-      return { ...task, status: "scheduled" };
+      return { ...task, status: "scheduled", completedAt: null };
     }));
 
     if (!liveDataRef.current) {
@@ -1859,8 +1866,9 @@ export function PlannerApp({
       const endAt = new Date(startAt.getTime() + item.duration * 60_000);
       try {
         if (task?.status === "done") {
-          await updateTask(task.id, { status: "SCHEDULED" });
+          await updateTask(task.id, { status: "SCHEDULED", outcomeAchieved: false });
         }
+        const pastedOutcome = sessionOutcomeForWeekPaste(item);
         const saved = await createPlannerTimeBlock({
           taskId: item.resolvedTaskId,
           projectId: task?.projectId ?? item.projectId,
@@ -1869,6 +1877,8 @@ export function PlannerApp({
           endAt: endAt.toISOString(),
           color: task ? priorityColor(task.priority) : item.color,
           notes: item.notes || undefined,
+          ...(item.isDailyFocus ? { isDailyFocus: true, replaceDailyFocus: true } : {}),
+          ...(pastedOutcome ? { sessionOutcome: pastedOutcome } : {}),
         });
         const mapped = timeBlockFromApi(saved, weekStart, projects);
         setBlocks((current) => current.map((block) => (block.id === pending.id ? mapped : block)));
@@ -2257,7 +2267,10 @@ export function PlannerApp({
     setToast(liveDataRef.current ? "Restoring task…" : "Task restored · demo mode");
     if (!liveDataRef.current) return;
     try {
-      await updateTask(taskId, { status: hasBlock ? "SCHEDULED" : "INBOX" });
+      await updateTask(taskId, {
+        status: hasBlock ? "SCHEDULED" : "INBOX",
+        outcomeAchieved: false,
+      });
       setToast(hasBlock ? "Task restored on calendar" : "Task restored to Inbox");
       setEvidenceEpoch((value) => value + 1);
     } catch {

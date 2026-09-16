@@ -32,6 +32,8 @@ export type TaskRowProps = {
   completeEnabled?: boolean;
   /** Hide complete control (routine aggregate rows). */
   hideComplete?: boolean;
+  /** When set, overrides task.status for done styling (stale DONE with open sessions). */
+  displayCompleted?: boolean;
 };
 
 export function TaskRow({
@@ -50,9 +52,10 @@ export function TaskRow({
   onToggleComplete,
   completeEnabled = true,
   hideComplete = false,
+  displayCompleted,
 }: TaskRowProps) {
   const priority = priorityMeta(task.priority);
-  const done = task.status === "done";
+  const done = displayCompleted ?? task.status === "done";
   const showUnscheduledBadge = !block && Boolean(task.dueHorizon);
   const showStar = isDailyFocus || isCoreWork;
 

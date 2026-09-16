@@ -8,6 +8,7 @@ import {
   formatSessionProgressLabel,
   futureWeekOffsets,
   resolveRepeatWeekCount,
+  isTaskCompletedForListView,
   resolveTaskStatusFromEvidence,
   shiftEpochByWeeks,
 } from "../lib/session-evidence.ts";
@@ -115,6 +116,32 @@ test("caps weeks and builds future offsets excluding source week", () => {
   assert.equal(resolveRepeatWeekCount({ weeks: 999, fromEpochMs: 0 }), 52);
   assert.deepEqual(futureWeekOffsets(4), [1, 2, 3, 4]);
   assert.equal(shiftEpochByWeeks(1_000, 2), 1_000 + 14 * 86_400_000);
+});
+
+test("stale DONE with open sessions is not completed in list view", () => {
+  const blocks = [
+    { id: "1", status: "DONE" },
+    { id: "2", status: "PLANNED" },
+    { id: "3", status: "PLANNED" },
+    { id: "4", status: "PLANNED" },
+  ];
+  assert.equal(
+    isTaskCompletedForListView({ status: "done", outcomeAchieved: false }, blocks),
+    false,
+  );
+  assert.equal(
+    isTaskCompletedForListView({ status: "done", outcomeAchieved: true }, blocks),
+    true,
+  );
+  assert.equal(
+    isTaskCompletedForListView({ status: "done", outcomeAchieved: false }, [
+      { id: "1", status: "DONE" },
+      { id: "2", status: "DONE" },
+      { id: "3", status: "DONE" },
+      { id: "4", status: "DONE" },
+    ]),
+    true,
+  );
 });
 
 test("appends carry-over note without overwriting existing notes", () => {
