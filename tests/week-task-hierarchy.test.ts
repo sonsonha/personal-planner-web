@@ -297,7 +297,7 @@ test("groupTasks week uses Core / Also this week / Routines sections", () => {
   }), "1 Core · 1 Also this week · 1 Routine");
 });
 
-test("Routines collapse default when Core Work exists", () => {
+test("Routines stay collapsed by default even without Core Work", () => {
   const hierarchy = buildWeekTaskHierarchy({
     tasks: [
       task({ id: "c", title: "Core" }),
@@ -313,4 +313,18 @@ test("Routines collapse default when Core Work exists", () => {
   });
   const routines = hierarchy.sections.find((section) => section.id === "routines");
   assert.equal(routines?.defaultCollapsed, true);
+
+  const onlyHabits = buildWeekTaskHierarchy({
+    tasks: [task({ id: "h", title: "Habit", projectType: "HABIT", repeatSeriesId: "r" })],
+    sessions: [
+      session({ id: "2", taskId: "h", startAt: "2026-09-08T06:00:00+07:00" }),
+    ],
+    weekStartMs: WEEK_START,
+    weekEndMs: WEEK_END,
+    isOverdue: () => false,
+  });
+  assert.equal(
+    onlyHabits.sections.find((section) => section.id === "routines")?.defaultCollapsed,
+    true,
+  );
 });

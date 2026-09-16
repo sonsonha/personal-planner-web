@@ -79,11 +79,15 @@ export type WeekHierarchyResult = {
 
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
+/**
+ * Maintain / habit inventory — not merely "has a repeat series".
+ * Weekly work meetings (STANDARD + repeatSeriesId) stay real Tasks.
+ */
 export function isRoutineTask(task: {
   repeatSeriesId?: string | null;
   projectType?: "STANDARD" | "HABIT" | null;
 }): boolean {
-  return Boolean(task.repeatSeriesId) || task.projectType === "HABIT";
+  return task.projectType === "HABIT";
 }
 
 /** Prefer repeat-series lineage; fall back to habit semantic identity — never title alone across projects. */
@@ -314,7 +318,6 @@ export function buildWeekTaskHierarchy(input: {
 
   const routineCompleted = routineRows.reduce((sum, row) => sum + row.completedSessions, 0);
   const routinePlanned = routineRows.reduce((sum, row) => sum + row.plannedSessions, 0);
-  const hasCore = core.length > 0;
 
   const sections: WeekHierarchySection[] = [
     { id: "overdue", label: "Overdue", rows: overdue },
@@ -327,7 +330,7 @@ export function buildWeekTaskHierarchy(input: {
       completedSessions: routineCompleted,
       plannedSessions: routinePlanned,
       collapsible: true,
-      defaultCollapsed: hasCore,
+      defaultCollapsed: true,
     },
     { id: "completed", label: "Completed", rows: completed },
   ].filter((section) => {

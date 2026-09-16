@@ -138,7 +138,7 @@ export function TasksWorkspaceView({
 
   useEffect(() => {
     setRoutinesExpanded(null);
-  }, [weekStartMs]);
+  }, [weekStartMs, horizon, focusDate]);
 
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
   const quietPriority = horizon === "week";

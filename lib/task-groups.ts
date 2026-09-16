@@ -210,11 +210,6 @@ export function groupTasks(
               { id: "completed", label: "Completed" },
             ];
 
-  const alsoTodayCount = (buckets["also-today"] ?? []).length;
-  const dayDueCount = (buckets["day-due"] ?? []).length;
-  const hasFiniteBesideRoutines = alsoTodayCount + dayDueCount + (buckets["scheduled"] ?? []).length > 0
-    || (buckets["daily-focus"] ?? []).length > 0;
-
   return order
     .map((meta) => ({
       id: meta.id,
@@ -223,7 +218,8 @@ export function groupTasks(
       ...(meta.id === "routines"
         ? {
             collapsible: true,
-            defaultCollapsed: hasFiniteBesideRoutines,
+            // Always start collapsed so habits don't bury real work.
+            defaultCollapsed: true,
           }
         : {}),
     }))
