@@ -131,6 +131,10 @@ import {
   planWeekSchedulePaste,
   type WeekScheduleClipboard,
 } from "@/lib/week-schedule-clipboard";
+import {
+  getTasksWorkspacePrefs,
+  patchTasksWorkspacePrefs,
+} from "@/lib/tasks-workspace-prefs";
 
 type TaskStatus = "inbox" | "scheduled" | "done";
 type CalendarDrawerFilter = "today" | "week" | "inbox";
@@ -1007,8 +1011,21 @@ export function PlannerApp({
   const [reloadKey, setReloadKey] = useState(0);
   const [evidenceEpoch, setEvidenceEpoch] = useState(0);
   const [taskFilter, setTaskFilter] = useState<CalendarDrawerFilter>("today");
-  const [taskHorizon, setTaskHorizon] = useState<HorizonScope>("week");
-  const [taskAnchor, setTaskAnchor] = useState(() => startOfDay(new Date()));
+  const [taskHorizon, setTaskHorizonState] = useState<HorizonScope>(
+    () => getTasksWorkspacePrefs().horizon,
+  );
+  const [taskAnchor, setTaskAnchorState] = useState(
+    () => startOfDay(new Date(getTasksWorkspacePrefs().anchorMs)),
+  );
+  const setTaskHorizon = useCallback((value: HorizonScope) => {
+    setTaskHorizonState(value);
+    patchTasksWorkspacePrefs({ horizon: value });
+  }, []);
+  const setTaskAnchor = useCallback((value: Date) => {
+    const next = startOfDay(value);
+    setTaskAnchorState(next);
+    patchTasksWorkspacePrefs({ anchorMs: next.getTime() });
+  }, []);
   const [captureScope, setCaptureScope] = useState<HorizonScope | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -4785,9 +4802,25 @@ function TasksWorkspace({
   onSetDailyFocus: (taskId: string, date: string | null) => void;
   onSetSessionDailyFocus: (sessionId: string, enabled: boolean, opts?: { replaceDailyFocus?: boolean }) => void;
 }) {
-  const [showCompleted, setShowCompleted] = useState(true);
-  const [projectFilterId, setProjectFilterId] = useState<string | "all">("all");
-  const [query, setQuery] = useState("");
+  const [showCompleted, setShowCompletedState] = useState(
+    () => getTasksWorkspacePrefs().showCompleted,
+  );
+  const [projectFilterId, setProjectFilterIdState] = useState<string | "all">(
+    () => getTasksWorkspacePrefs().projectFilterId,
+  );
+  const [query, setQueryState] = useState(() => getTasksWorkspacePrefs().query);
+  const setShowCompleted = useCallback((value: boolean) => {
+    setShowCompletedState(value);
+    patchTasksWorkspacePrefs({ showCompleted: value });
+  }, []);
+  const setProjectFilterId = useCallback((value: string | "all") => {
+    setProjectFilterIdState(value);
+    patchTasksWorkspacePrefs({ projectFilterId: value });
+  }, []);
+  const setQuery = useCallback((value: string) => {
+    setQueryState(value);
+    patchTasksWorkspacePrefs({ query: value });
+  }, []);
   const [chooseFocusOpen, setChooseFocusOpen] = useState(false);
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
   const today = startOfDay(now);

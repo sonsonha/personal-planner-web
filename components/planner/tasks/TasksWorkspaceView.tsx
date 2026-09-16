@@ -170,32 +170,35 @@ export function TasksWorkspaceView({
 
           {horizon !== "all" && (
             <div className="pos-task-period-nav">
-              {(onPrevPeriod || onNextPeriod) && (
-                <div className="pos-task-pager">
-                  <button
-                    type="button"
-                    aria-label="Previous period"
-                    onClick={onPrevPeriod}
-                    disabled={!onPrevPeriod}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                      <path d="M9 11L5 7l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Next period"
-                    onClick={onNextPeriod}
-                    disabled={!onNextPeriod}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                      <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </button>
+              <div className="pos-task-period-strip">
+                <button
+                  type="button"
+                  className="pos-task-period-step"
+                  aria-label="Previous period"
+                  onClick={onPrevPeriod}
+                  disabled={!onPrevPeriod}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                    <path d="M9 11L5 7l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <div className="pos-task-period-control">
+                  {periodControl ?? (
+                    <span className="pos-task-period-caption">{periodCaption}</span>
+                  )}
                 </div>
-              )}
-              {periodControl}
-              <span className="pos-task-period-caption">{periodCaption}</span>
+                <button
+                  type="button"
+                  className="pos-task-period-step"
+                  aria-label="Next period"
+                  onClick={onNextPeriod}
+                  disabled={!onNextPeriod}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                    <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
               {canJumpCurrent && onJumpCurrent && (
                 <button type="button" className="pos-task-jump-current" onClick={onJumpCurrent}>
                   {jumpCurrentLabel

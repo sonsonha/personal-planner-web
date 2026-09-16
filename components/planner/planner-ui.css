@@ -3934,9 +3934,49 @@
 
 .pos-task-period-nav {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
+}
+
+.pos-task-period-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pos-task-period-control {
+  display: inline-flex;
+  align-items: center;
+}
+
+.pos-task-period-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--pos-border);
+  border-radius: 8px;
+  background: var(--pos-card);
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.pos-task-period-step:hover:not(:disabled) {
+  background: #f9fafb;
+}
+
+.pos-task-period-step:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pos-task-period-step:focus-visible {
+  outline: 2px solid var(--pos-primary-ring);
+  outline-offset: 1px;
 }
 
 .pos-task-period-nav input[type="date"],
@@ -3963,12 +4003,22 @@
   box-sizing: border-box;
 }
 
-.pos-qa-field .week-range-field,
-.pos-task-period-nav .week-range-field {
+.pos-qa-field .week-range-field {
   position: relative;
   display: flex;
   align-items: center;
   width: 100%;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.pos-task-period-nav .week-range-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: auto;
   height: auto;
   padding: 0;
   border: 0;
