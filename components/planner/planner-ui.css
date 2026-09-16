@@ -4361,13 +4361,13 @@
 
 .pos-task-row.daily-focus,
 .pos-task-row.core-work {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pos-primary) 35%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--priority-solid, var(--pos-primary)) 28%, transparent);
 }
 
 .pos-task-row.core-work {
   border-left-width: 5px;
-  border-left-color: var(--pos-ink);
-  background: color-mix(in srgb, var(--pos-primary-soft, #eef2ff) 55%, var(--pos-card));
+  border-left-color: var(--priority-strong, var(--pos-ink));
+  background: color-mix(in srgb, var(--priority-bg, var(--priority-soft)) 82%, var(--pos-card));
   padding-top: 12px;
   padding-bottom: 12px;
 }
@@ -4380,8 +4380,9 @@
 .pos-task-row.routine-row {
   padding-top: 7px;
   padding-bottom: 7px;
-  border-left-color: #d1d5db;
-  background: color-mix(in srgb, var(--pos-surface-alt) 40%, var(--pos-card));
+  border-left-width: 3px;
+  border-left-color: color-mix(in srgb, var(--priority-border, #d1d5db) 55%, var(--pos-border));
+  background: color-mix(in srgb, var(--priority-soft, var(--pos-surface-alt)) 40%, var(--pos-card));
   opacity: 0.92;
 }
 
@@ -4391,14 +4392,15 @@
   color: var(--pos-ink-secondary, #4b5563);
 }
 
+/* Week view: soften PRI badge only — keep full-row priority wash. */
 .pos-task-row.quiet-priority {
-  border-left-color: color-mix(in srgb, var(--pos-task-priority-color, #9ca3af) 35%, var(--pos-border));
-  background: var(--pos-card);
+  border-left-color: var(--priority-strong, var(--pos-task-priority-color, var(--pos-border)));
+  background: color-mix(in srgb, var(--priority-bg, var(--priority-soft)) 75%, var(--pos-card));
 }
 
 .pos-task-row.quiet-priority.core-work {
-  border-left-color: var(--pos-ink);
-  background: color-mix(in srgb, var(--pos-primary-soft, #eef2ff) 55%, var(--pos-card));
+  border-left-color: var(--priority-strong, var(--pos-ink));
+  background: color-mix(in srgb, var(--priority-bg, var(--priority-soft)) 82%, var(--pos-card));
 }
 
 .pos-task-check-spacer {
@@ -4408,16 +4410,16 @@
 
 .pos-task-priority.quiet {
   padding: 2px 6px;
-  background: transparent;
-  color: #9ca3af;
+  background: color-mix(in srgb, var(--priority-bg, transparent) 55%, transparent);
+  color: var(--priority-text, #9ca3af);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .pos-task-priority.quiet i {
   width: 6px;
   height: 6px;
-  opacity: 0.55;
+  opacity: 0.9;
 }
 
 .pos-core-focus-dates {
@@ -4547,22 +4549,22 @@
   gap: 8px;
   align-items: center;
   padding: 10px 12px;
-  border: 1px solid var(--pos-border);
+  border: 1px solid color-mix(in srgb, var(--priority-border, var(--pos-border)) 35%, var(--pos-border));
   border-left: 4px solid var(--priority-strong, var(--pos-task-priority-color, var(--pos-primary)));
   border-radius: 12px;
-  background: color-mix(in srgb, var(--priority-soft, transparent) 70%, var(--pos-card));
+  background: color-mix(in srgb, var(--priority-bg, var(--priority-soft, transparent)) 78%, var(--pos-card));
   transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .pos-task-row:hover {
-  border-color: color-mix(in srgb, var(--priority-border, var(--pos-border)) 40%, var(--pos-border));
-  background: color-mix(in srgb, var(--priority-bg, var(--pos-surface-alt)) 55%, var(--pos-card));
+  border-color: color-mix(in srgb, var(--priority-border, var(--pos-border)) 55%, var(--pos-border));
+  background: color-mix(in srgb, var(--priority-bg, var(--pos-surface-alt)) 88%, var(--pos-card));
 }
 
 .pos-task-row.selected {
   border-color: var(--priority-border, var(--pos-primary-ring));
-  background: color-mix(in srgb, var(--priority-bg, var(--pos-primary-soft)) 65%, var(--pos-card));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--priority-solid, var(--pos-primary)) 25%, transparent);
+  background: color-mix(in srgb, var(--priority-bg, var(--pos-primary-soft)) 90%, var(--pos-card));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--priority-solid, var(--pos-primary)) 30%, transparent);
 }
 
 .pos-task-row.done {
