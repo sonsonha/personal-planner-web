@@ -156,8 +156,6 @@ export function groupTasks(
         ensure("month").push(task);
       } else if (taskHorizon === "week") {
         ensure("week").push(task);
-      } else if (taskHorizon === "day") {
-        ensure("days").push(task);
       } else {
         ensure("month").push(task);
       }
@@ -197,7 +195,6 @@ export function groupTasks(
               { id: "overdue", label: "Overdue" },
               { id: "month", label: "Month membership" },
               { id: "week", label: "Week membership" },
-              { id: "days", label: "Specific days" },
               { id: "completed", label: "Completed" },
             ]
           : [

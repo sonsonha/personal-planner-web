@@ -824,6 +824,8 @@ function taskBelongsToHorizon(
   if (!due || !dueHorizon) return false;
   if (horizon === "day" && dueHorizon !== "day") return false;
   if (horizon === "week" && dueHorizon === "month") return false;
+  // Month is planning inventory — not every daily checkpoint that falls in the month.
+  if (horizon === "month" && dueHorizon === "day") return false;
   if (dateInHorizon(due, horizon, anchor)) return true;
   if (task.status === "done") return false;
 
@@ -835,6 +837,8 @@ function taskBelongsToHorizon(
   if (!window || due.getTime() >= window.start.getTime()) return false;
   if (window.start.getTime() > startOfDay(today).getTime()) return false;
   if (horizon === "week") return dueHorizon === "day" || dueHorizon === "week";
+  // Month overdue carry: WEEK/MONTH only — never daily routines.
+  if (horizon === "month") return dueHorizon === "week" || dueHorizon === "month";
   return true;
 }
 
@@ -4621,6 +4625,8 @@ function TasksWorkspace({
       ? "MONTH tasks are planning inventory — not due on the 1st. Assign week or calendar time when ready."
       : horizon === "day"
         ? "Only tasks due on this date, or scheduled on the calendar this day."
+        : horizon === "month"
+          ? "Month shows WEEK and MONTH commitments — not daily checkpoints. Use Day/Week for routines."
         : undefined;
 
   return (
