@@ -269,10 +269,12 @@ export function TasksWorkspaceView({
             title={horizon === "all" ? "No tasks in this view" : `Nothing in this ${horizon}`}
             sub={
               horizon === "all"
-                ? "Capture your next action, or turn on completed to look back."
+                ? "WEEK/MONTH commitments only — daily checkpoints live in Day/Week. Capture a next action, or show completed."
                 : horizon === "day"
                   ? "Day view shows tasks pinned to a specific day. Week membership stays in Week until you pick a day."
-                  : "Add a task for this period, or schedule time on the calendar."
+                  : horizon === "month"
+                    ? "Month lists WEEK and MONTH commitments — not daily checkpoints."
+                    : "Add a task for this period, or schedule time on the calendar."
             }
           />
         ) : (

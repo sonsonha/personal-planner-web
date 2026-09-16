@@ -199,7 +199,6 @@ export function groupTasks(
             ]
           : [
               { id: "overdue", label: "Overdue" },
-              { id: "day", label: "Day" },
               { id: "week", label: "Week" },
               { id: "month", label: "Month" },
               { id: "someday", label: "Someday" },

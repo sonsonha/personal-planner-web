@@ -12,6 +12,8 @@ export type QuickCreateTaskOption = {
   duration: number;
   status: string;
   dueHorizon?: "day" | "week" | "month" | null;
+  isRoutine?: boolean;
+  instanceCount?: number;
 };
 
 export type CalendarQuickCreatePopoverProps = {
@@ -177,7 +179,7 @@ export function CalendarQuickCreatePopover({
         ) : null}
 
         <label className="pos-cal-quick-create-field">
-          <span>Task</span>
+          <span>Link to task</span>
           <select
             value={taskId}
             onChange={(event) => {
@@ -193,6 +195,9 @@ export function CalendarQuickCreatePopover({
               <option key={task.id} value={task.id}>
                 {task.title}
                 {task.dueHorizon ? ` · ${task.dueHorizon.toUpperCase()}` : ""}
+                {task.isRoutine && (task.instanceCount ?? 0) > 1
+                  ? ` · routine`
+                  : ""}
               </option>
             ))}
           </select>

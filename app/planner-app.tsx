@@ -119,6 +119,7 @@ import { GoalsWorkspace, ProgressWorkspace, ProjectsWorkspace, type HorizonScope
 import { FinanceWorkspace } from "./finance-workspace";
 import { parsePlannerPath, plannerPath, type PlannerSection } from "./planner-routes";
 import { aggregateTaskSchedule, formatScheduledMinutes, remainingSessionsAfterRemove } from "@/lib/task-schedule";
+import { listTasksForQuickCreate } from "@/lib/calendar-quick-create-tasks";
 
 type TaskStatus = "inbox" | "scheduled" | "done";
 type CalendarDrawerFilter = "today" | "week" | "inbox";
@@ -809,7 +810,12 @@ function taskBelongsToHorizon(
   weekStart: Date,
   today: Date,
 ) {
-  if (horizon === "all") return true;
+  if (horizon === "all") {
+    // Same inventory lens as Month: skip daily DAY checkpoints.
+    const dueHorizon = taskDueHorizon(task);
+    if (dueHorizon === "day") return false;
+    return true;
+  }
   const hasBlockHere = blocks.some((block) =>
     block.type === "task"
     && block.taskId === task.id
@@ -3304,16 +3310,22 @@ export function PlannerApp({
             slotLabel={slotLabel}
             anchor={slotPicker.anchor}
             live={connection === "live"}
-            tasks={tasks.map((task) => ({
-              id: task.id,
-              title: task.title,
-              projectId: task.projectId,
-              project: task.project,
-              color: task.color,
-              duration: task.duration,
-              status: task.status,
-              dueHorizon: task.dueHorizon,
-            }))}
+            tasks={listTasksForQuickCreate(
+              tasks.map((task) => ({
+                id: task.id,
+                title: task.title,
+                projectId: task.projectId,
+                project: task.project,
+                color: task.color,
+                duration: task.duration,
+                status: task.status,
+                dueAt: task.dueAt,
+                dueHorizon: task.dueHorizon,
+                repeatSeriesId: task.repeatSeriesId,
+                projectType: task.projectType,
+              })),
+              productDateFromEpoch(slotDateValue.getTime()),
+            )}
             projects={projects.map((project) => ({ id: project.id, title: project.title }))}
             onClose={() => {
               setSlotSelectPreview(null);
@@ -4622,12 +4634,12 @@ function TasksWorkspace({
   const footerHint = horizon === "week"
     ? "WEEK tasks belong to this week — no specific day until scheduled. DAY tasks have a real due date. Unscheduled ≠ deleted."
     : horizon === "month"
-      ? "MONTH tasks are planning inventory — not due on the 1st. Assign week or calendar time when ready."
+      ? "Month shows WEEK and MONTH commitments — not daily checkpoints. Use Day/Week for routines."
       : horizon === "day"
         ? "Only tasks due on this date, or scheduled on the calendar this day."
-        : horizon === "month"
-          ? "Month shows WEEK and MONTH commitments — not daily checkpoints. Use Day/Week for routines."
-        : undefined;
+        : horizon === "all"
+          ? "All shows WEEK, MONTH, and open commitments — not daily checkpoints. Use Day/Week for routines."
+          : undefined;
 
   return (
     <div className="tasks-workspace" data-task-project-filter="task-project-filter">
