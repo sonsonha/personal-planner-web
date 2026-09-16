@@ -827,10 +827,13 @@ function taskBelongsToHorizon(
   if (dateInHorizon(due, horizon, anchor)) return true;
   if (task.status === "done") return false;
 
+  // Day view is strict: only tasks due on this date (or scheduled here above).
+  // Do not pull overdue DAY tasks from other dates into "today".
+  if (horizon === "day") return false;
+
   const window = horizonWindow(horizon, anchor);
   if (!window || due.getTime() >= window.start.getTime()) return false;
   if (window.start.getTime() > startOfDay(today).getTime()) return false;
-  if (horizon === "day") return dueHorizon === "day";
   if (horizon === "week") return dueHorizon === "day" || dueHorizon === "week";
   return true;
 }
@@ -4589,7 +4592,7 @@ function TasksWorkspace({
     : horizon === "month"
       ? "MONTH tasks are planning inventory — not due on the 1st. Assign week or calendar time when ready."
       : horizon === "day"
-        ? "Showing DAY tasks for this date and calendar blocks on this day. WEEK tasks appear only when scheduled here."
+        ? "Only tasks due on this date, or scheduled on the calendar this day."
         : undefined;
 
   return (
