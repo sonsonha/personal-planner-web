@@ -121,6 +121,7 @@ import { parsePlannerPath, plannerPath, type PlannerSection } from "./planner-ro
 import { aggregateTaskSchedule, formatScheduledMinutes, remainingSessionsAfterRemove } from "@/lib/task-schedule";
 import { listTasksForQuickCreate } from "@/lib/calendar-quick-create-tasks";
 import { CALENDAR_SNAP_MINUTES, snapMinutesForCreate } from "@/lib/calendar-snap";
+import { goalsInOwnerPriorityOrder, projectsInOwnerPriorityOrder } from "@/lib/project-sections";
 
 type TaskStatus = "inbox" | "scheduled" | "done";
 type CalendarDrawerFilter = "today" | "week" | "inbox";
@@ -634,18 +635,17 @@ function scheduleLabel(block?: CalendarBlock) {
   return timeRangeLabel(block.start, block.duration);
 }
 
-function projectOptions(projects: ApiProject[]): ProjectOption[] {
+function projectOptions(projects: ApiProject[], goals: ApiGoal[] = []): ProjectOption[] {
+  const ordered = projectsInOwnerPriorityOrder(projects, goals);
   return [
-    ...projects
-      .filter((project) => project.active)
-      .map((project) => ({
-        id: project.id,
-        title: project.title,
-        color: project.color,
-        goalId: project.goalId,
-        defaultGoalProcessId: project.defaultGoalProcessId ?? null,
-        projectType: project.projectType ?? "STANDARD",
-      })),
+    ...ordered.map((project) => ({
+      id: project.id,
+      title: project.title,
+      color: project.color,
+      goalId: project.goalId,
+      defaultGoalProcessId: project.defaultGoalProcessId ?? null,
+      projectType: project.projectType ?? "STANDARD",
+    })),
     { id: null, title: "Inbox", color: COLORS.violet, projectType: "STANDARD" },
   ];
 }
@@ -1230,7 +1230,7 @@ export function PlannerApp({
         })) {
           return;
         }
-        const nextProjects = projectOptions(data.projects);
+        const nextProjects = projectOptions(data.projects, data.goals);
         setApiProjects(data.projects);
         setGoals(data.goals);
         setProjects(nextProjects);
@@ -3320,19 +3320,27 @@ export function PlannerApp({
             anchor={slotPicker.anchor}
             live={connection === "live"}
             tasks={listTasksForQuickCreate(
-              tasks.map((task) => ({
-                id: task.id,
-                title: task.title,
-                projectId: task.projectId,
-                project: task.project,
-                color: task.color,
-                duration: task.duration,
-                status: task.status,
-                dueAt: task.dueAt,
-                dueHorizon: task.dueHorizon,
-                repeatSeriesId: task.repeatSeriesId,
-                projectType: task.projectType,
-              })),
+              (() => {
+                const projectRankById = new Map(
+                  projects.map((project, index) => [project.id ?? "inbox", index]),
+                );
+                return tasks.map((task) => ({
+                  id: task.id,
+                  title: task.title,
+                  projectId: task.projectId,
+                  project: task.project,
+                  color: task.color,
+                  duration: task.duration,
+                  status: task.status,
+                  priority: task.priority,
+                  dueAt: task.dueAt,
+                  dueHorizon: task.dueHorizon,
+                  repeatSeriesId: task.repeatSeriesId,
+                  projectType: task.projectType,
+                  projectRank: projectRankById.get(task.projectId ?? "inbox")
+                    ?? Number.MAX_SAFE_INTEGER,
+                }));
+              })(),
               productDateFromEpoch(slotDateValue.getTime()),
             )}
             projects={projects.map((project) => ({ id: project.id, title: project.title }))}
@@ -5067,7 +5075,7 @@ function TaskEditor({
     })()
     : null;
 
-  const goalOptions = goals.map((goal) => ({
+  const goalOptions = goalsInOwnerPriorityOrder(goals).map((goal) => ({
     id: goal.id,
     title: goal.title,
     outcome: goal.outcome,
@@ -5352,7 +5360,7 @@ function QuickAdd({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const goalOptions: TasksGoalOption[] = goals.map((goal) => ({
+  const goalOptions: TasksGoalOption[] = goalsInOwnerPriorityOrder(goals).map((goal) => ({
     id: goal.id,
     title: goal.title,
     outcome: goal.outcome,

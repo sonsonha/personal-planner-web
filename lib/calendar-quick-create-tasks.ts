@@ -9,10 +9,13 @@ export type QuickCreateSourceTask = {
   color: string;
   duration: number;
   status: string;
+  priority?: "p1" | "p2" | "p3" | "p4";
   dueAt?: string | null;
   dueHorizon?: "day" | "week" | "month" | null;
   repeatSeriesId?: string | null;
   projectType?: "STANDARD" | "HABIT" | null;
+  /** Lower = more important project (owner priority order). */
+  projectRank?: number;
 };
 
 export type QuickCreateListedTask = QuickCreateSourceTask & {
@@ -68,11 +71,25 @@ export function listTasksForQuickCreate(
     const aRoutine = a.isRoutine ? 1 : 0;
     const bRoutine = b.isRoutine ? 1 : 0;
     if (aRoutine !== bRoutine) return aRoutine - bRoutine;
+    const aPriority = priorityRank(a.priority);
+    const bPriority = priorityRank(b.priority);
+    if (aPriority !== bPriority) return aPriority - bPriority;
+    const aProject = a.projectRank ?? Number.MAX_SAFE_INTEGER;
+    const bProject = b.projectRank ?? Number.MAX_SAFE_INTEGER;
+    if (aProject !== bProject) return aProject - bProject;
     const aHorizon = horizonRank(a.dueHorizon);
     const bHorizon = horizonRank(b.dueHorizon);
     if (aHorizon !== bHorizon) return aHorizon - bHorizon;
     return a.title.localeCompare(b.title);
   });
+}
+
+function priorityRank(priority: QuickCreateSourceTask["priority"]) {
+  if (priority === "p1") return 0;
+  if (priority === "p2") return 1;
+  if (priority === "p3") return 2;
+  if (priority === "p4") return 3;
+  return 1;
 }
 
 function horizonRank(horizon: QuickCreateSourceTask["dueHorizon"]) {

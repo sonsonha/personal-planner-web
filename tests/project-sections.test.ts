@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildProjectSections } from "../lib/project-sections.ts";
+import { buildProjectSections, projectsInOwnerPriorityOrder } from "../lib/project-sections.ts";
 import type { ApiGoal, ApiProject } from "../lib/planner-api.ts";
 
 function goal(partial: Partial<ApiGoal> & Pick<ApiGoal, "id" | "title">): ApiGoal {
@@ -82,4 +82,22 @@ test("project sections follow Work → Personal → priority Goal order", () => 
     ],
   );
   assert.equal(sections.find((s) => s.key === "goal-explore")?.projects[0]?.projectType, "STANDARD");
+});
+
+test("projectsInOwnerPriorityOrder flattens important goals before explore/habits", () => {
+  const goals = [
+    goal({ id: "explore", title: "Education & Opportunity Exploration", focusType: "EXPLORE" }),
+    goal({ id: "ielts", title: "Achieve IELTS 7.0", focusType: "FOCUS" }),
+    goal({ id: "job", title: "Obtain a strong Software Engineer / Backend-focused job", focusType: "FOCUS" }),
+  ];
+  const projects = [
+    project({ id: "e1", title: "Opportunity Exploration", goalId: "explore" }),
+    project({ id: "i1", title: "IELTS Speaking Improvement", goalId: "ielts" }),
+    project({ id: "j1", title: "Backend Interview Preparation", goalId: "job" }),
+    project({ id: "w1", title: "Landfill Rover", projectContext: "WORK" }),
+  ];
+  assert.deepEqual(
+    projectsInOwnerPriorityOrder(projects, goals).map((p) => p.id),
+    ["w1", "j1", "i1", "e1"],
+  );
 });

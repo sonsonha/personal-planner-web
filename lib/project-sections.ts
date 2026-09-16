@@ -26,6 +26,33 @@ function goalPriorityIndex(title: string): number {
   return idx === -1 ? GOAL_GROUP_PRIORITY_TITLES.length + 1 : idx;
 }
 
+function compareGoalsByOwnerPriority(
+  a: { title: string; focusType?: string | null },
+  b: { title: string; focusType?: string | null },
+): number {
+  const focusA = FOCUS_SECTION_ORDER.indexOf((a.focusType ?? "FOCUS") as (typeof FOCUS_SECTION_ORDER)[number]);
+  const focusB = FOCUS_SECTION_ORDER.indexOf((b.focusType ?? "FOCUS") as (typeof FOCUS_SECTION_ORDER)[number]);
+  const fa = focusA === -1 ? 99 : focusA;
+  const fb = focusB === -1 ? 99 : focusB;
+  if (fa !== fb) return fa - fb;
+  const pa = goalPriorityIndex(a.title);
+  const pb = goalPriorityIndex(b.title);
+  if (pa !== pb) return pa - pb;
+  return a.title.localeCompare(b.title);
+}
+
+/** Active goals in Focus → Maintain → Explore, then owner priority titles. */
+export function goalsInOwnerPriorityOrder<T extends { title: string; status?: string; focusType?: string | null }>(
+  goals: T[],
+): T[] {
+  return [...goals]
+    .filter((goal) => {
+      const status = (goal.status ?? "ACTIVE").toUpperCase();
+      return status === "ACTIVE";
+    })
+    .sort(compareGoalsByOwnerPriority);
+}
+
 export function buildProjectSections(projects: ApiProject[], goals: ApiGoal[]): ProjectSection[] {
   const byTitle = (a: ApiProject, b: ApiProject) => a.title.localeCompare(b.title);
 
@@ -54,17 +81,7 @@ export function buildProjectSections(projects: ApiProject[], goals: ApiGoal[]): 
 
   const linkedGoals = goals
     .filter((g) => g.status === "ACTIVE" && linkedByGoal.has(g.id))
-    .sort((a, b) => {
-      const focusA = FOCUS_SECTION_ORDER.indexOf((a.focusType ?? "FOCUS") as (typeof FOCUS_SECTION_ORDER)[number]);
-      const focusB = FOCUS_SECTION_ORDER.indexOf((b.focusType ?? "FOCUS") as (typeof FOCUS_SECTION_ORDER)[number]);
-      const fa = focusA === -1 ? 99 : focusA;
-      const fb = focusB === -1 ? 99 : focusB;
-      if (fa !== fb) return fa - fb;
-      const pa = goalPriorityIndex(a.title);
-      const pb = goalPriorityIndex(b.title);
-      if (pa !== pb) return pa - pb;
-      return a.title.localeCompare(b.title);
-    });
+    .sort(compareGoalsByOwnerPriority);
 
   for (const goal of linkedGoals) {
     const linked = (linkedByGoal.get(goal.id) ?? []).sort(byTitle);
@@ -85,4 +102,13 @@ export function buildProjectSections(projects: ApiProject[], goals: ApiGoal[]): 
   }
 
   return sections;
+}
+
+/** Flat project list in the same owner-priority order as the Projects page. */
+export function projectsInOwnerPriorityOrder(
+  projects: ApiProject[],
+  goals: ApiGoal[],
+): ApiProject[] {
+  const active = projects.filter((project) => project.active);
+  return buildProjectSections(active, goals).flatMap((section) => section.projects);
 }
