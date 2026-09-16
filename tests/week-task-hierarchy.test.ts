@@ -82,7 +82,7 @@ test("2. Task with multiple Daily Focus Sessions → one Core row", () => {
   }
 });
 
-test("3. finite non-focus Task → Supporting", () => {
+test("3. finite non-focus Task → Also this week", () => {
   const supporting = task({ id: "outreach", title: "Send 2 outreaches" });
   const hierarchy = buildWeekTaskHierarchy({
     tasks: [supporting],
@@ -95,6 +95,10 @@ test("3. finite non-focus Task → Supporting", () => {
   });
   assert.equal(hierarchy.counts.supporting, 1);
   assert.equal(hierarchy.counts.core, 0);
+  assert.equal(
+    hierarchy.sections.find((section) => section.id === "supporting")?.label,
+    "Also this week",
+  );
 });
 
 test("4–6. repeated Habit Tasks group by series identity into one 0/7 row", () => {
@@ -257,7 +261,7 @@ test("9. week hierarchy is derived — no Task mutation", () => {
   assert.deepEqual(original, snapshot);
 });
 
-test("groupTasks week uses Core / Supporting / Routines sections", () => {
+test("groupTasks week uses Core / Also this week / Routines sections", () => {
   const core = task({ id: "c", title: "Core" });
   const support = task({ id: "s", title: "Support" });
   const habit = task({
@@ -290,7 +294,7 @@ test("groupTasks week uses Core / Supporting / Routines sections", () => {
     routines: 1,
     overdue: 0,
     completed: 0,
-  }), "1 Core · 1 Supporting · 1 Routine");
+  }), "1 Core · 1 Also this week · 1 Routine");
 });
 
 test("Routines collapse default when Core Work exists", () => {

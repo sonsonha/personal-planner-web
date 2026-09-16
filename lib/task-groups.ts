@@ -7,6 +7,7 @@ import type {
 import { findDailyFocusSession, isSessionDailyFocusOnDate } from "./daily-focus.ts";
 import {
   buildWeekTaskHierarchy,
+  isRoutineTask,
   type WeekHierarchyRow,
   type WeekHierarchySection,
   type WeekTaskMeta,
@@ -129,12 +130,14 @@ export function groupTasks(
     if (horizon === "day") {
       if (focusDate && (task.id === focusTaskId || hasFocusSessionToday)) {
         ensure("daily-focus").push(task);
+      } else if (isRoutineTask(task)) {
+        ensure("routines").push(task);
       } else if (taskHorizon === "day") {
-        ensure(focusDate ? "supporting" : "day-due").push(task);
+        ensure(focusDate ? "also-today" : "day-due").push(task);
       } else if (block) {
-        ensure(focusDate ? "supporting" : "scheduled").push(task);
+        ensure(focusDate ? "also-today" : "scheduled").push(task);
       } else {
-        ensure(focusDate ? "supporting" : "scheduled").push(task);
+        ensure(focusDate ? "also-today" : "scheduled").push(task);
       }
       continue;
     }
@@ -174,13 +177,15 @@ export function groupTasks(
         ? [
             { id: "overdue", label: "Overdue" },
             { id: "daily-focus", label: "Daily Focus" },
-            { id: "supporting", label: "Supporting" },
+            { id: "also-today", label: "Also today" },
+            { id: "routines", label: "Routines & Maintain" },
             { id: "completed", label: "Completed" },
           ]
         : [
             { id: "overdue", label: "Overdue" },
             { id: "day-due", label: "Day due" },
             { id: "scheduled", label: "Scheduled" },
+            { id: "routines", label: "Routines & Maintain" },
             { id: "completed", label: "Completed" },
           ]
       : horizon === "week"
@@ -205,11 +210,22 @@ export function groupTasks(
               { id: "completed", label: "Completed" },
             ];
 
+  const alsoTodayCount = (buckets["also-today"] ?? []).length;
+  const dayDueCount = (buckets["day-due"] ?? []).length;
+  const hasFiniteBesideRoutines = alsoTodayCount + dayDueCount + (buckets["scheduled"] ?? []).length > 0
+    || (buckets["daily-focus"] ?? []).length > 0;
+
   return order
     .map((meta) => ({
       id: meta.id,
       label: meta.label,
       tasks: buckets[meta.id] ?? [],
+      ...(meta.id === "routines"
+        ? {
+            collapsible: true,
+            defaultCollapsed: hasFiniteBesideRoutines,
+          }
+        : {}),
     }))
     .filter((group) => {
       if (group.id === "daily-focus") return true;

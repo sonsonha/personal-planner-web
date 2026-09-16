@@ -61,9 +61,9 @@ export type TasksWorkspaceViewProps = {
   projectFilterId: string | "all" | "inbox";
   onProjectFilter: (value: string | "all" | "inbox") => void;
   selectedTaskId?: string | null;
-  /** When set (Today Day view), group Daily Focus vs Supporting. */
+  /** When set (Today Day view), group Daily Focus vs Also today / Routines. */
   focusDate?: string | null;
-  /** Week window for Core / Supporting / Routines hierarchy. */
+  /** Week window for Core / Also this week / Routines hierarchy. */
   weekStartMs?: number;
   weekEndMs?: number;
   onChooseDailyFocus?: () => void;
@@ -434,9 +434,12 @@ export function TasksWorkspaceView({
                               isSelected={selectedTaskId === task.id}
                               isDailyFocus={isFocus}
                               quietPriority={false}
+                              hideComplete={group.id === "routines"}
                               sessionProgressLabel={sessionProgressLabel}
                               scheduleLabel={getScheduleLabel(task, block)}
-                              horizonLabel={getHorizonLabel(task)}
+                              horizonLabel={
+                                group.id === "routines" ? "Routine" : getHorizonLabel(task)
+                              }
                               onOpen={() => onOpenTask(task.id)}
                               completeEnabled={task.status === "done" || policy.allow}
                               onToggleComplete={() => {

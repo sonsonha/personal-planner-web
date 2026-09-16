@@ -1,7 +1,7 @@
 /**
  * Week Tasks view hierarchy — derived UI only.
  * CORE = finite Tasks with ≥1 Daily Focus Session in the selected week.
- * SUPPORTING = finite non-routine Tasks without Daily Focus this week.
+ * ALSO THIS WEEK = finite non-routine Tasks without Daily Focus this week.
  * ROUTINES = Habit / repeat-series instances collapsed by series lineage.
  */
 import { productDateFromEpoch } from "./daily-focus.ts";
@@ -319,7 +319,7 @@ export function buildWeekTaskHierarchy(input: {
   const sections: WeekHierarchySection[] = [
     { id: "overdue", label: "Overdue", rows: overdue },
     { id: "core", label: "Core Work", rows: core },
-    { id: "supporting", label: "Supporting", rows: supporting },
+    { id: "supporting", label: "Also this week", rows: supporting },
     {
       id: "routines",
       label: "Routines & Maintain",
@@ -363,7 +363,7 @@ export function formatWeekRangeCaption(weekStart: Date): string {
 export function formatWeekHeaderCounts(counts: WeekHierarchyResult["counts"]): string {
   const parts = [
     `${counts.core} Core`,
-    `${counts.supporting} Supporting`,
+    `${counts.supporting} Also this week`,
     `${counts.routines} Routine${counts.routines === 1 ? "" : "s"}`,
   ];
   return parts.join(" · ");
