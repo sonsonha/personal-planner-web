@@ -822,9 +822,10 @@ function taskBelongsToHorizon(
     && block.taskId === task.id
     && dateInHorizon(blockInstant(block, weekStart), horizon, anchor),
   );
-  // Only Day may surface execution scheduled for that day. Week/Month are
-  // commitment views: TimeBlocks must not change a Task's planning horizon.
-  if (horizon === "day" && hasBlockHere) return true;
+  // Day/Week execution: a Session on the calendar pulls the Task into that
+  // horizon so Daily Focus / scheduled work is visible alongside commitments.
+  // Month stays commitment-only (no session pull).
+  if ((horizon === "day" || horizon === "week") && hasBlockHere) return true;
 
   const due = parseDateValue(task.dueAt);
   const dueHorizon = taskDueHorizon(task);
@@ -4557,11 +4558,33 @@ function TasksWorkspace({
   const normalizedQuery = query.trim().toLowerCase();
 
   const scoped = tasks.filter((task) => taskBelongsToHorizon(task, horizon, anchor, blocks, weekStart, now));
+  const weekWindow = horizon === "week"
+    ? { startMs: startOfWeek(anchor).getTime(), endMs: addDays(startOfWeek(anchor), 7).getTime() }
+    : null;
   const visible = scoped
     .filter((task) => {
-      // Week hierarchy still needs completed routine instances for 0/7 → 1/7 progress.
+      // Week hierarchy still needs completed routine instances for 0/7 → 1/7 progress,
+      // and completed work that had Sessions this week (Calendar history → Tasks Week).
       if (!showCompleted && task.status === "done") {
-        if (!(horizon === "week" && isRoutineTask(task))) return false;
+        if (horizon === "week") {
+          if (isRoutineTask(task)) return true;
+          if (
+            weekWindow
+            && blocks.some(
+              (block) =>
+                block.type === "task"
+                && block.taskId === task.id
+                && Boolean(block.startAt)
+                && (() => {
+                  const epoch = new Date(block.startAt!).getTime();
+                  return epoch >= weekWindow.startMs && epoch < weekWindow.endMs;
+                })(),
+            )
+          ) {
+            return true;
+          }
+        }
+        return false;
       }
       if (projectFilterId !== "all") {
         if (projectFilterId === "inbox") {
@@ -4581,10 +4604,6 @@ function TasksWorkspace({
       return (left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER)
         - (right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER);
     });
-
-  const weekWindow = horizon === "week"
-    ? { startMs: startOfWeek(anchor).getTime(), endMs: addDays(startOfWeek(anchor), 7).getTime() }
-    : null;
 
   const scheduleCopy = (task: PlannerTask, block?: CalendarBlock) => {
     if (task.status === "done") {
@@ -4649,7 +4668,7 @@ function TasksWorkspace({
   );
 
   const footerHint = horizon === "week"
-    ? "WEEK tasks belong to this week — no specific day until scheduled. DAY tasks have a real due date. Unscheduled ≠ deleted."
+    ? "Week lists commitments due this week plus anything with a Session on the calendar — Daily Focus lands in Core Work."
     : horizon === "month"
       ? "Month shows WEEK and MONTH commitments — not daily checkpoints. Use Day/Week for routines."
       : horizon === "day"

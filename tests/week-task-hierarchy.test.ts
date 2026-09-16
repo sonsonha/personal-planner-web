@@ -195,6 +195,36 @@ test("7. completed Session updates grouped routine progress", () => {
   }
 });
 
+test("7b. completed focus work with Sessions stays visible when showCompleted is false", () => {
+  const focusTask = task({
+    id: "role",
+    title: "Finalize target role",
+    status: "done",
+    dueHorizon: "month",
+  });
+  const hierarchy = buildWeekTaskHierarchy({
+    tasks: [focusTask],
+    sessions: [
+      session({
+        id: "s1",
+        taskId: "role",
+        startAt: "2026-09-07T19:30:00+07:00",
+        isDailyFocus: true,
+        status: "DONE",
+      }),
+    ],
+    weekStartMs: WEEK_START,
+    weekEndMs: WEEK_END,
+    isOverdue: () => false,
+    showCompleted: false,
+  });
+  const completed = hierarchy.sections.find((section) => section.id === "completed");
+  assert.equal(completed?.rows.length, 1);
+  if (completed?.rows[0]?.kind === "task") {
+    assert.equal(completed.rows[0].taskId, "role");
+  }
+});
+
 test("8. All view still lists concrete Tasks via groupTasks", () => {
   const tasks = [
     task({ id: "a", title: "A", dueHorizon: "day" }),
@@ -202,7 +232,9 @@ test("8. All view still lists concrete Tasks via groupTasks", () => {
   ];
   const groups = groupTasks("all", tasks, [], (item) => item.dueHorizon ?? null, () => false);
   const listed = groups.flatMap((group) => group.tasks);
-  assert.equal(listed.length, 2);
+  // All skips DAY checkpoints; week habit remains.
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0]!.id, "b");
 });
 
 test("9. week hierarchy is derived — no Task mutation", () => {

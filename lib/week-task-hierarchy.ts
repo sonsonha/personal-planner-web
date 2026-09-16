@@ -262,11 +262,13 @@ export function buildWeekTaskHierarchy(input: {
     }
 
     if (done) {
-      if (showCompleted) {
+      const meta = taskWeekMeta(task.id, sessions, weekStartMs, weekEndMs);
+      // Keep completed work that actually ran this week even when "Show completed" is off.
+      if (showCompleted || meta.plannedSessions > 0) {
         completed.push({
           kind: "task",
           taskId: task.id,
-          meta: taskWeekMeta(task.id, sessions, weekStartMs, weekEndMs),
+          meta,
         });
       }
       continue;

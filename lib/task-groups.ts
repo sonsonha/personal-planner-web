@@ -162,8 +162,8 @@ export function groupTasks(
       continue;
     }
 
-    if (taskHorizon === "day") ensure("day").push(task);
-    else if (taskHorizon === "week") ensure("week").push(task);
+    if (taskHorizon === "day") continue; // All inventory skips daily checkpoints
+    if (taskHorizon === "week") ensure("week").push(task);
     else if (taskHorizon === "month") ensure("month").push(task);
     else ensure("someday").push(task);
   }
