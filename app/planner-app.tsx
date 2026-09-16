@@ -120,6 +120,7 @@ import { FinanceWorkspace } from "./finance-workspace";
 import { parsePlannerPath, plannerPath, type PlannerSection } from "./planner-routes";
 import { aggregateTaskSchedule, formatScheduledMinutes, remainingSessionsAfterRemove } from "@/lib/task-schedule";
 import { listTasksForQuickCreate } from "@/lib/calendar-quick-create-tasks";
+import { CALENDAR_SNAP_MINUTES, snapMinutesForCreate } from "@/lib/calendar-snap";
 
 type TaskStatus = "inbox" | "scheduled" | "done";
 type CalendarDrawerFilter = "today" | "week" | "inbox";
@@ -237,7 +238,7 @@ const START_HOUR = 0;
 const END_HOUR = 24;
 const MINUTES_VISIBLE = (END_HOUR - START_HOUR) * 60;
 /** Fine snap for Google Calendar–like precision (visual drag is continuous; time snaps). */
-const SNAP_MINUTES = 5;
+const SNAP_MINUTES = CALENDAR_SNAP_MINUTES;
 const DRAG_THRESHOLD_PX = 4;
 const MIN_SESSION_MINUTES = 15;
 const DEFAULT_SESSION_MINUTES = 60;
@@ -898,8 +899,12 @@ function conflictingBlocks(
 
 function slotMinutesFromClick(clientY: number, rect: DOMRect) {
   const y = Math.max(0, Math.min(rect.height, clientY - rect.top));
-  const minutesFromStart = Math.round((y / rect.height) * MINUTES_VISIBLE / SNAP_MINUTES) * SNAP_MINUTES;
-  return Math.min(END_HOUR * 60 - SNAP_MINUTES, START_HOUR * 60 + minutesFromStart);
+  const raw = START_HOUR * 60 + (y / rect.height) * MINUTES_VISIBLE;
+  return snapMinutesForCreate(raw, {
+    snap: SNAP_MINUTES,
+    min: START_HOUR * 60,
+    max: END_HOUR * 60 - SNAP_MINUTES,
+  });
 }
 
 function externalBlockFromApi(event: ApiExternalEvent, weekStart: Date): CalendarBlock {
@@ -2996,7 +3001,11 @@ export function PlannerApp({
                       }
                       const y = Math.max(0, Math.min(state.trackHeight, event.clientY - state.trackTop));
                       const rawCurrent = START_HOUR * 60 + (y / state.trackHeight) * MINUTES_VISIBLE;
-                      const current = Math.round(rawCurrent / SNAP_MINUTES) * SNAP_MINUTES;
+                      const current = snapMinutesForCreate(rawCurrent, {
+                        snap: SNAP_MINUTES,
+                        min: START_HOUR * 60,
+                        max: END_HOUR * 60,
+                      });
                       const clampedCurrent = Math.max(
                         START_HOUR * 60,
                         Math.min(END_HOUR * 60, current),
