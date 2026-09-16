@@ -8,8 +8,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
+  ClipboardPaste,
   Clock3,
   Command,
+  Copy,
   Flag,
   FileText,
   GripVertical,
@@ -122,6 +124,12 @@ import { aggregateTaskSchedule, formatScheduledMinutes, remainingSessionsAfterRe
 import { listTasksForQuickCreate } from "@/lib/calendar-quick-create-tasks";
 import { CALENDAR_SNAP_MINUTES, snapMinutesForCreate } from "@/lib/calendar-snap";
 import { goalsInOwnerPriorityOrder, projectsInOwnerPriorityOrder } from "@/lib/project-sections";
+import {
+  buildWeekScheduleClipboard,
+  formatWeekPasteToast,
+  planWeekSchedulePaste,
+  type WeekScheduleClipboard,
+} from "@/lib/week-schedule-clipboard";
 
 type TaskStatus = "inbox" | "scheduled" | "done";
 type CalendarDrawerFilter = "today" | "week" | "inbox";
@@ -1027,6 +1035,8 @@ export function PlannerApp({
     rect: DOMRect;
   } | null>(null);
   const [blockClipboard, setBlockClipboard] = useState<BlockClipboard | null>(null);
+  const [weekClipboard, setWeekClipboard] = useState<WeekScheduleClipboard | null>(null);
+
   const [pasteFocus, setPasteFocus] = useState<{ day: number; start: number } | null>(null);
   const [seriesScopePrompt, setSeriesScopePrompt] = useState<{
     kind: "task" | "session";
@@ -1718,6 +1728,190 @@ export function PlannerApp({
     setMonthAnchor(startOfMonth(new Date()));
     setActiveDay(nowDay);
   };
+
+  const weekRangeLabel = useMemo(() => {
+    const end = addDays(weekStart, 6);
+    return `${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })}–${end.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  }, [weekStart]);
+
+  const copyWeekSchedule = useCallback(() => {
+    if (view === "month") {
+      showToast("Switch to Week or Day to copy a week schedule", "warning");
+      return;
+    }
+    const clipboard = buildWeekScheduleClipboard({
+      weekStart,
+      label: weekRangeLabel,
+      blocks: blocks.map((block) => ({
+        id: block.id,
+        type: block.type,
+        day: block.day,
+        start: block.start,
+        duration: block.duration,
+        allDay: block.allDay,
+        taskId: block.taskId,
+        title: block.title,
+        notes: block.notes,
+        projectId: block.projectId ?? null,
+        color: block.color,
+        repeatSeriesId: block.repeatSeriesId,
+      })),
+      tasks: tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        projectId: task.projectId,
+        color: task.color,
+        dueAt: task.dueAt,
+        repeatSeriesId: task.repeatSeriesId,
+        projectType: task.projectType,
+      })),
+    });
+    if (clipboard.sessions.length === 0) {
+      showToast("This week has no Personal OS sessions to copy", "warning");
+      return;
+    }
+    setWeekClipboard(clipboard);
+    showToast(`Copied ${clipboard.sessions.length} session${clipboard.sessions.length === 1 ? "" : "s"} from ${clipboard.label}`);
+  }, [view, weekStart, weekRangeLabel, blocks, tasks, showToast]);
+
+  const pasteWeekSchedule = useCallback(async () => {
+    if (!weekClipboard) {
+      showToast("Copy a week schedule first", "warning");
+      return;
+    }
+    if (view === "month") {
+      showToast("Switch to Week or Day to paste a week schedule", "warning");
+      return;
+    }
+
+    const plan = planWeekSchedulePaste({
+      clipboard: weekClipboard,
+      targetWeekStart: weekStart,
+      existingBlocks: blocks.map((block) => ({
+        id: block.id,
+        type: block.type,
+        day: block.day,
+        start: block.start,
+        duration: block.duration,
+        allDay: block.allDay,
+        taskId: block.taskId,
+      })),
+      tasks: tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        projectId: task.projectId,
+        color: task.color,
+        dueAt: task.dueAt,
+        repeatSeriesId: task.repeatSeriesId,
+        projectType: task.projectType,
+      })),
+      slotDate,
+    });
+
+    const toast = formatWeekPasteToast(plan);
+    if (plan.create.length === 0) {
+      showToast(toast.message, toast.kind);
+      return;
+    }
+
+    const pendingRows: CalendarBlock[] = plan.create.map((item) => {
+      const task = tasks.find((candidate) => candidate.id === item.resolvedTaskId);
+      return {
+        id: `pending-${crypto.randomUUID()}`,
+        title: item.title || task?.title || "Session",
+        day: item.day,
+        start: item.start,
+        duration: item.duration,
+        color: task ? priorityColor(task.priority) : item.color,
+        type: "task" as const,
+        taskId: item.resolvedTaskId,
+        priority: task?.priority,
+        projectId: task?.projectId ?? item.projectId,
+        meta: task?.project,
+        syncStatus: "PENDING" as const,
+        notes: item.notes,
+        status: "PLANNED",
+      };
+    });
+
+    setBlocks((current) => [...current, ...pendingRows]);
+    setTasks((current) => current.map((task) => {
+      const touched = plan.create.some((item) => item.resolvedTaskId === task.id);
+      if (!touched || task.status === "done") return task;
+      return { ...task, status: "scheduled" };
+    }));
+
+    if (!liveDataRef.current) {
+      showToast(`${toast.message} · demo mode`, toast.kind);
+      return;
+    }
+
+    showToast(`Pasting ${plan.create.length} free-slot session${plan.create.length === 1 ? "" : "s"}…`);
+    let savedCount = 0;
+    const failures: string[] = [];
+    for (let index = 0; index < plan.create.length; index += 1) {
+      const item = plan.create[index]!;
+      const pending = pendingRows[index]!;
+      const task = tasks.find((candidate) => candidate.id === item.resolvedTaskId);
+      const startAt = slotDate(weekStart, item.day, item.start);
+      const endAt = new Date(startAt.getTime() + item.duration * 60_000);
+      try {
+        const saved = await createPlannerTimeBlock({
+          taskId: item.resolvedTaskId,
+          projectId: task?.projectId ?? item.projectId,
+          title: item.title || task?.title || "Session",
+          startAt: startAt.toISOString(),
+          endAt: endAt.toISOString(),
+          color: task ? priorityColor(task.priority) : item.color,
+          notes: item.notes || undefined,
+        });
+        const mapped = timeBlockFromApi(saved, weekStart, projects);
+        setBlocks((current) => current.map((block) => (block.id === pending.id ? mapped : block)));
+        savedCount += 1;
+      } catch {
+        failures.push(pending.id);
+        setBlocks((current) => current.filter((block) => block.id !== pending.id));
+      }
+    }
+
+    if (failures.length > 0) {
+      setConnection("error");
+      showToast(
+        `Pasted ${savedCount} · ${failures.length} failed · busy slots were left untouched`,
+        "warning",
+      );
+      return;
+    }
+    const suffix = plan.skippedConflict.length + plan.skippedMissingTask.length > 0
+      ? ` · skipped ${plan.skippedConflict.length + plan.skippedMissingTask.length} (kept target)`
+      : "";
+    showToast(`Pasted ${savedCount} session${savedCount === 1 ? "" : "s"} into free time${suffix}`);
+  }, [weekClipboard, view, weekStart, blocks, tasks, projects, showToast]);
+
+  useEffect(() => {
+    if (activeSection !== "calendar") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod || !event.shiftKey) return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      const inField = tag === "input" || tag === "textarea" || target?.isContentEditable;
+      if (inField) return;
+      if (event.key.toLowerCase() === "c") {
+        event.preventDefault();
+        copyWeekSchedule();
+        return;
+      }
+      if (event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        void pasteWeekSchedule();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeSection, copyWeekSchedule, pasteWeekSchedule]);
 
   const warnIfConflict = (candidate: CalendarBlock, excludeId?: string) => {
     const overlaps = conflictingBlocks(candidate, blocks, excludeId);
@@ -2812,6 +3006,36 @@ export function PlannerApp({
                 </>
               )}
             </div>
+            {view !== "month" ? (
+              <div className="pos-cal-week-clip" role="group" aria-label="Copy or paste week schedule">
+                <button
+                  type="button"
+                  className="pos-cal-week-clip-btn"
+                  onClick={() => copyWeekSchedule()}
+                  title="Copy this week’s Personal OS sessions (free-slot paste later)"
+                >
+                  <Copy size={14} aria-hidden="true" />
+                  <span>Copy week</span>
+                </button>
+                <button
+                  type="button"
+                  className="pos-cal-week-clip-btn"
+                  onClick={() => { void pasteWeekSchedule(); }}
+                  disabled={!weekClipboard}
+                  title={
+                    weekClipboard
+                      ? `Paste free slots from ${weekClipboard.label} · busy times on this week stay`
+                      : "Copy a week first"
+                  }
+                >
+                  <ClipboardPaste size={14} aria-hidden="true" />
+                  <span>Paste week</span>
+                  {weekClipboard ? (
+                    <em className="pos-cal-week-clip-count pos-mono">{weekClipboard.sessions.length}</em>
+                  ) : null}
+                </button>
+              </div>
+            ) : null}
           </div>
 
           <div className="toolbar-cluster toolbar-right">
