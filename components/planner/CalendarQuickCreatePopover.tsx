@@ -35,6 +35,8 @@ export type CalendarQuickCreatePopoverProps = {
   }) => void | Promise<void>;
   /** Called when user pastes a Session template into this draft. */
   onPasteSession?: () => void | Promise<void>;
+  /** When true, Cmd/Ctrl+V pastes the session even if focus is in an input. */
+  hasSessionClipboard?: boolean;
 };
 
 export function CalendarQuickCreatePopover({
@@ -51,6 +53,7 @@ export function CalendarQuickCreatePopover({
   onSaveExisting,
   onSaveNew,
   onPasteSession,
+  hasSessionClipboard = false,
 }: CalendarQuickCreatePopoverProps) {
   const [title, setTitle] = useState("");
   const [taskId, setTaskId] = useState("");
@@ -89,19 +92,26 @@ export function CalendarQuickCreatePopover({
         onClose();
         return;
       }
+      const mod = event.metaKey || event.ctrlKey;
+      // Prefer session clipboard over OS text paste into the title field.
+      if (mod && event.key.toLowerCase() === "v" && onPasteSession && hasSessionClipboard) {
+        event.preventDefault();
+        event.stopPropagation();
+        void onPasteSession();
+        return;
+      }
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
       const inField = tag === "input" || tag === "textarea" || target?.isContentEditable;
       if (inField) return;
-      const mod = event.metaKey || event.ctrlKey;
       if (mod && event.key.toLowerCase() === "v" && onPasteSession) {
         event.preventDefault();
         void onPasteSession();
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, onPasteSession, saving]);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose, onPasteSession, hasSessionClipboard, saving]);
 
   const displayTitle = taskId
     ? (openTasks.find((t) => t.id === taskId)?.title ?? title)
@@ -137,6 +147,7 @@ export function CalendarQuickCreatePopover({
       <button type="button" className="pos-cal-popover-dismiss" aria-label="Close" onClick={onClose} />
       <form
         className="pos-cal-quick-create"
+        data-cal-quick-create=""
         role="dialog"
         aria-modal="true"
         aria-label="Add session"
@@ -161,6 +172,9 @@ export function CalendarQuickCreatePopover({
           </button>
         </div>
         <p className="pos-cal-quick-create-when pos-mono">{slotLabel}</p>
+        {hasSessionClipboard ? (
+          <p className="pos-cal-quick-create-paste-hint">⌘V / Ctrl+V pastes the copied session here</p>
+        ) : null}
 
         <label className="pos-cal-quick-create-field">
           <span>Task</span>

@@ -1420,39 +1420,47 @@ export function PlannerApp({
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
-      if (tag === "input" || tag === "textarea" || target?.isContentEditable) return;
+      const inField = tag === "input" || tag === "textarea" || Boolean(target?.isContentEditable);
       const mod = event.metaKey || event.ctrlKey;
-      if (!mod) return;
 
-      if (event.key.toLowerCase() === "c") {
-        const selected = blockPopover
-          ? blocks.find((block) => block.id === blockPopover.blockId)
-          : null;
-        if (!selected || selected.type !== "task" || !selected.taskId) return;
+      // Delete selected session (not while typing in a field).
+      if (
+        !mod
+        && (event.key === "Delete" || event.key === "Backspace")
+        && !inField
+        && blockPopover
+      ) {
+        const selected = blocks.find((block) => block.id === blockPopover.blockId);
+        if (!selected || selected.type !== "task" || selected.id.startsWith("pending-")) return;
         event.preventDefault();
-        setBlockClipboard({
-          taskId: selected.taskId,
+        setSessionDeleteConfirm({
+          blockId: selected.id,
           title: selected.title,
-          duration: selected.duration,
-          notes: selected.notes ?? "",
+          repeated: Boolean(selected.repeatSeriesId),
         });
-        showToast("Session template copied");
+        setBlockPopover(null);
         return;
       }
 
-      if (event.key.toLowerCase() === "v") {
-        if (!blockClipboard) return;
+      if (!mod) return;
+
+      // Session clipboard paste wins over OS text paste in calendar inputs.
+      if (event.key.toLowerCase() === "v" && blockClipboard) {
+        if (inField && !target?.closest(".pos-cal-quick-create, .calendar-quick-create, [data-cal-quick-create]")) {
+          return;
+        }
         event.preventDefault();
         const task = tasks.find((item) => item.id === blockClipboard.taskId);
         if (!task || task.status === "done") {
           showToast("Copied task is missing or already done", "warning");
           return;
         }
-        const day = pasteFocus?.day
+        const day = slotPicker?.day
+          ?? pasteFocus?.day
           ?? (view === "day" ? activeDay : (isCurrentWeek ? nowDay : 0));
-        const start = pasteFocus?.start
+        const start = slotPicker?.start
+          ?? pasteFocus?.start
           ?? Math.max(START_HOUR * 60, Math.min(END_HOUR * 60 - blockClipboard.duration, nowMinute));
-        // Replace empty quick-create draft with an immediate Session paste.
         setSlotSelectPreview(null);
         setSlotPicker(null);
         const pendingId = `pending-${crypto.randomUUID()}`;
@@ -1500,6 +1508,24 @@ export function PlannerApp({
             showToast("Could not paste session", "warning");
           }
         })();
+        return;
+      }
+
+      if (inField) return;
+
+      if (event.key.toLowerCase() === "c") {
+        const selected = blockPopover
+          ? blocks.find((block) => block.id === blockPopover.blockId)
+          : null;
+        if (!selected || selected.type !== "task" || !selected.taskId) return;
+        event.preventDefault();
+        setBlockClipboard({
+          taskId: selected.taskId,
+          title: selected.title,
+          duration: selected.duration,
+          notes: selected.notes ?? "",
+        });
+        showToast("Session template copied");
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -1510,6 +1536,7 @@ export function PlannerApp({
     blocks,
     blockClipboard,
     pasteFocus,
+    slotPicker,
     tasks,
     view,
     activeDay,
@@ -3356,6 +3383,7 @@ export function PlannerApp({
                 showToast("Could not paste session", "warning");
               }
             }}
+            hasSessionClipboard={Boolean(blockClipboard)}
             onSaveExisting={async (taskId, note, duration) => {
               const task = tasks.find((item) => item.id === taskId);
               if (!task) return;
@@ -3890,7 +3918,7 @@ function CalendarEvent({
       }
       style={{
         top: block.start - START_HOUR * 60 + 1,
-        height: Math.max(isTiny ? 18 : 28, displayDuration - 2),
+        height: Math.max(isTiny ? 28 : 32, displayDuration - 2),
         left: layout.left,
         right: layout.right,
         "--event-color": block.color,

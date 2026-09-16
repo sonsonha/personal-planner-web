@@ -2931,7 +2931,8 @@ button {
 }
 
 .pos-cal .calendar-event.tiny {
-  padding: 2px 5px;
+  padding: 4px 6px;
+  min-height: 32px;
 }
 
 .pos-cal .event-title-row {
@@ -3742,6 +3743,13 @@ button {
   margin: 0;
   color: #78716c;
   font-size: 12px;
+}
+
+.pos-cal-quick-create-paste-hint {
+  margin: 0;
+  color: var(--pos-primary, #5b4bdb);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .pos-cal-quick-create-field {
