@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ApiSeriesScope } from "@/lib/planner-api";
 
 export type DestructiveConfirmModalProps = {
@@ -24,23 +24,35 @@ export function DestructiveConfirmModal({
   onConfirm,
 }: DestructiveConfirmModalProps) {
   const [scope, setScope] = useState<ApiSeriesScope>("THIS_INSTANCE");
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+
+  useEffect(() => {
+    confirmRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (saving) return;
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
         onClose();
         return;
       }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        void onConfirm(showSeriesScope ? scope : null);
-      }
+      if (event.key !== "Enter") return;
+      // Capture before calendar block Enter opens the session popover again.
+      event.stopPropagation();
+      const target = event.target as HTMLElement | null;
+      // Focused Cancel/Close/Remove buttons activate via native click — don't double-fire.
+      if (target?.closest("button, a, [href], [role='button']")) return;
+      event.preventDefault();
+      void onConfirm(showSeriesScope ? scopeRef.current : null);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, onConfirm, saving, scope, showSeriesScope]);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose, onConfirm, saving, showSeriesScope]);
 
   return (
     <div className="pos-qa-backdrop">
@@ -97,6 +109,7 @@ export function DestructiveConfirmModal({
               Cancel
             </button>
             <button
+              ref={confirmRef}
               type="button"
               className="danger-button"
               disabled={saving}

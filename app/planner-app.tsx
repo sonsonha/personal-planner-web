@@ -1465,6 +1465,7 @@ export function PlannerApp({
   useEffect(() => {
     if (activeSection !== "calendar") return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (sessionDeleteConfirm) return;
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
       const inField = tag === "input" || tag === "textarea" || Boolean(target?.isContentEditable);
@@ -1579,6 +1580,7 @@ export function PlannerApp({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     activeSection,
+    sessionDeleteConfirm,
     blockPopover,
     blocks,
     blockClipboard,
