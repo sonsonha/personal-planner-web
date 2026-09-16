@@ -27,11 +27,20 @@ export function DestructiveConfirmModal({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !saving) onClose();
+      if (saving) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void onConfirm(showSeriesScope ? scope : null);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, saving]);
+  }, [onClose, onConfirm, saving, scope, showSeriesScope]);
 
   return (
     <div className="pos-qa-backdrop">
