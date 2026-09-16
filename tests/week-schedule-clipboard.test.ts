@@ -93,7 +93,7 @@ test("habit series remaps to target-day instance", () => {
   );
 });
 
-test("finite open task keeps same id; done task is missing", () => {
+test("finite task keeps same id even when done", () => {
   const tasks = [
     { id: "meet", title: "Meetings", status: "scheduled", projectId: "rover" },
     { id: "done", title: "Old", status: "done", projectId: null },
@@ -105,7 +105,39 @@ test("finite open task keeps same id; done task is missing", () => {
   );
   assert.equal(
     resolveTaskIdForWeekPaste({ taskId: "done", repeatSeriesId: null }, day, tasks),
-    null,
+    "done",
+  );
+});
+
+test("habit target-day done instance is still selected so paste can reopen it", () => {
+  const tasks = [
+    {
+      id: "wake-mon",
+      title: "Wake-up",
+      status: "scheduled",
+      projectId: "sleep",
+      dueAt: "2026-09-14T16:59:00.000Z",
+      repeatSeriesId: "series-wake",
+      projectType: "HABIT" as const,
+    },
+    {
+      id: "wake-fri",
+      title: "Wake-up",
+      status: "done",
+      projectId: "sleep",
+      dueAt: "2026-09-18T16:59:00.000Z",
+      repeatSeriesId: "series-wake",
+      projectType: "HABIT" as const,
+    },
+  ];
+  const fri = slotDate(WEEK, 4, 6 * 60);
+  assert.equal(
+    resolveTaskIdForWeekPaste(
+      { taskId: "wake-mon", repeatSeriesId: "series-wake" },
+      fri,
+      tasks,
+    ),
+    "wake-fri",
   );
 });
 

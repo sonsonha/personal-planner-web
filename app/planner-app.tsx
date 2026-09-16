@@ -1839,7 +1839,7 @@ export function PlannerApp({
     setBlocks((current) => [...current, ...pendingRows]);
     setTasks((current) => current.map((task) => {
       const touched = plan.create.some((item) => item.resolvedTaskId === task.id);
-      if (!touched || task.status === "done") return task;
+      if (!touched) return task;
       return { ...task, status: "scheduled" };
     }));
 
@@ -1858,6 +1858,9 @@ export function PlannerApp({
       const startAt = slotDate(weekStart, item.day, item.start);
       const endAt = new Date(startAt.getTime() + item.duration * 60_000);
       try {
+        if (task?.status === "done") {
+          await updateTask(task.id, { status: "SCHEDULED" });
+        }
         const saved = await createPlannerTimeBlock({
           taskId: item.resolvedTaskId,
           projectId: task?.projectId ?? item.projectId,

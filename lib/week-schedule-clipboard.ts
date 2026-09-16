@@ -102,8 +102,8 @@ function dueProductDate(task: WeekPasteTask): string | null {
 
 /**
  * Map a copied session onto a live Task for the destination day.
- * - Finite tasks: same id if still open.
- * - Habit series: prefer open instance due on that product day; else open series task.
+ * - Finite tasks: same id, even if done (paste can reopen it).
+ * - Habit series: prefer target-day instance; if that one is done, still use it so paste can reopen it.
  */
 export function resolveTaskIdForWeekPaste(
   session: Pick<WeekClipboardSession, "taskId" | "repeatSeriesId">,
@@ -118,7 +118,6 @@ export function resolveTaskIdForWeekPaste(
     const dueMatch = tasks.find(
       (task) =>
         task.repeatSeriesId === seriesId
-        && !isDone(task.status)
         && dueProductDate(task) === targetKey,
     );
     if (dueMatch) return dueMatch.id;
@@ -127,11 +126,12 @@ export function resolveTaskIdForWeekPaste(
       (task) => task.repeatSeriesId === seriesId && !isDone(task.status),
     );
     if (openSeries) return openSeries.id;
+    const anySeries = tasks.find((task) => task.repeatSeriesId === seriesId);
+    if (anySeries) return anySeries.id;
     return null;
   }
 
-  if (!source || isDone(source.status)) return null;
-  return source.id;
+  return source?.id ?? null;
 }
 
 export function buildWeekScheduleClipboard(input: {
