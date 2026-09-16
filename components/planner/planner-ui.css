@@ -4337,7 +4337,48 @@
   font-weight: 550;
 }
 
+.pos-task-group-routines.is-collapsed {
+  margin-top: 8px;
+  margin-bottom: 10px;
+}
+
+.pos-task-routines-reveal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px dashed color-mix(in srgb, var(--pos-border) 80%, #9ca3af);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--pos-surface-alt) 55%, var(--pos-card));
+  color: var(--pos-ink-secondary, #4b5563);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.pos-task-routines-reveal:hover {
+  border-color: color-mix(in srgb, var(--pos-primary) 35%, var(--pos-border));
+  background: color-mix(in srgb, var(--pos-primary-soft, #eef2ff) 40%, var(--pos-card));
+  color: var(--pos-ink);
+}
+
+.pos-task-routines-reveal-icon {
+  display: inline-flex;
+  color: var(--pos-ink-muted);
+}
+
+.pos-task-routines-reveal:hover .pos-task-routines-reveal-icon {
+  color: var(--pos-primary);
+}
+
 .pos-task-routines-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 0;
   background: transparent;
   color: var(--pos-ink-muted);
@@ -4346,6 +4387,10 @@
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 4px;
+}
+
+.pos-task-routines-toggle-icon {
+  display: inline-flex;
 }
 
 .pos-task-routines-toggle:hover {

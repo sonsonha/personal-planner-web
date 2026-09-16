@@ -298,25 +298,61 @@ export function TasksWorkspaceView({
                   "pos-task-group",
                   group.id === "core" && "pos-task-group-core",
                   isRoutines && "pos-task-group-routines",
+                  isRoutines && collapsed && "is-collapsed",
                 )}
                 aria-label={group.label}
               >
-                <div className="pos-task-group-head">
-                  <span>{group.label}</span>
-                  <span className="pos-task-group-head-right">
-                    <span className="pos-mono">{headMeta}</span>
-                    {isRoutines && group.collapsible && (
-                      <button
-                        type="button"
-                        className="pos-task-routines-toggle"
-                        aria-expanded={routinesOpen}
-                        onClick={() => setRoutinesExpanded(!routinesOpen)}
-                      >
-                        {routinesOpen ? "Collapse" : "Show"}
-                      </button>
-                    )}
-                  </span>
-                </div>
+                {isRoutines && group.collapsible && collapsed ? (
+                  <button
+                    type="button"
+                    className="pos-task-routines-reveal"
+                    aria-expanded={false}
+                    onClick={() => setRoutinesExpanded(true)}
+                  >
+                    <span className="pos-task-routines-reveal-icon" aria-hidden="true">
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path
+                          d="M3.5 5.25L7 8.75l3.5-3.5"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                    <span>
+                      Show {rowCount} routine{rowCount === 1 ? "" : "s"}
+                    </span>
+                  </button>
+                ) : (
+                  <div className="pos-task-group-head">
+                    <span>{group.label}</span>
+                    <span className="pos-task-group-head-right">
+                      <span className="pos-mono">{headMeta}</span>
+                      {isRoutines && group.collapsible && (
+                        <button
+                          type="button"
+                          className="pos-task-routines-toggle"
+                          aria-expanded={routinesOpen}
+                          onClick={() => setRoutinesExpanded(false)}
+                        >
+                          <span className="pos-task-routines-toggle-icon" aria-hidden="true">
+                            <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                              <path
+                                d="M3.5 8.75L7 5.25l3.5 3.5"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </span>
+                          Hide
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                )}
 
                 {group.id === "daily-focus" && group.tasks.length === 0 ? (
                   <div className="pos-daily-focus-empty">
