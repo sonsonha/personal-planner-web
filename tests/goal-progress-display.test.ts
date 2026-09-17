@@ -98,6 +98,7 @@ test("processStatusLabel and fill percent keep overshoot visible", () => {
   assert.equal(processStatusLabel({ completed: 5, target: 4, planned: 3 }), "Ahead");
   assert.equal(processStatusLabel({ completed: 4, target: 4, planned: 4 }), "Done");
   assert.equal(processStatusLabel({ completed: 2, target: 4, planned: 3 }), "In progress");
-  assert.equal(processFillPercent(5, 4), 125);
+  assert.equal(processFillPercent(5, 4), 100);
   assert.equal(processFillPercent(4, 4), 100);
+  assert.equal(processFillPercent(2, 4), 50);
 });

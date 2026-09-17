@@ -112,10 +112,10 @@ export function processStatusLabel(bucket: Pick<ProcessBucketView, "completed" |
   return "Not started";
 }
 
-/** Bar width % vs target. Overshoot may exceed 100 (capped for layout). */
-export function processFillPercent(value: number, target: number, maxPct = 150): number {
+/** Bar width % vs target. Visual fill never exceeds 100%; numbers may overshoot separately. */
+export function processFillPercent(value: number, target: number): number {
   if (target <= 0) return 0;
-  return Math.min(Math.max((value / target) * 100, 0), maxPct);
+  return Math.min(Math.max((value / target) * 100, 0), 100);
 }
 
 export function progressPeriodLabel(period: ProgressViewPeriod) {
