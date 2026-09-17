@@ -130,3 +130,37 @@ test("Day view puts habits in Routines, finite work in Also today", () => {
   assert.equal(groups.find((g) => g.id === "daily-focus")?.tasks[0]?.id, "focus");
   assert.equal(groups.find((g) => g.id === "routines")?.defaultCollapsed, true);
 });
+
+test("Day routines collapse duplicate series — keep session-backed instance", () => {
+  const focusDate = "2026-09-17";
+  const groups = groupTasks(
+    "day",
+    [
+      task({
+        id: "wake-empty",
+        title: "Wake-up Checkpoint",
+        projectType: "HABIT",
+        repeatSeriesId: "series-wake",
+        project: "Sleep Routine",
+        dueAt: "2026-09-17T16:59:00.000Z",
+        status: "inbox",
+      }),
+      task({
+        id: "wake-scheduled",
+        title: "Wake-up Checkpoint",
+        projectType: "HABIT",
+        repeatSeriesId: "series-wake",
+        project: "Sleep Routine",
+        dueAt: "2026-09-16T16:59:00.000Z",
+        status: "scheduled",
+      }),
+    ],
+    [block({ id: "bw", taskId: "wake-scheduled", startAt: "2026-09-17T06:00:00+07:00" })],
+    (item) => item.dueHorizon ?? null,
+    () => false,
+    { focusDate, emphasizeDailyFocus: true },
+  );
+  const routines = groups.find((group) => group.id === "routines")?.tasks ?? [];
+  assert.equal(routines.length, 1);
+  assert.equal(routines[0]!.id, "wake-scheduled");
+});

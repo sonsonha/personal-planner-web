@@ -4,11 +4,12 @@ import type {
   TasksViewBlock,
   TasksViewTask,
 } from "../components/planner/tasks/types.ts";
-import { findDailyFocusSession, isSessionDailyFocusOnDate } from "./daily-focus.ts";
+import { findDailyFocusSession, isSessionDailyFocusOnDate, productDateFromEpoch } from "./daily-focus.ts";
 import { isTaskCompletedForListView } from "./session-evidence.ts";
 import {
   buildWeekTaskHierarchy,
   isRoutineTask,
+  routineGroupingKey,
   type WeekHierarchyRow,
   type WeekHierarchySection,
   type WeekTaskMeta,
@@ -58,6 +59,61 @@ function weekMetaMap(section: WeekHierarchySection): Record<string, WeekTaskMeta
     if (row.kind === "task") map[row.taskId] = row.meta;
   }
   return map;
+}
+
+function dueDateKey(task: TasksViewTask): string | null {
+  if (!task.dueAt) return null;
+  const time = new Date(task.dueAt).getTime();
+  if (!Number.isFinite(time)) return null;
+  return productDateFromEpoch(time);
+}
+
+function taskHasSession(taskId: string, blocks: TasksViewBlock[]) {
+  return blocks.some((block) => block.taskId === taskId);
+}
+
+/**
+ * Day view: one row per habit series.
+ * Prefer the instance that has a Session today; else the due-matching instance.
+ * Avoids “Unscheduled” + “06:00” duplicates after paste / due-date edits.
+ */
+export function pickDayRoutineRepresentative(
+  bucket: TasksViewTask[],
+  blocks: TasksViewBlock[],
+  focusDate?: string | null,
+): TasksViewTask {
+  if (bucket.length === 0) {
+    throw new Error("pickDayRoutineRepresentative: empty bucket");
+  }
+  if (bucket.length === 1) return bucket[0]!;
+  const withSession = bucket.filter((task) => taskHasSession(task.id, blocks));
+  const pool = withSession.length > 0 ? withSession : bucket;
+  if (focusDate) {
+    const dueMatch = pool.find((task) => dueDateKey(task) === focusDate);
+    if (dueMatch) return dueMatch;
+  }
+  return [...pool].sort((left, right) => {
+    const leftDue = left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+    const rightDue = right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+    return leftDue - rightDue;
+  })[0]!;
+}
+
+function dedupeDayRoutineTasks(
+  tasks: TasksViewTask[],
+  blocks: TasksViewBlock[],
+  focusDate?: string | null,
+): TasksViewTask[] {
+  const buckets = new Map<string, TasksViewTask[]>();
+  for (const task of tasks) {
+    const key = routineGroupingKey(task);
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(task);
+    buckets.set(key, bucket);
+  }
+  return [...buckets.values()].map((bucket) =>
+    pickDayRoutineRepresentative(bucket, blocks, focusDate),
+  );
 }
 
 /** Group Tasks for Day/Week/Month lists — one row per Task, never per TimeBlock. */
@@ -213,18 +269,28 @@ export function groupTasks(
             ];
 
   return order
-    .map((meta) => ({
-      id: meta.id,
-      label: meta.label,
-      tasks: buckets[meta.id] ?? [],
-      ...(meta.id === "routines"
-        ? {
-            collapsible: true,
-            // Always start collapsed so habits don't bury real work.
-            defaultCollapsed: true,
-          }
-        : {}),
-    }))
+    .map((meta) => {
+      let list = buckets[meta.id] ?? [];
+      if (horizon === "day" && meta.id === "routines") {
+        list = dedupeDayRoutineTasks(list, blocks, focusDate);
+      }
+      if (horizon === "day" && meta.id === "overdue") {
+        // Overdue habits: same series collapse — prefer session-backed instance.
+        list = dedupeDayRoutineTasks(list, blocks, focusDate);
+      }
+      return {
+        id: meta.id,
+        label: meta.label,
+        tasks: list,
+        ...(meta.id === "routines"
+          ? {
+              collapsible: true,
+              // Always start collapsed so habits don't bury real work.
+              defaultCollapsed: true,
+            }
+          : {}),
+      };
+    })
     .filter((group) => {
       if (group.id === "daily-focus") return true;
       return group.tasks.length > 0;

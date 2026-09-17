@@ -3566,6 +3566,11 @@ export function PlannerApp({
           onComplete={() => completeTask(editingTask.id)}
           onRestore={() => restoreTask(editingTask.id)}
           onSetDailyFocus={setTaskDailyFocus}
+          onTaskSaved={(saved) => {
+            setTasks((current) =>
+              current.map((item) => (item.id === saved.id ? taskFromApi(saved, projects) : item)),
+            );
+          }}
           onChanged={(message) => {
             setEditingTaskId(null);
             setReloadKey((value) => value + 1);
@@ -5132,6 +5137,7 @@ function TaskEditor({
   onRestore,
   onSetDailyFocus,
   onChanged,
+  onTaskSaved,
 }: {
   task: PlannerTask;
   projects: ProjectOption[];
@@ -5143,6 +5149,7 @@ function TaskEditor({
   onRestore?: () => void;
   onSetDailyFocus: (taskId: string, date: string | null) => void;
   onChanged: (message: string) => void;
+  onTaskSaved?: (saved: ApiTask) => void;
 }) {
   const suggestedStart = defaultScheduleStart();
   const focusPlanningDate = productDateString();
@@ -5277,7 +5284,8 @@ function TaskEditor({
         ...taskPayload(),
         ...(seriesScope ? { seriesScope } : {}),
       };
-      await updateTask(task.id, payload);
+      const saved = await updateTask(task.id, payload);
+      onTaskSaved?.(saved);
       if (startAt) {
         const endAt = new Date(startAt.getTime() + sessionDuration * 60_000);
         await createPlannerTimeBlock({
