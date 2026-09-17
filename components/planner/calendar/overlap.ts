@@ -37,7 +37,7 @@ export function resolveOverlapLayout<T extends OverlapBlock>(blocks: T[]): LaidO
   return assigned;
 }
 
-export function overlapGeometry(col: number, numCols: number, gapPx = 2) {
+export function overlapGeometry(col: number, numCols: number, gapPx = 4) {
   const colW = 100 / Math.max(1, numCols);
   const leftPct = col * colW;
   const rightPct = 100 - (col + 1) * colW;

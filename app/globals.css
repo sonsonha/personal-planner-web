@@ -488,10 +488,14 @@ button {
   min-height: 0;
   height: 100%;
   grid-template-columns: minmax(0, 1fr);
+  /* Keep Sunday off the viewport / panel edge */
+  padding: 0 14px 14px 0;
+  box-sizing: border-box;
 }
 
 .planner-layout.with-panel {
   grid-template-columns: minmax(620px, 1fr) 314px;
+  gap: 12px;
 }
 
 .calendar-card {
@@ -2484,6 +2488,7 @@ button {
 
 .planner-layout.with-panel {
   grid-template-columns: minmax(0, 1fr) min(300px, 34vw);
+  gap: 12px;
 }
 
 .calendar-toolbar.pos-cal-toolbar {
@@ -2716,6 +2721,12 @@ button {
   background-size: 100% 60px;
 }
 
+.pos-cal .day-heading:last-child,
+.pos-cal .all-day-cell:last-child,
+.pos-cal .day-track:last-child {
+  border-right: 1px solid var(--pos-border-light);
+}
+
 .pos-cal .day-track.today {
   background-color: var(--pos-cal-today-wash);
 }
@@ -2737,6 +2748,8 @@ button {
   z-index: 2;
   overflow: hidden;
   padding: 5px 8px;
+  /* Slight inset so Sunday blocks don’t kiss the column edge */
+  box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--priority-border, var(--event-color)) 45%, var(--pos-border));
   border-left: 3px solid var(--priority-strong, var(--event-color));
   border-radius: 8px;
