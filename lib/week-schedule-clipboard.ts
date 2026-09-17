@@ -96,10 +96,6 @@ export function slotConflictsWithOccupied(
   return occupied.some((slot) => weekSlotsOverlap(candidate, slot));
 }
 
-function isDone(status: string) {
-  return status === "done" || status === "DONE";
-}
-
 function dueProductDate(task: WeekPasteTask): string | null {
   if (!task.dueAt) return null;
   const time = new Date(task.dueAt).getTime();
@@ -110,7 +106,9 @@ function dueProductDate(task: WeekPasteTask): string | null {
 /**
  * Map a copied session onto a live Task for the destination day.
  * - Finite tasks: same id, even if done (paste can reopen it).
- * - Habit series: prefer target-day instance; if that one is done, still use it so paste can reopen it.
+ * - Habit / repeat series: ONLY the instance whose due day matches the paste day.
+ *   Never fall back to an older open instance — that copies “Overdue · Sep 16”
+ *   onto Friday’s calendar slot.
  */
 export function resolveTaskIdForWeekPaste(
   session: Pick<WeekClipboardSession, "taskId" | "repeatSeriesId">,
@@ -127,15 +125,7 @@ export function resolveTaskIdForWeekPaste(
         task.repeatSeriesId === seriesId
         && dueProductDate(task) === targetKey,
     );
-    if (dueMatch) return dueMatch.id;
-
-    const openSeries = tasks.find(
-      (task) => task.repeatSeriesId === seriesId && !isDone(task.status),
-    );
-    if (openSeries) return openSeries.id;
-    const anySeries = tasks.find((task) => task.repeatSeriesId === seriesId);
-    if (anySeries) return anySeries.id;
-    return null;
+    return dueMatch?.id ?? null;
   }
 
   return source?.id ?? null;

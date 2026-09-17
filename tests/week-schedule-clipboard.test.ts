@@ -142,6 +142,29 @@ test("habit target-day done instance is still selected so paste can reopen it", 
   );
 });
 
+test("habit paste does not fall back to an overdue other-day instance", () => {
+  const tasks = [
+    {
+      id: "wake-wed",
+      title: "Wake-up",
+      status: "scheduled",
+      projectId: "sleep",
+      dueAt: "2026-09-16T16:59:00.000Z",
+      repeatSeriesId: "series-wake",
+      projectType: "HABIT" as const,
+    },
+  ];
+  const fri = slotDate(WEEK, 4, 6 * 60);
+  assert.equal(
+    resolveTaskIdForWeekPaste(
+      { taskId: "wake-wed", repeatSeriesId: "series-wake" },
+      fri,
+      tasks,
+    ),
+    null,
+  );
+});
+
 test("paste keeps target busy slots and only fills free time", () => {
   const clipboard = buildWeekScheduleClipboard({
     weekStart: new Date("2026-09-07T00:00:00+07:00"),
