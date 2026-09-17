@@ -102,6 +102,16 @@ export function isTaskCompletedForListView(
   return true;
 }
 
+/**
+ * Day Tasks list: a row is "done" when every Session on that product day is DONE.
+ * Multi-session week habits (e.g. Wake-up 1/5) can still show done for today.
+ */
+export function isTaskCompletedForDayView(dayBlocks: SessionEvidenceBlock[]): boolean {
+  const active = activeSessions(dayBlocks);
+  if (active.length === 0) return false;
+  return active.every((block) => isSessionDone(block.status));
+}
+
 export function directTaskCompletePolicy(
   blocks: SessionEvidenceBlock[],
   opts?: { definitionOfDone?: string | null },

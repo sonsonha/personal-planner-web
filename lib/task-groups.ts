@@ -5,7 +5,10 @@ import type {
   TasksViewTask,
 } from "../components/planner/tasks/types.ts";
 import { findDailyFocusSession, isSessionDailyFocusOnDate, productDateFromEpoch } from "./daily-focus.ts";
-import { isTaskCompletedForListView } from "./session-evidence.ts";
+import {
+  isTaskCompletedForDayView,
+  isTaskCompletedForListView,
+} from "./session-evidence.ts";
 import {
   buildWeekTaskHierarchy,
   isRoutineTask,
@@ -30,6 +33,24 @@ export type TaskGroup = {
 
 function blockForTask(taskId: string, blocks: TasksViewBlock[]) {
   return blocks.find((block) => block.taskId === taskId);
+}
+
+function sessionProductDate(block: TasksViewBlock): string | null {
+  if (!block.startAt) return null;
+  const epoch = new Date(block.startAt).getTime();
+  if (!Number.isFinite(epoch)) return null;
+  return productDateFromEpoch(epoch);
+}
+
+/** Sessions for a task on one product day (Day Tasks evidence scope). */
+export function blocksForTaskOnDay(
+  taskId: string,
+  blocks: TasksViewBlock[],
+  dayKey: string,
+): TasksViewBlock[] {
+  return blocks.filter(
+    (block) => block.taskId === taskId && sessionProductDate(block) === dayKey,
+  );
 }
 
 function tasksById(tasks: TasksViewTask[]) {
@@ -160,13 +181,22 @@ export function groupTasks(
     return buckets[id]!;
   };
 
-  const focusDate = opts?.emphasizeDailyFocus ? opts.focusDate ?? null : null;
+  const dayKey = horizon === "day" ? (opts?.focusDate ?? null) : null;
+  const focusDate = opts?.emphasizeDailyFocus ? dayKey : null;
   const focusSession = focusDate ? findDailyFocusSession(blocks, focusDate) : null;
   const focusTaskId = focusSession?.taskId ?? null;
 
   for (const task of tasks) {
-    const taskBlocks = blocks.filter((block) => block.taskId === task.id);
-    if (isTaskCompletedForListView(task, taskBlocks)) {
+    const allTaskBlocks = blocks.filter((block) => block.taskId === task.id);
+    const taskBlocks = dayKey
+      ? blocksForTaskOnDay(task.id, blocks, dayKey)
+      : allTaskBlocks;
+    const evidence = taskBlocks.map((item) => ({
+      id: item.id,
+      status: item.status ?? "PLANNED",
+    }));
+    const completedOnDay = Boolean(dayKey) && isTaskCompletedForDayView(evidence);
+    if (completedOnDay || isTaskCompletedForListView(task, evidence)) {
       ensure("completed").push(task);
       continue;
     }
@@ -176,7 +206,9 @@ export function groupTasks(
     }
 
     const taskHorizon = getHorizon(task);
-    const block = blockForTask(task.id, blocks);
+    const block = dayKey
+      ? (blocksForTaskOnDay(task.id, blocks, dayKey)[0] ?? blockForTask(task.id, blocks))
+      : blockForTask(task.id, blocks);
     const hasFocusSessionToday = Boolean(
       focusDate
       && blocks.some(
@@ -191,11 +223,11 @@ export function groupTasks(
       } else if (isRoutineTask(task)) {
         ensure("routines").push(task);
       } else if (taskHorizon === "day") {
-        ensure(focusDate ? "also-today" : "day-due").push(task);
+        ensure(focusDate || dayKey ? "also-today" : "day-due").push(task);
       } else if (block) {
-        ensure(focusDate ? "also-today" : "scheduled").push(task);
+        ensure(focusDate || dayKey ? "also-today" : "scheduled").push(task);
       } else {
-        ensure(focusDate ? "also-today" : "scheduled").push(task);
+        ensure(focusDate || dayKey ? "also-today" : "scheduled").push(task);
       }
       continue;
     }
@@ -231,10 +263,10 @@ export function groupTasks(
 
   const order: Array<{ id: string; label: string }> =
     horizon === "day"
-      ? focusDate
+      ? dayKey
         ? [
             { id: "overdue", label: "Overdue" },
-            { id: "daily-focus", label: "Daily Focus" },
+            ...(focusDate ? [{ id: "daily-focus", label: "Daily Focus" }] : []),
             { id: "also-today", label: "Also today" },
             { id: "routines", label: "Routines & Maintain" },
             { id: "completed", label: "Completed" },
@@ -271,12 +303,8 @@ export function groupTasks(
   return order
     .map((meta) => {
       let list = buckets[meta.id] ?? [];
-      if (horizon === "day" && meta.id === "routines") {
-        list = dedupeDayRoutineTasks(list, blocks, focusDate);
-      }
-      if (horizon === "day" && meta.id === "overdue") {
-        // Overdue habits: same series collapse — prefer session-backed instance.
-        list = dedupeDayRoutineTasks(list, blocks, focusDate);
+      if (horizon === "day" && (meta.id === "routines" || meta.id === "overdue" || meta.id === "completed")) {
+        list = dedupeDayRoutineTasks(list, blocks, dayKey);
       }
       return {
         id: meta.id,

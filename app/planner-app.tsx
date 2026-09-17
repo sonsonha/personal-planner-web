@@ -3461,6 +3461,7 @@ export function PlannerApp({
             onOpenTask={setEditingTaskId}
             onComplete={completeTask}
             onRestore={restoreTask}
+            onToggleSession={toggleSessionDone}
             onSetDailyFocus={setTaskDailyFocus}
             onSetSessionDailyFocus={setSessionDailyFocus}
           />
@@ -4800,6 +4801,7 @@ function TasksWorkspace({
   onOpenTask,
   onComplete,
   onRestore,
+  onToggleSession,
   onSetDailyFocus,
   onSetSessionDailyFocus,
 }: {
@@ -4818,6 +4820,7 @@ function TasksWorkspace({
   onOpenTask: (taskId: string) => void;
   onComplete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
+  onToggleSession: (blockId: string, done: boolean) => void;
   onSetDailyFocus: (taskId: string, date: string | null) => void;
   onSetSessionDailyFocus: (sessionId: string, enabled: boolean, opts?: { replaceDailyFocus?: boolean }) => void;
 }) {
@@ -4844,7 +4847,9 @@ function TasksWorkspace({
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
   const today = startOfDay(now);
   const viewingToday = sameDay(anchor, now);
-  const focusDate = horizon === "day" && viewingToday ? productDateString(now) : null;
+  // Always pass the selected day so Day evidence / completion is scoped to that date
+  // (Wake-up "1/5" was counting the whole week). Daily Focus picker stays Today-only.
+  const focusDate = horizon === "day" ? productDateFromEpoch(anchor.getTime()) : null;
   const viewingThisWeek = startOfWeek(anchor).getTime() === startOfWeek(now).getTime();
   const viewingThisMonth = startOfMonth(anchor).getTime() === startOfMonth(now).getTime();
   const normalizedQuery = query.trim().toLowerCase();
@@ -4998,11 +5003,12 @@ function TasksWorkspace({
         focusDate={focusDate}
         weekStartMs={weekWindow?.startMs}
         weekEndMs={weekWindow?.endMs}
-        onChooseDailyFocus={focusDate ? () => setChooseFocusOpen(true) : undefined}
+        onChooseDailyFocus={focusDate && viewingToday ? () => setChooseFocusOpen(true) : undefined}
         onAdd={onQuickAdd}
         onOpenTask={onOpenTask}
         onComplete={onComplete}
         onRestore={onRestore}
+        onToggleSession={onToggleSession}
         onPrevPeriod={horizon === "all" ? undefined : () => shiftAnchor(-1)}
         onNextPeriod={horizon === "all" ? undefined : () => shiftAnchor(1)}
         onJumpCurrent={canJumpCurrent ? () => onAnchorChange(startOfDay(now)) : undefined}

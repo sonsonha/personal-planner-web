@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 import { EmptyState } from "../shared";
 import { cn } from "../utils";
-import { groupTasks } from "@/lib/task-groups";
 import {
   deriveTaskProgressFromSessions,
   directTaskCompletePolicy,
+  isTaskCompletedForDayView,
   isTaskCompletedForListView,
 } from "@/lib/session-evidence";
 import { isSessionDailyFocusOnDate } from "@/lib/daily-focus";
@@ -19,6 +19,7 @@ import type {
   TasksViewBlock,
   TasksViewTask,
 } from "./types";
+import { blocksForTaskOnDay, groupTasks } from "@/lib/task-groups";
 
 const HORIZON_TABS: Array<{ id: HorizonScope; label: string }> = [
   { id: "day", label: "Day" },
@@ -75,6 +76,8 @@ export type TasksWorkspaceViewProps = {
   onOpenTask: (taskId: string) => void;
   onComplete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
+  /** Day view: toggle today's Session done (multi-session habits). */
+  onToggleSession?: (blockId: string, done: boolean) => void;
   onPrevPeriod?: () => void;
   onNextPeriod?: () => void;
   onJumpCurrent?: () => void;
@@ -113,6 +116,7 @@ export function TasksWorkspaceView({
   onOpenTask,
   onComplete,
   onRestore,
+  onToggleSession,
   onPrevPeriod,
   onNextPeriod,
   onJumpCurrent,
@@ -126,6 +130,7 @@ export function TasksWorkspaceView({
   isOverdue,
 }: TasksWorkspaceViewProps) {
   const emphasizeDailyFocus = horizon === "day" && Boolean(focusDate);
+  const dayKey = horizon === "day" ? focusDate ?? null : null;
   const groups = groupTasks(horizon, tasks, blocks, getHorizon, isOverdue, {
     focusDate,
     emphasizeDailyFocus,
@@ -449,13 +454,18 @@ export function TasksWorkspaceView({
                           );
                         })
                       : group.tasks.map((task) => {
-                          const block = blockForTask(task.id, blocks);
-                          const taskBlocks = blocks.filter((candidate) => candidate.taskId === task.id);
+                          const allTaskBlocks = blocks.filter((candidate) => candidate.taskId === task.id);
+                          const taskBlocks = dayKey
+                            ? blocksForTaskOnDay(task.id, blocks, dayKey)
+                            : allTaskBlocks;
                           const evidenceBlocks = taskBlocks.map((item) => ({
                             id: item.id,
                             status: item.status ?? "PLANNED",
                           }));
-                          const listCompleted = isTaskCompletedForListView(task, evidenceBlocks);
+                          const listCompleted = dayKey
+                            ? isTaskCompletedForDayView(evidenceBlocks)
+                              || isTaskCompletedForListView(task, evidenceBlocks)
+                            : isTaskCompletedForListView(task, evidenceBlocks);
                           const policy = directTaskCompletePolicy(
                             evidenceBlocks,
                             { definitionOfDone: task.definitionOfDone },
@@ -468,6 +478,17 @@ export function TasksWorkspaceView({
                             focusDate
                             && taskBlocks.some((item) => isSessionDailyFocusOnDate(item, focusDate)),
                           );
+                          const block = taskBlocks[0] ?? blockForTask(task.id, blocks);
+                          // Day routines used to hide the check — that hid Wake-up after
+                          // mobile marked today's Session done. Show it whenever Day has
+                          // session evidence (or the row is already completed).
+                          const hideComplete = group.id === "routines"
+                            && horizon !== "day"
+                            && !listCompleted;
+                          const canToggleDaySession = Boolean(
+                            dayKey && onToggleSession && taskBlocks.length > 0,
+                          );
+
                           return (
                             <TaskRow
                               key={task.id}
@@ -477,7 +498,7 @@ export function TasksWorkspaceView({
                               isSelected={selectedTaskId === task.id}
                               isDailyFocus={isFocus}
                               quietPriority={false}
-                              hideComplete={group.id === "routines"}
+                              hideComplete={hideComplete}
                               sessionProgressLabel={sessionProgressLabel}
                               scheduleLabel={getScheduleLabel(task, block)}
                               horizonLabel={
@@ -485,8 +506,17 @@ export function TasksWorkspaceView({
                               }
                               onOpen={() => onOpenTask(task.id)}
                               displayCompleted={listCompleted}
-                              completeEnabled={listCompleted || policy.allow}
+                              completeEnabled={
+                                listCompleted || policy.allow || canToggleDaySession
+                              }
                               onToggleComplete={() => {
+                                if (canToggleDaySession) {
+                                  const done = !listCompleted;
+                                  for (const session of taskBlocks) {
+                                    onToggleSession?.(session.id, done);
+                                  }
+                                  return;
+                                }
                                 if (listCompleted) {
                                   onRestore(task.id);
                                   return;
