@@ -534,6 +534,12 @@
   background: #f3f4f6;
 }
 
+.pos-process-bar.is-ahead .pos-process-track,
+.pos-process-mini.is-ahead .pos-process-mini-track,
+.pos-gp-period-card.is-ahead .pos-process-track {
+  overflow: visible;
+}
+
 .pos-process-track.thin {
   height: 6px;
 }

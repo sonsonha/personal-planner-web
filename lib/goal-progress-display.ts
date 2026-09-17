@@ -86,7 +86,8 @@ export function formatProcessValue(
   return `${num} ${normalized}`;
 }
 
-/** Ratio with unit once for word units: `1 / 3 applications`. Hours keep compact `4.8h / 2h`. */
+/** Ratio with unit once for word units: `1 / 3 applications`. Hours keep compact `4.8h / 2h`.
+ * Overshoot is intentional — e.g. 5 apps against a 4/wk target → `5 / 4 Applications`. */
 export function formatProcessRatio(
   completed: number,
   target: number,
@@ -99,6 +100,22 @@ export function formatProcessRatio(
   if (!normalized) return `${left} / ${right}`;
   if (normalized === "h") return `${left}h / ${right}h`;
   return `${left} / ${right} ${normalized}`;
+}
+
+/** Status chip for a process bucket — never clamps completed to target. */
+export function processStatusLabel(bucket: Pick<ProcessBucketView, "completed" | "target" | "planned">): string {
+  const { completed, target, planned } = bucket;
+  if (target > 0 && completed > target) return "Ahead";
+  if (target > 0 && completed >= target && completed >= planned) return "Done";
+  if (target > 0 && completed >= target) return "At target";
+  if (completed > 0) return "In progress";
+  return "Not started";
+}
+
+/** Bar width % vs target. Overshoot may exceed 100 (capped for layout). */
+export function processFillPercent(value: number, target: number, maxPct = 150): number {
+  if (target <= 0) return 0;
+  return Math.min(Math.max((value / target) * 100, 0), maxPct);
 }
 
 export function progressPeriodLabel(period: ProgressViewPeriod) {

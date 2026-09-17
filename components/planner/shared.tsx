@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { GoalFocusType, GoalMilestone } from "@/lib/planner-api";
-import { formatProcessValue, formatProcessRatio, coerceProcessBucketForDisplay, type ProcessBucketView } from "@/lib/goal-progress-display";
+import { formatProcessValue, formatProcessRatio, coerceProcessBucketForDisplay, processFillPercent, processStatusLabel, type ProcessBucketView } from "@/lib/goal-progress-display";
 import { cn, processAccent } from "./utils";
 
 export function SectionLabel({
@@ -62,21 +62,15 @@ export function ProcessBar({
 }) {
   const view = coerceProcessBucketForDisplay(bucket, measurementType);
   const accent = processAccent(accentIndex);
-  const denom = Math.max(view.target, 0.0001);
-  const completedPct = Math.min((view.completed / denom) * 100, 100);
-  const plannedPct = Math.min((view.planned / denom) * 100, 100);
+  const completedPct = processFillPercent(view.completed, view.target);
+  const plannedPct = processFillPercent(view.planned, view.target);
   const atTarget = view.target > 0 && view.completed >= view.target;
-  const statusLabel = atTarget && view.completed >= view.planned
-    ? "Done"
-    : atTarget
-      ? "At target"
-      : view.completed > 0
-        ? "In progress"
-        : "Not started";
+  const ahead = view.target > 0 && view.completed > view.target;
+  const statusLabel = processStatusLabel(view);
   const unit = view.unit;
 
   return (
-    <article className="pos-process-bar">
+    <article className={cn("pos-process-bar", ahead && "is-ahead")}>
       <div className="pos-process-bar-top">
         <span className="pos-process-bar-name">{name}</span>
         <div className="pos-process-bar-top-right">
@@ -86,7 +80,7 @@ export function ProcessBar({
             </button>
           )}
           <span
-            className={cn("pos-process-bar-status", atTarget && "at-target")}
+            className={cn("pos-process-bar-status", atTarget && "at-target", ahead && "is-ahead")}
             style={atTarget ? { backgroundColor: accent.light, color: accent.color } : undefined}
           >
             {statusLabel}
@@ -139,17 +133,17 @@ export function ProcessMini({
 }) {
   const view = coerceProcessBucketForDisplay(bucket, measurementType);
   const accent = processAccent(accentIndex);
-  const denom = Math.max(view.target, 0.0001);
-  const completedPct = Math.min((view.completed / denom) * 100, 100);
-  const plannedPct = Math.min((view.planned / denom) * 100, 100);
+  const completedPct = processFillPercent(view.completed, view.target);
+  const plannedPct = processFillPercent(view.planned, view.target);
   const atTarget = view.target > 0 && view.completed >= view.target;
+  const ahead = view.target > 0 && view.completed > view.target;
   const doneLabel = formatProcessValue(view.completed, view.unit, measurementType);
   const targetLabel = formatProcessValue(view.target, view.unit, measurementType);
   const ratioLabel = formatProcessRatio(view.completed, view.target, view.unit, measurementType);
 
   return (
     <div
-      className="pos-process-mini"
+      className={cn("pos-process-mini", ahead && "is-ahead")}
       title={`${name}: ${doneLabel} done of ${targetLabel} weekly target`}
     >
       <span className="pos-process-mini-name">{name}</span>

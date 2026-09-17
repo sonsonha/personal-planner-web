@@ -7,6 +7,8 @@ import {
   formatProcessValue,
   formatProcessRatio,
   coerceProcessBucketForDisplay,
+  processFillPercent,
+  processStatusLabel,
   type ProcessBucketView,
 } from "@/lib/goal-progress-display";
 import {
@@ -57,15 +59,16 @@ function ProcessPeriodCard({
 }) {
   const view = coerceProcessBucketForDisplay(bucket, measurementType);
   const accent = processAccent(accentIndex);
-  const denom = Math.max(view.target, view.planned, 0.0001);
-  const completedPct = Math.min((view.completed / denom) * 100, 100);
-  const plannedPct = Math.min((view.planned / denom) * 100, 100);
+  const completedPct = processFillPercent(view.completed, view.target);
+  const plannedPct = processFillPercent(view.planned, view.target);
   const atTarget = view.target > 0 && view.completed >= view.target;
+  const ahead = view.target > 0 && view.completed > view.target;
+  const statusLabel = processStatusLabel(view);
   const periodSuffix = period === "thisWeek" ? "/wk" : period === "thisMonth" ? "/mo" : "";
   const unit = view.unit;
 
   return (
-    <article className="pos-gp-period-card">
+    <article className={cn("pos-gp-period-card", ahead && "is-ahead")}>
       <div className="pos-gp-period-card-top">
         <span className="pos-gp-period-name">{name}</span>
         <div className="pos-gp-period-card-actions">
@@ -74,7 +77,11 @@ function ProcessPeriodCard({
               Edit
             </button>
           )}
-          {atTarget && <span className="pos-gp-on-track">On track</span>}
+          {atTarget && (
+            <span className={cn("pos-gp-on-track", ahead && "is-ahead")}>
+              {statusLabel === "Ahead" ? "Ahead" : "On track"}
+            </span>
+          )}
         </div>
       </div>
       <div className="pos-gp-period-metrics">

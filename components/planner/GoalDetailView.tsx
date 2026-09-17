@@ -6,7 +6,7 @@ import {
   type ApiGoalProgress,
   type ApiProject,
 } from "@/lib/planner-api";
-import { formatProcessRatio } from "@/lib/goal-progress-display";
+import { formatProcessRatio, processFillPercent } from "@/lib/goal-progress-display";
 import { inProductWeek, startOfProductWeek } from "@/lib/product-week";
 import {
   ArrowLink,
@@ -392,7 +392,7 @@ export function GoalDetailView({
                               <div
                                 className="pos-process-completed-fill"
                                 style={{
-                                  width: `${Math.min((bucket.completed / Math.max(bucket.target, 0.0001)) * 100, 100)}%`,
+                                  width: `${processFillPercent(bucket.completed, bucket.target)}%`,
                                   backgroundColor: accent.color,
                                 }}
                               />
@@ -508,7 +508,7 @@ export function GoalDetailView({
                     const progressProc = processes.find((p) => p.id === proc.id);
                     const bucket = progressProc?.thisWeek;
                     const pct = bucket && bucket.target > 0
-                      ? Math.min((bucket.completed / bucket.target) * 100, 100)
+                      ? processFillPercent(bucket.completed, bucket.target)
                       : 0;
                     return (
                       <li key={proc.id}>

@@ -8,7 +8,9 @@ import {
   isVagueGoalOutcome,
   normalizeProcessUnit,
   processBucketCompact,
+  processFillPercent,
   processOnTargetSummary,
+  processStatusLabel,
 } from "../lib/goal-progress-display.ts";
 
 test("processOnTargetSummary counts processes meeting threshold", () => {
@@ -61,6 +63,7 @@ test("formatProcessValue always shows duration hours and count sessions", () => 
   assert.equal(formatProcessRatio(4.8, 120, "h"), "4.8h / 120h");
   assert.equal(formatProcessRatio(1, 3, "applications"), "1 / 3 applications");
   assert.equal(formatProcessRatio(1, 2, "sections"), "1 / 2 sections");
+  assert.equal(formatProcessRatio(5, 4, "Applications"), "5 / 4 Applications");
   assert.equal(normalizeProcessUnit("HR"), "h");
 });
 
@@ -89,4 +92,12 @@ test("formatObservationEntry prefers readable month labels", () => {
 test("isVagueGoalOutcome flags generic titles", () => {
   assert.equal(isVagueGoalOutcome("Scholarship"), true);
   assert.equal(isVagueGoalOutcome("Get a Backend Developer job before November"), false);
+});
+
+test("processStatusLabel and fill percent keep overshoot visible", () => {
+  assert.equal(processStatusLabel({ completed: 5, target: 4, planned: 3 }), "Ahead");
+  assert.equal(processStatusLabel({ completed: 4, target: 4, planned: 4 }), "Done");
+  assert.equal(processStatusLabel({ completed: 2, target: 4, planned: 3 }), "In progress");
+  assert.equal(processFillPercent(5, 4), 125);
+  assert.equal(processFillPercent(4, 4), 100);
 });
