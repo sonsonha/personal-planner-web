@@ -9,7 +9,7 @@ Browser
       → Railway backend (SoC-server)
 ```
 
-Backend stays on Railway (`https://soc-server-production.up.railway.app`).  
+Backend stays on Railway (`https://soc-server-production-85a9.up.railway.app`).  
 This frontend no longer deploys via Cloudflare Workers / wrangler.
 
 ## Why Cloudflare was removed
@@ -25,7 +25,7 @@ Production path is now:
 
 | Key | Notes |
 | --- | --- |
-| `PLANNER_API_BASE_URL` | `https://soc-server-production.up.railway.app` (server-only) |
+| `PLANNER_API_BASE_URL` | `https://soc-server-production-85a9.up.railway.app` (server-only) |
 | `PLANNER_WEB_TOKEN` | Same ≥32-char token as Railway (server-only) |
 
 Optional:

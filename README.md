@@ -50,7 +50,7 @@ Copy `.env.example` to `.env.local`, then set `PLANNER_API_BASE_URL`.
 **Local web + Railway backend (recommended):** point at your deployed API and use the same `PLANNER_WEB_TOKEN` as Railway (minimum 32 characters). Restart `npm run dev` after changing `.env.local`.
 
 ```env
-PLANNER_API_BASE_URL=https://soc-server-production.up.railway.app
+PLANNER_API_BASE_URL=https://soc-server-production-85a9.up.railway.app
 PLANNER_WEB_TOKEN=<matches Railway PLANNER_WEB_TOKEN>
 ```
 
